@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/core/di/injection_container.dart';
 import 'package:flutter_ai_agent/core/errors/failures.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/voice_input_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/voice_output_service.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/screens/chat_screen.dart';
@@ -19,6 +20,7 @@ void main() {
   late MockAgentCubit mockAgentCubit;
   late MockSettingsCubit mockSettingsCubit;
   late MockVoiceInputService mockVoiceService;
+  late MockVoiceOutputService mockVoiceOutputService;
   late StreamController<AgentState> stateController;
   late StreamController<String> transcriptionController;
   late StreamController<double> soundLevelController;
@@ -30,6 +32,7 @@ void main() {
     mockAgentCubit = MockAgentCubit();
     mockSettingsCubit = MockSettingsCubit();
     mockVoiceService = MockVoiceInputService();
+    mockVoiceOutputService = MockVoiceOutputService();
 
     stateController = StreamController<AgentState>.broadcast();
     transcriptionController = StreamController<String>.broadcast();
@@ -69,9 +72,16 @@ void main() {
     when(() => mockVoiceService.stopListening())
         .thenAnswer((_) async => const Right(''));
 
+    when(() => mockVoiceOutputService.isMuted).thenReturn(false);
+    when(() => mockVoiceOutputService.interrupt()).thenAnswer((_) async {});
+    when(() => mockVoiceOutputService.statusStream).thenAnswer((_) => const Stream.empty());
+    when(() => mockVoiceOutputService.errorStream).thenAnswer((_) => const Stream.empty());
+    when(() => mockVoiceOutputService.dispose()).thenReturn(null);
+
     sl.registerFactory<AgentCubit>(() => mockAgentCubit);
     sl.registerFactory<SettingsCubit>(() => mockSettingsCubit);
     sl.registerLazySingleton<VoiceInputServiceBase>(() => mockVoiceService);
+    sl.registerLazySingleton<VoiceOutputServiceBase>(() => mockVoiceOutputService);
   });
 
   tearDown(() async {

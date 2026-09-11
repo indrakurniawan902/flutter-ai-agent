@@ -7,6 +7,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_ai_agent/core/di/injection_container.dart';
 import 'package:flutter_ai_agent/features/chat/data/models/chat_models.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/voice_input_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/voice_output_service.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/widgets/action_approval_sheet.dart';
@@ -16,9 +17,14 @@ import 'package:flutter_ai_agent/features/settings/presentation/screens/settings
 /// Main Chat Screen displaying streaming conversation, tool call cards,
 /// and input prompt area.
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key, this.voiceInputService});
+  const ChatScreen({
+    super.key,
+    this.voiceInputService,
+    this.voiceOutputService,
+  });
 
   final VoiceInputServiceBase? voiceInputService;
+  final VoiceOutputServiceBase? voiceOutputService;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -30,6 +36,8 @@ class _ChatScreenState extends State<ChatScreen> {
   final FocusNode _focusNode = FocusNode();
   bool _isComposing = false;
   late final VoiceInputServiceBase _voiceService;
+  late final VoiceOutputServiceBase _voiceOutputService;
+  bool _isSpeakerMuted = false;
   AgentCubit? _agentCubit;
   StreamSubscription<VoiceInputStatus>? _voiceStatusSub;
   StreamSubscription<String>? _voiceErrorSub;
@@ -45,6 +53,12 @@ class _ChatScreenState extends State<ChatScreen> {
         (sl.isRegistered<VoiceInputServiceBase>()
             ? sl<VoiceInputServiceBase>()
             : VoiceInputService());
+
+    _voiceOutputService = widget.voiceOutputService ??
+        (sl.isRegistered<VoiceOutputServiceBase>()
+            ? sl<VoiceOutputServiceBase>()
+            : VoiceOutputService());
+    _isSpeakerMuted = _voiceOutputService.isMuted;
 
     _voiceStatusSub = _voiceService.statusStream.listen((status) {
       if (!mounted) return;
@@ -89,9 +103,14 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_isVoiceRecording) {
       _voiceService.cancelListening();
     }
+    _voiceOutputService.interrupt();
     if (widget.voiceInputService == null &&
         !sl.isRegistered<VoiceInputServiceBase>()) {
       _voiceService.dispose();
+    }
+    if (widget.voiceOutputService == null &&
+        !sl.isRegistered<VoiceOutputServiceBase>()) {
+      _voiceOutputService.dispose();
     }
     _textController.removeListener(_onTextChanged);
     _textController.dispose();
@@ -100,9 +119,18 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
+  void _toggleSpeakerMute() {
+    setState(() {
+      _voiceOutputService.toggleMute();
+      _isSpeakerMuted = _voiceOutputService.isMuted;
+    });
+  }
+
   Future<void> _startVoiceInput({bool isHold = false}) async {
     final isBusy = _agentCubit != null && _isAgentBusy(_agentCubit!.state);
     if (isBusy) return;
+
+    await _voiceOutputService.interrupt();
 
     final result = await _voiceService.startListening();
     result.fold(
@@ -190,6 +218,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final prompt = text.trim();
     if (prompt.isEmpty) return;
 
+    _voiceOutputService.interrupt();
     _textController.clear();
     _agentCubit?.sendMessage(prompt);
     _scrollToBottom();
@@ -213,10 +242,20 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               actions: [
                 IconButton(
+                  key: const Key('chat_speaker_toggle'),
+                  icon: Icon(
+                    _isSpeakerMuted ? Icons.volume_off : Icons.volume_up,
+                  ),
+                  tooltip:
+                      _isSpeakerMuted ? 'Unmute Speaker' : 'Mute Speaker',
+                  onPressed: _toggleSpeakerMute,
+                ),
+                IconButton(
                   key: const Key('chat_reset_button'),
                   icon: const Icon(Icons.refresh),
                   tooltip: 'Reset Conversation',
                   onPressed: () {
+                    _voiceOutputService.interrupt();
                     context.read<AgentCubit>().reset();
                   },
                 ),
@@ -239,6 +278,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 _scrollToBottom();
 
                 if (state is WaitingApproval) {
+                  _voiceOutputService.interrupt();
                   ActionApprovalSheet.show(
                     context,
                     request: state.request,
@@ -251,6 +291,11 @@ class _ChatScreenState extends State<ChatScreen> {
                       context.read<AgentCubit>().rejectAction();
                     },
                   );
+                } else if (state is AgentSuccess) {
+                  if (!_voiceOutputService.isMuted &&
+                      state.response.isNotEmpty) {
+                    _voiceOutputService.speakText(state.response);
+                  }
                 } else if (state is AgentError) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(

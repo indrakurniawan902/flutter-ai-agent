@@ -16,6 +16,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/file_workspace_service
 import 'package:flutter_ai_agent/features/chat/data/tools/local_memory_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/ambient_trigger_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/voice_input_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/voice_output_service.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
@@ -133,6 +134,13 @@ class MockWorkmanagerPlatformWrapper extends Mock
 class MockSpeechToTextWrapper extends Mock implements SpeechToTextWrapper {}
 
 class MockVoiceInputService extends Mock implements VoiceInputServiceBase {}
+
+// Voice Output Service
+class MockAudioPlayerWrapper extends Mock implements AudioPlayerWrapper {}
+
+class MockTtsClient extends Mock implements TtsClient {}
+
+class MockVoiceOutputService extends Mock implements VoiceOutputServiceBase {}
 
 
 

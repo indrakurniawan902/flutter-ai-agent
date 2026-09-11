@@ -555,4 +555,74 @@ void main() {
       verifyNever(() => mockVoiceService.startListening(listenFor: any(named: 'listenFor')));
     });
   });
+
+  group('ToolRegistry - Voice Output Tools', () {
+    late ToolRegistry registry;
+    late MockVoiceOutputService mockVoiceOutputService;
+
+    setUp(() {
+      registry = ToolRegistry();
+      mockVoiceOutputService = MockVoiceOutputService();
+      registry.registerVoiceOutputTools(mockVoiceOutputService);
+    });
+
+    test('registers speak_text as tier1 auto tool', () {
+      expect(registry.hasTool('speak_text'), isTrue);
+      expect(
+        registry.getTool('speak_text')?.securityTier,
+        equals(SecurityTier.tier1Auto),
+      );
+    });
+
+    test('executes speak_text and delegates to voiceOutputService.speakText', () async {
+      when(() => mockVoiceOutputService.speakText(
+            'Halo dunia',
+            voice: any(named: 'voice'),
+            model: any(named: 'model'),
+            speed: any(named: 'speed'),
+          )).thenAnswer((_) async => const Right(unit));
+
+      final result = await registry.executeTool('speak_text', {
+        'text': 'Halo dunia',
+        'voice': 'alloy',
+      });
+
+      expect(result.isRight(), isTrue);
+      verify(() => mockVoiceOutputService.speakText(
+            'Halo dunia',
+            voice: 'alloy',
+          )).called(1);
+    });
+
+    test('fails validation when text parameter is empty or missing', () async {
+      final resultMissing = await registry.executeTool('speak_text', {});
+      final resultEmpty = await registry.executeTool('speak_text', {'text': '   '});
+
+      expect(resultMissing.isLeft(), isTrue);
+      expect(resultEmpty.isLeft(), isTrue);
+      resultMissing.fold(
+        (failure) => expect(failure, isA<ValidationFailure>()),
+        (_) => fail('Expected Left(ValidationFailure)'),
+      );
+    });
+
+    test('returns Left(Failure) when voiceOutputService.speakText fails', () async {
+      when(() => mockVoiceOutputService.speakText(
+            any(),
+            voice: any(named: 'voice'),
+            model: any(named: 'model'),
+            speed: any(named: 'speed'),
+          )).thenAnswer((_) async => const Left(ServerFailure('TTS service error')));
+
+      final result = await registry.executeTool('speak_text', {
+        'text': 'Error text',
+      });
+
+      expect(result.isLeft(), isTrue);
+      result.fold(
+        (failure) => expect(failure, isA<ServerFailure>()),
+        (_) => fail('Expected Left(ServerFailure)'),
+      );
+    });
+  });
 }

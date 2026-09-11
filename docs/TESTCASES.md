@@ -551,6 +551,77 @@
 
 ---
 
+## Module 9: Streaming Voice & Audio Interface (Fase 4)
+
+### TC-VOICE-01: Voice Input & Real-Time Transcription (T9.1)
+- **Type**: Positive
+- **Objective**: Capture microphone audio and stream transcribed speech into text.
+- **Preconditions**: Microphone permission granted; `VoiceInputService` initialized.
+- **Steps**:
+  1. User taps mic button or holds to speak.
+  2. Waveform visualizer animates with sound level stream.
+  3. User finishes speaking; transcription is auto-dispatched to `AgentCubit.sendMessage()`.
+- **Expected Outcome**:
+  - Spoken words transcribed accurately.
+  - Message bubble appears in ChatScreen.
+
+### TC-VOICE-02: Microphone Permission Denied Handling (T9.1)
+- **Type**: Negative
+- **Objective**: Ensure graceful error handling when microphone permission is denied.
+- **Preconditions**: Microphone permission denied in system settings.
+- **Steps**:
+  1. User taps mic button.
+- **Expected Outcome**:
+  - SnackBar error displayed with permission advice.
+  - Waveform visualizer does not remain stuck; recording mode cancelled.
+
+### TC-VOICE-03: Streaming Voice Output & Audio Playback Queue (T9.2)
+- **Type**: Positive
+- **Objective**: Stream and synthesize agent responses using TTS and queue playback sequentially.
+- **Preconditions**: Speaker unmuted; `VoiceOutputService` active.
+- **Steps**:
+  1. Agent finishes response generation (`AgentSuccess`).
+  2. Text synthesized via `/audio/speech` TTS endpoint.
+  3. Audio chunks queued in `_audioQueue` and played smoothly through `audioplayers`.
+- **Expected Outcome**:
+  - Audio plays out loud clearly.
+  - Consecutive audio chunks transition seamlessly without clipping.
+
+### TC-VOICE-04: Barge-In Interruption on User Interaction (T9.2)
+- **Type**: Positive
+- **Objective**: Immediately halt speaking audio when user taps microphone to speak.
+- **Preconditions**: Agent currently speaking audio response.
+- **Steps**:
+  1. User taps mic button in input bar.
+- **Expected Outcome**:
+  - `VoiceOutputService.interrupt()` called instantly.
+  - Audio playback stops immediately; audio queue and streaming buffer cleared.
+  - Voice recording starts cleanly without audio feedback loop.
+
+### TC-VOICE-05: Speaker Mute/Unmute Toggle in ChatScreen AppBar (T9.2)
+- **Type**: Positive
+- **Objective**: Allow user to silence/enable audio output on demand.
+- **Preconditions**: ChatScreen open.
+- **Steps**:
+  1. User taps speaker toggle in AppBar (`chat_speaker_toggle`).
+  2. Icon switches from `volume_up` to `volume_off`.
+  3. Subsequent agent responses remain silent.
+  4. User taps speaker toggle again; icon switches back to `volume_up` and volume is restored.
+- **Expected Outcome**:
+  - Immediate mute toggle without restarting conversation.
+
+### TC-VOICE-06: TTS Synthesis Failure & Error Resilience (T9.2)
+- **Type**: Negative
+- **Objective**: Prevent app crash when TTS endpoint times out or returns error.
+- **Preconditions**: Network disconnected or invalid API key.
+- **Steps**:
+  1. Call `speakText()` when TTS endpoint unreachable.
+- **Expected Outcome**:
+  - Returns `Left(Failure)` (`ServerFailure` or `ConnectionFailure`).
+  - Error piped to `errorStream`; player queue safely reset to `idle`.
+
+---
+
 ## Summary Matrix
 
 | Module | Positive Cases | Negative Cases | Total Cases |
@@ -563,7 +634,8 @@
 | **Module 6: Tier 3 HITL Tools** | 2 | 3 | 5 |
 | **Module 7: Presentation & UI/UX** | 3 | 1 | 4 |
 | **Module 8: Local Workspace & Intelligence (Fase 3)** | 6 | 3 | 9 |
-| **Grand Total** | **21** | **22** | **43** |
+| **Module 9: Streaming Voice & Audio (Fase 4)** | 4 | 2 | 6 |
+| **Grand Total** | **25** | **24** | **49** |
 
 ---
 _Standardized for Hermes Bot Team: PM Bot (`default`), Dev Bot (`dev`), Ops Bot (`ops`)._

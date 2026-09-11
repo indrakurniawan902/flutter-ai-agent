@@ -16,6 +16,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/local_memory_service.d
 import 'package:flutter_ai_agent/features/chat/data/models/ambient_event.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/ambient_trigger_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/voice_input_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/voice_output_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/security_policy.dart';
 
 typedef ToolExecutor = Future<Either<Failure, String>> Function(
@@ -845,6 +846,52 @@ class ToolRegistry {
         checkPermission: () => service.checkPermission().then(
               (res) => res.fold((_) => false, (allowed) => allowed),
             ),
+      ),
+    );
+  }
+
+  void registerVoiceOutputTools(VoiceOutputServiceBase service) {
+    register(
+      RegisteredTool(
+        name: 'speak_text',
+        description:
+            'Speaks the provided text out loud using Text-to-Speech (TTS).',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'text': {
+              'type': 'string',
+              'description':
+                  'The text content to synthesize and speak out loud.',
+            },
+            'voice': {
+              'type': 'string',
+              'description':
+                  'Voice name to use (e.g. alloy, echo, fable, onyx, nova, shimmer)',
+            },
+          },
+          'required': ['text'],
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) async {
+          final text = args['text'] as String?;
+          if (text == null || text.trim().isEmpty) {
+            return const Left(
+              ValidationFailure('text parameter is required and cannot be empty'),
+            );
+          }
+          final voice = args['voice'] as String?;
+          final result = await service.speakText(text, voice: voice);
+          return result.fold(
+            (failure) => Left(failure),
+            (_) => Right(
+              jsonEncode({
+                'status': 'spoken',
+                'text': text,
+              }),
+            ),
+          );
+        },
       ),
     );
   }
