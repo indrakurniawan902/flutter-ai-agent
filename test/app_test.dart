@@ -55,4 +55,32 @@ void main() {
     expect(find.byKey(const Key('settings_base_url_field')), findsOneWidget);
     expect(find.byKey(const Key('settings_save_button')), findsOneWidget);
   });
+
+  testWidgets('App switches tabs via FloatingBottomNavBar', (tester) async {
+    await tester.pumpWidget(const App());
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('floating_bottom_nav_bar')), findsOneWidget);
+    expect(find.text('Flames'), findsOneWidget);
+
+    // Tap Skills tab
+    await tester.tap(find.byKey(const Key('nav_item_skills')));
+    await tester.pumpAndSettle();
+    expect(find.text('Skills Hub'), findsOneWidget);
+
+    // Tap Pocket Node tab
+    await tester.tap(find.byKey(const Key('nav_item_node')));
+    await tester.pumpAndSettle();
+    expect(find.text('Pocket Node'), findsOneWidget);
+
+    // Tap Memory Vault tab
+    await tester.tap(find.byKey(const Key('nav_item_vault')));
+    await tester.pumpAndSettle();
+    expect(find.text('Memory Vault'), findsOneWidget);
+
+    // Tap Settings tab
+    await tester.tap(find.byKey(const Key('nav_item_settings')));
+    await tester.pumpAndSettle();
+    expect(find.text('LLM Settings'), findsOneWidget);
+  });
 }

@@ -11,6 +11,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart'
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
+import 'package:flutter_ai_agent/features/navigation/presentation/cubits/navigation_cubit.dart';
 import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart';
 import 'package:flutter_ai_agent/features/server_profiles/presentation/cubits/server_profile_cubit.dart';
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
@@ -132,6 +133,13 @@ Future<void> initDependencies() async {
         toolRegistry: sl<ToolRegistry>(),
         secureStorageService: sl<SecureStorageService>(),
       ),
+    );
+  }
+
+  // Navigation Cubit
+  if (!sl.isRegistered<NavigationCubit>()) {
+    sl.registerFactory<NavigationCubit>(
+      () => NavigationCubit(),
     );
   }
 }
