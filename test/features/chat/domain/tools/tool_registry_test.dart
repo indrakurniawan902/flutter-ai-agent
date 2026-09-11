@@ -500,4 +500,56 @@ void main() {
       expect(checkRes.getOrElse(() => ''), contains('battery_level'));
     });
   });
+
+  group('registerVoiceTools', () {
+    late MockVoiceInputService mockVoiceService;
+
+    setUp(() {
+      mockVoiceService = MockVoiceInputService();
+      registry.registerVoiceTools(mockVoiceService);
+    });
+
+    test('registers listen_voice_input as tier2 permission tool', () {
+      expect(registry.hasTool('listen_voice_input'), isTrue);
+      expect(
+        registry.getTool('listen_voice_input')?.securityTier,
+        equals(SecurityTier.tier2Permission),
+      );
+    });
+
+    test('executes listen_voice_input and returns transcribed text on permission grant', () async {
+      when(() => mockVoiceService.checkPermission())
+          .thenAnswer((_) async => const Right(true));
+      when(() => mockVoiceService.startListening(
+            listenFor: any(named: 'listenFor'),
+          )).thenAnswer((_) async => const Right(unit));
+      when(() => mockVoiceService.stopListening())
+          .thenAnswer((_) async => const Right('Halo Hermit'));
+
+      final result = await registry.executeTool('listen_voice_input', {
+        'listenDurationSeconds': 5,
+      });
+
+      expect(result, const Right<Failure, String>('Halo Hermit'));
+      verify(() => mockVoiceService.startListening(
+            listenFor: const Duration(seconds: 5),
+          )).called(1);
+      verify(() => mockVoiceService.stopListening()).called(1);
+    });
+
+    test('denies listen_voice_input when permission is denied', () async {
+      when(() => mockVoiceService.checkPermission())
+          .thenAnswer((_) async => const Left(PermissionFailure('Mic access denied')));
+
+      final result = await registry.executeTool('listen_voice_input', {});
+
+      expect(
+        result,
+        const Left<Failure, String>(
+          PermissionFailure('Permission denied for tool: listen_voice_input'),
+        ),
+      );
+      verifyNever(() => mockVoiceService.startListening(listenFor: any(named: 'listenFor')));
+    });
+  });
 }

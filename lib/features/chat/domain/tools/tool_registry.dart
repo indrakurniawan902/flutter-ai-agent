@@ -14,6 +14,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/file_workspace_service
 import 'package:flutter_ai_agent/features/chat/data/tools/local_memory_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/models/ambient_event.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/ambient_trigger_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/voice_input_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/security_policy.dart';
 
 typedef ToolExecutor = Future<Either<Failure, String>> Function(
@@ -788,6 +789,43 @@ class ToolRegistry {
             (result) => Right(jsonEncode(result.toJson())),
           );
         },
+      ),
+    );
+  }
+
+  void registerVoiceTools(VoiceInputServiceBase service) {
+    register(
+      RegisteredTool(
+        name: 'listen_voice_input',
+        description:
+            'Listens to microphone voice input and transcribes spoken audio into text.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'listenDurationSeconds': {
+              'type': 'integer',
+              'description':
+                  'Maximum duration in seconds to listen for voice input (default: 10)',
+            },
+          },
+        },
+        securityTier: SecurityTier.tier2Permission,
+        execute: (args) async {
+          final durationSec =
+              (args['listenDurationSeconds'] as num?)?.toInt() ?? 10;
+          final startResult = await service.startListening(
+            listenFor: Duration(seconds: durationSec),
+          );
+          return startResult.fold(
+            (failure) => Left(failure),
+            (_) async {
+              return service.stopListening();
+            },
+          );
+        },
+        checkPermission: () => service.checkPermission().then(
+              (res) => res.fold((_) => false, (allowed) => allowed),
+            ),
       ),
     );
   }

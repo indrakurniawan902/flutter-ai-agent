@@ -1,18 +1,24 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
 import 'package:flutter_ai_agent/core/di/injection_container.dart';
 import 'package:flutter_ai_agent/features/chat/data/models/chat_models.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/voice_input_service.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/widgets/action_approval_sheet.dart';
+import 'package:flutter_ai_agent/features/chat/presentation/widgets/voice_waveform_widget.dart';
 import 'package:flutter_ai_agent/features/settings/presentation/screens/settings_screen.dart';
 
 /// Main Chat Screen displaying streaming conversation, tool call cards,
 /// and input prompt area.
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  const ChatScreen({super.key, this.voiceInputService});
+
+  final VoiceInputServiceBase? voiceInputService;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -23,11 +29,48 @@ class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
   bool _isComposing = false;
+  late final VoiceInputServiceBase _voiceService;
+  AgentCubit? _agentCubit;
+  StreamSubscription<VoiceInputStatus>? _voiceStatusSub;
+  StreamSubscription<String>? _voiceErrorSub;
+  bool _isVoiceRecording = false;
+  bool _isHoldToSpeak = false;
 
   @override
   void initState() {
     super.initState();
     _textController.addListener(_onTextChanged);
+
+    _voiceService = widget.voiceInputService ??
+        (sl.isRegistered<VoiceInputServiceBase>()
+            ? sl<VoiceInputServiceBase>()
+            : VoiceInputService());
+
+    _voiceStatusSub = _voiceService.statusStream.listen((status) {
+      if (!mounted) return;
+      if (status == VoiceInputStatus.done && _isVoiceRecording) {
+        _stopVoiceInputAndSend();
+      } else if (status == VoiceInputStatus.error) {
+        setState(() {
+          _isVoiceRecording = false;
+          _isHoldToSpeak = false;
+        });
+      }
+    });
+
+    _voiceErrorSub = _voiceService.errorStream.listen((error) {
+      if (!mounted) return;
+      setState(() {
+        _isVoiceRecording = false;
+        _isHoldToSpeak = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    });
   }
 
   void _onTextChanged() {
@@ -41,11 +84,91 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    _voiceStatusSub?.cancel();
+    _voiceErrorSub?.cancel();
+    if (widget.voiceInputService == null &&
+        !sl.isRegistered<VoiceInputServiceBase>()) {
+      _voiceService.dispose();
+    }
     _textController.removeListener(_onTextChanged);
     _textController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  Future<void> _startVoiceInput({bool isHold = false}) async {
+    final isBusy = _agentCubit != null && _isAgentBusy(_agentCubit!.state);
+    if (isBusy) return;
+
+    final result = await _voiceService.startListening();
+    result.fold(
+      (failure) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(failure.message),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
+      },
+      (_) {
+        if (mounted) {
+          setState(() {
+            _isVoiceRecording = true;
+            _isHoldToSpeak = isHold;
+          });
+        }
+      },
+    );
+  }
+
+  Future<void> _stopVoiceInputAndSend() async {
+    if (!_isVoiceRecording) return;
+    if (mounted) {
+      setState(() {
+        _isVoiceRecording = false;
+        _isHoldToSpeak = false;
+      });
+    }
+
+    final result = await _voiceService.stopListening();
+    result.fold(
+      (failure) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(failure.message),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
+      },
+      (text) {
+        if (mounted && text.trim().isNotEmpty) {
+          _handleSubmitted(text);
+        }
+      },
+    );
+  }
+
+  Future<void> _cancelVoiceInput() async {
+    if (!_isVoiceRecording) return;
+    if (mounted) {
+      setState(() {
+        _isVoiceRecording = false;
+        _isHoldToSpeak = false;
+      });
+    }
+    await _voiceService.cancelListening();
+  }
+
+  bool _isAgentBusy(AgentState state) {
+    return state is AgentThinking ||
+        state is AgentStreaming ||
+        state is ExecutingTool ||
+        state is WaitingApproval;
   }
 
   void _scrollToBottom() {
@@ -60,12 +183,12 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  void _handleSubmitted(BuildContext context, String text) {
+  void _handleSubmitted(String text) {
     final prompt = text.trim();
     if (prompt.isEmpty) return;
 
     _textController.clear();
-    context.read<AgentCubit>().sendMessage(prompt);
+    _agentCubit?.sendMessage(prompt);
     _scrollToBottom();
   }
 
@@ -78,6 +201,7 @@ class _ChatScreenState extends State<ChatScreen> {
       create: (_) => sl<AgentCubit>(),
       child: Builder(
         builder: (context) {
+          _agentCubit = context.read<AgentCubit>();
           return Scaffold(
             appBar: AppBar(
               title: const Text(
@@ -147,6 +271,20 @@ class _ChatScreenState extends State<ChatScreen> {
                             : _buildMessageList(context, messages, state),
                       ),
                       if (state is AgentThinking) _buildThinkingBar(context),
+                      if (_isVoiceRecording)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 4),
+                          child: VoiceWaveformWidget(
+                            soundLevelStream: _voiceService.soundLevelStream,
+                            transcriptionStream:
+                                _voiceService.transcriptionStream,
+                            initialText: _voiceService.lastRecognizedWords,
+                            isHoldToSpeak: _isHoldToSpeak,
+                            onStopAndSend: _stopVoiceInputAndSend,
+                            onCancel: _cancelVoiceInput,
+                          ),
+                        ),
                       _buildInputBar(context, state),
                     ],
                   ),
@@ -546,10 +684,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildInputBar(BuildContext context, AgentState state) {
     final theme = Theme.of(context);
-    final isBusy = state is AgentThinking ||
-        state is AgentStreaming ||
-        state is ExecutingTool ||
-        state is WaitingApproval;
+    final isBusy = _isAgentBusy(state);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -597,19 +732,58 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               onSubmitted: (val) {
                 if (_isComposing && !isBusy) {
-                  _handleSubmitted(context, val);
+                  _handleSubmitted(val);
                 }
               },
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
+          Tooltip(
+            message: _isVoiceRecording
+                ? 'Stop voice recording'
+                : 'Voice Input (Tap or hold to speak)',
+            child: GestureDetector(
+              key: const Key('chat_mic_button'),
+              behavior: HitTestBehavior.opaque,
+              onTap: isBusy
+                  ? null
+                  : () => _isVoiceRecording
+                      ? _stopVoiceInputAndSend()
+                      : _startVoiceInput(isHold: false),
+              onLongPressStart: isBusy || _isVoiceRecording
+                  ? null
+                  : (_) => _startVoiceInput(isHold: true),
+              onLongPressEnd: isBusy
+                  ? null
+                  : (_) {
+                      if (_isHoldToSpeak && _isVoiceRecording) {
+                        _stopVoiceInputAndSend();
+                      }
+                    },
+              onLongPressCancel: isBusy ? null : () => _cancelVoiceInput(),
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Icon(
+                  _isVoiceRecording
+                      ? Icons.mic
+                      : Icons.mic_rounded,
+                  color: isBusy
+                      ? const Color(0xFF475569)
+                      : (_isVoiceRecording
+                          ? const Color(0xFFEF4444)
+                          : theme.colorScheme.primary),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
           IconButton(
             key: const Key('chat_send_button'),
             icon: const Icon(Icons.send_rounded),
             color: theme.colorScheme.primary,
             disabledColor: const Color(0xFF475569),
             onPressed: (_isComposing && !isBusy)
-                ? () => _handleSubmitted(context, _textController.text)
+                ? () => _handleSubmitted(_textController.text)
                 : null,
           ),
         ],

@@ -11,6 +11,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/notification_triage_se
 import 'package:flutter_ai_agent/features/chat/data/tools/file_workspace_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/local_memory_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/ambient_trigger_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/voice_input_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart';
@@ -70,6 +71,7 @@ void main() {
     expect(sl.isRegistered<NotificationTriageServiceBase>(), isFalse);
     expect(sl.isRegistered<LocalMemoryServiceBase>(), isFalse);
     expect(sl.isRegistered<AmbientTriggerServiceBase>(), isFalse);
+    expect(sl.isRegistered<VoiceInputServiceBase>(), isFalse);
     expect(sl.isRegistered<ToolRegistry>(), isFalse);
     expect(sl.isRegistered<AgentCubit>(), isFalse);
 
@@ -87,6 +89,7 @@ void main() {
     expect(sl.isRegistered<NotificationTriageServiceBase>(), isTrue);
     expect(sl.isRegistered<LocalMemoryServiceBase>(), isTrue);
     expect(sl.isRegistered<AmbientTriggerServiceBase>(), isTrue);
+    expect(sl.isRegistered<VoiceInputServiceBase>(), isTrue);
     expect(sl.isRegistered<ToolRegistry>(), isTrue);
     expect(sl.isRegistered<AgentCubit>(), isTrue);
 
@@ -114,5 +117,6 @@ void main() {
     expect(registry.hasTool('remove_geofence'), isTrue);
     expect(registry.hasTool('check_ambient_status'), isTrue);
     expect(registry.hasTool('trigger_ambient_check'), isTrue);
+    expect(registry.hasTool('listen_voice_input'), isTrue);
   });
 }

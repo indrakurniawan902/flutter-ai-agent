@@ -51,6 +51,7 @@ dependencies:
   syncfusion_flutter_pdf: ^34.2.7
   sqflite: ^2.4.4
   workmanager: ^0.10.10
+  speech_to_text: ^7.4.0
 
 dev_dependencies:
   flutter_test:

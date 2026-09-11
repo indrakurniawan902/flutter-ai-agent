@@ -15,6 +15,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/notification_triage_se
 import 'package:flutter_ai_agent/features/chat/data/tools/file_workspace_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/local_memory_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/ambient_trigger_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/voice_input_service.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
@@ -127,6 +128,12 @@ class MockBatteryPlatformWrapper extends Mock
 
 class MockWorkmanagerPlatformWrapper extends Mock
     implements WorkmanagerPlatformWrapper {}
+
+// Voice Input Service
+class MockSpeechToTextWrapper extends Mock implements SpeechToTextWrapper {}
+
+class MockVoiceInputService extends Mock implements VoiceInputServiceBase {}
+
 
 
 
