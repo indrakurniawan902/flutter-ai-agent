@@ -413,5 +413,115 @@ void main() {
       expect(toolMessages[0].content, equals('Critical action executed'));
       expect(toolMessages[1].content, equals('Info action executed'));
     });
+
+    test('terminates ReAct loop immediately when tool execution returns PermissionFailure without re-requesting tool', () async {
+      toolRegistry.register(
+        RegisteredTool(
+          name: 'get_location',
+          description: 'Get device location',
+          parameters: const {'type': 'object'},
+          securityTier: SecurityTier.tier1Auto,
+          execute: (args) async =>
+              const Left(PermissionFailure('Location permission denied')),
+        ),
+      );
+
+      when(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: any(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+          )).thenAnswer((_) async {
+        return Right(Stream.fromIterable([
+          const ChatChunk(
+            toolCallDeltas: [
+              ToolCallDelta(
+                index: 0,
+                id: 'call_loc',
+                name: 'get_location',
+                argumentsFragment: '{}',
+              ),
+            ],
+            finishReason: 'tool_calls',
+          ),
+        ]));
+      });
+
+      await cubit.sendMessage('What is my location?');
+
+      expect(cubit.state, isA<AgentSuccess>());
+      final successState = cubit.state as AgentSuccess;
+      expect(successState.response, contains('Location permission denied'));
+
+      verify(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: any(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+          )).called(1);
+
+      final toolMessages =
+          cubit.messages.where((m) => m.role == 'tool').toList();
+      expect(toolMessages.length, equals(1));
+      expect(toolMessages.first.content, contains('Location permission denied'));
+
+      final assistantMessages =
+          cubit.messages.where((m) => m.role == 'assistant').toList();
+      expect(assistantMessages.last.content, contains('Location permission denied'));
+    });
+
+    test('terminates ReAct loop immediately when approved Tier 3 tool returns PermissionFailure', () async {
+      toolRegistry.register(
+        RegisteredTool(
+          name: 'create_calendar_event',
+          description: 'Create calendar event',
+          parameters: const {'type': 'object'},
+          securityTier: SecurityTier.tier3Hitl,
+          execute: (args) async =>
+              const Left(PermissionFailure('Calendar permission denied')),
+        ),
+      );
+
+      when(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: any(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+          )).thenAnswer((_) async {
+        return Right(Stream.fromIterable([
+          const ChatChunk(
+            toolCallDeltas: [
+              ToolCallDelta(
+                index: 0,
+                id: 'call_cal',
+                name: 'create_calendar_event',
+                argumentsFragment: '{}',
+              ),
+            ],
+            finishReason: 'tool_calls',
+          ),
+        ]));
+      });
+
+      await cubit.sendMessage('Create event');
+      expect(cubit.state, isA<WaitingApproval>());
+
+      await cubit.approveAction();
+
+      expect(cubit.state, isA<AgentSuccess>());
+      final successState = cubit.state as AgentSuccess;
+      expect(successState.response, contains('Calendar permission denied'));
+
+      verify(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: any(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+          )).called(1);
+    });
   });
 }
