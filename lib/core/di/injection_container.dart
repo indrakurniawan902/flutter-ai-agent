@@ -11,6 +11,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart'
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_triage_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/file_workspace_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/local_memory_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart';
@@ -115,6 +116,12 @@ Future<void> initDependencies() async {
     );
   }
 
+  if (!sl.isRegistered<LocalMemoryServiceBase>()) {
+    sl.registerLazySingleton<LocalMemoryServiceBase>(
+      () => LocalMemoryService(),
+    );
+  }
+
   // Tool Registry
   if (!sl.isRegistered<ToolRegistry>()) {
     sl.registerLazySingleton<ToolRegistry>(
@@ -128,6 +135,7 @@ Future<void> initDependencies() async {
         registry.registerNotificationTools(sl<NotificationServiceBase>());
         registry.registerFileWorkspaceTools(sl<FileWorkspaceServiceBase>());
         registry.registerNotificationTriageTools(sl<NotificationTriageServiceBase>());
+        registry.registerMemoryTools(sl<LocalMemoryServiceBase>());
         return registry;
       },
     );
@@ -147,6 +155,7 @@ Future<void> initDependencies() async {
         llmRepository: sl<LlmRepository>(),
         toolRegistry: sl<ToolRegistry>(),
         secureStorageService: sl<SecureStorageService>(),
+        localMemoryService: sl<LocalMemoryServiceBase>(),
       ),
     );
   }

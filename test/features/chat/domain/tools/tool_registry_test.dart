@@ -371,4 +371,48 @@ void main() {
           ));
     });
   });
+
+  group('registerMemoryTools', () {
+    late MockLocalMemoryService mockMemoryService;
+
+    setUp(() {
+      mockMemoryService = MockLocalMemoryService();
+      registry.registerMemoryTools(mockMemoryService);
+    });
+
+    test('registers save_memory, search_memories, delete_memory, and list_memories as tier1Auto', () {
+      expect(registry.hasTool('save_memory'), isTrue);
+      expect(registry.hasTool('search_memories'), isTrue);
+      expect(registry.hasTool('delete_memory'), isTrue);
+      expect(registry.hasTool('list_memories'), isTrue);
+
+      expect(registry.getTool('save_memory')?.securityTier, equals(SecurityTier.tier1Auto));
+      expect(registry.getTool('search_memories')?.securityTier, equals(SecurityTier.tier1Auto));
+      expect(registry.getTool('delete_memory')?.securityTier, equals(SecurityTier.tier1Auto));
+      expect(registry.getTool('list_memories')?.securityTier, equals(SecurityTier.tier1Auto));
+    });
+
+    test('executes memory tools via ToolRegistry successfully', () async {
+      when(() => mockMemoryService.saveMemoryFormattedJson(any()))
+          .thenAnswer((_) async => const Right('{"status":"saved"}'));
+      when(() => mockMemoryService.searchMemoriesFormattedJson(any()))
+          .thenAnswer((_) async => const Right('{"count":1}'));
+      when(() => mockMemoryService.deleteMemoryFormattedJson(any()))
+          .thenAnswer((_) async => const Right('{"deleted":true}'));
+      when(() => mockMemoryService.listMemoriesFormattedJson(any()))
+          .thenAnswer((_) async => const Right('{"count":2}'));
+
+      final saveRes = await registry.executeTool('save_memory', {'key': 'k', 'content': 'c'});
+      expect(saveRes, equals(const Right('{"status":"saved"}')));
+
+      final searchRes = await registry.executeTool('search_memories', {'query': 'q'});
+      expect(searchRes, equals(const Right('{"count":1}')));
+
+      final deleteRes = await registry.executeTool('delete_memory', {'id': 1});
+      expect(deleteRes, equals(const Right('{"deleted":true}')));
+
+      final listRes = await registry.executeTool('list_memories', {});
+      expect(listRes, equals(const Right('{"count":2}')));
+    });
+  });
 }

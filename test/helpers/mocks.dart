@@ -13,6 +13,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart'
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_triage_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/file_workspace_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/local_memory_service.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
@@ -112,6 +113,9 @@ class MockFileWorkspaceService extends Mock
 class MockFileSystemWrapper extends Mock implements FileSystemWrapper {}
 
 class MockFilePickerWrapper extends Mock implements FilePickerWrapper {}
+
+// Local Memory
+class MockLocalMemoryService extends Mock implements LocalMemoryServiceBase {}
 
 
 

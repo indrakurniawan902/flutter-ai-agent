@@ -9,6 +9,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart'
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_triage_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/file_workspace_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/local_memory_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart';
@@ -66,6 +67,7 @@ void main() {
     expect(sl.isRegistered<NotificationServiceBase>(), isFalse);
     expect(sl.isRegistered<FileWorkspaceServiceBase>(), isFalse);
     expect(sl.isRegistered<NotificationTriageServiceBase>(), isFalse);
+    expect(sl.isRegistered<LocalMemoryServiceBase>(), isFalse);
     expect(sl.isRegistered<ToolRegistry>(), isFalse);
     expect(sl.isRegistered<AgentCubit>(), isFalse);
 
@@ -81,6 +83,7 @@ void main() {
     expect(sl.isRegistered<NotificationServiceBase>(), isTrue);
     expect(sl.isRegistered<FileWorkspaceServiceBase>(), isTrue);
     expect(sl.isRegistered<NotificationTriageServiceBase>(), isTrue);
+    expect(sl.isRegistered<LocalMemoryServiceBase>(), isTrue);
     expect(sl.isRegistered<ToolRegistry>(), isTrue);
     expect(sl.isRegistered<AgentCubit>(), isTrue);
 
@@ -99,5 +102,9 @@ void main() {
     expect(registry.hasTool('list_device_files'), isTrue);
     expect(registry.hasTool('read_recent_notifications'), isTrue);
     expect(registry.hasTool('extract_latest_otp'), isTrue);
+    expect(registry.hasTool('save_memory'), isTrue);
+    expect(registry.hasTool('search_memories'), isTrue);
+    expect(registry.hasTool('delete_memory'), isTrue);
+    expect(registry.hasTool('list_memories'), isTrue);
   });
 }

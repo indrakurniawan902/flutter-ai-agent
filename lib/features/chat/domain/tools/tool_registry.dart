@@ -11,6 +11,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart'
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_triage_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/file_workspace_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/local_memory_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/security_policy.dart';
 
 typedef ToolExecutor = Future<Either<Failure, String>> Function(
@@ -474,6 +475,101 @@ class ToolRegistry {
           appFilter: args['appFilter']?.toString(),
         ),
         checkPermission: () => service.checkPermission(),
+      ),
+    );
+  }
+
+  void registerMemoryTools(LocalMemoryServiceBase service) {
+    register(
+      RegisteredTool(
+        name: 'save_memory',
+        description:
+            'Save or update a persistent memory item (user preference, profile fact, project context) to local storage with optional tags.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'key': {
+              'type': 'string',
+              'description': 'Unique identifier for the memory (e.g. "user_name", "editor_preference")',
+            },
+            'content': {
+              'type': 'string',
+              'description': 'Full text content of the memory',
+            },
+            'tags': {
+              'type': 'array',
+              'items': {'type': 'string'},
+              'description': 'Optional tags for categorization',
+            },
+          },
+          'required': ['key', 'content'],
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) => service.saveMemoryFormattedJson(args),
+      ),
+    );
+
+    register(
+      RegisteredTool(
+        name: 'search_memories',
+        description:
+            'Search persistent device memories using SQLite FTS5 full-text search with BM25 relevance ranking.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'query': {
+              'type': 'string',
+              'description': 'Search query keywords',
+            },
+            'limit': {
+              'type': 'integer',
+              'description': 'Maximum number of results to return (default 5)',
+            },
+          },
+          'required': ['query'],
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) => service.searchMemoriesFormattedJson(args),
+      ),
+    );
+
+    register(
+      RegisteredTool(
+        name: 'delete_memory',
+        description: 'Delete a stored memory item by id or key.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'id': {
+              'type': 'integer',
+              'description': 'Integer database ID of the memory item',
+            },
+            'key': {
+              'type': 'string',
+              'description': 'Key of the memory item to delete',
+            },
+          },
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) => service.deleteMemoryFormattedJson(args),
+      ),
+    );
+
+    register(
+      RegisteredTool(
+        name: 'list_memories',
+        description: 'List stored memories ordered by most recently updated.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'limit': {
+              'type': 'integer',
+              'description': 'Maximum number of memories to return (default 50)',
+            },
+          },
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) => service.listMemoriesFormattedJson(args),
       ),
     );
   }
