@@ -12,6 +12,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.d
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart';
+import 'package:flutter_ai_agent/features/server_profiles/domain/server_profile_cubit.dart';
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
 import 'package:flutter_ai_agent/features/settings/domain/settings_cubit.dart';
 
@@ -54,6 +55,12 @@ Future<void> initDependencies() async {
   if (!sl.isRegistered<SettingsCubit>()) {
     sl.registerFactory<SettingsCubit>(
       () => SettingsCubit(secureStorageService: sl<SecureStorageService>()),
+    );
+  }
+
+  if (!sl.isRegistered<ServerProfileCubit>()) {
+    sl.registerFactory<ServerProfileCubit>(
+      () => ServerProfileCubit(secureStorageService: sl<SecureStorageService>()),
     );
   }
 

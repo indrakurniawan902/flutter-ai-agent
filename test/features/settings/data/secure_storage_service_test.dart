@@ -1,3 +1,7 @@
+import 'dart:convert';
+
+import 'package:flutter_ai_agent/features/server_profiles/data/models/server_profile_model.dart';
+import 'package:flutter_ai_agent/features/server_profiles/domain/entities/server_profile.dart';
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -208,6 +212,225 @@ void main() {
       await service.clearAll();
 
       verify(() => mockStorage.deleteAll()).called(1);
+    });
+  });
+
+  group('SecureStorageService - Server Profiles CRUD', () {
+    final profile1 = ServerProfile(
+      id: 'profile-1',
+      name: 'VPS Oracle',
+      gatewayUrl: 'https://indra-9router.my.id/v1',
+      token: 'sk-token-1',
+      isActive: true,
+      lastConnected: DateTime.utc(2026, 9, 11, 10, 0),
+    );
+
+    final profile2 = ServerProfile(
+      id: 'profile-2',
+      name: 'Dev Server',
+      gatewayUrl: 'http://localhost:8080',
+      token: 'sk-token-2',
+      isActive: false,
+    );
+
+    test('getServerProfiles returns empty list when key does not exist or empty', () async {
+      when(() => mockStorage.read(key: SecureStorageService.keyServerProfiles))
+          .thenAnswer((_) async => null);
+
+      final result = await service.getServerProfiles();
+
+      expect(result, isEmpty);
+    });
+
+    test('getServerProfiles returns empty list on invalid/corrupt JSON', () async {
+      when(() => mockStorage.read(key: SecureStorageService.keyServerProfiles))
+          .thenAnswer((_) async => '{not valid json list');
+
+      final result = await service.getServerProfiles();
+
+      expect(result, isEmpty);
+    });
+
+    test('getServerProfiles returns parsed profiles on valid JSON', () async {
+      final jsonString = jsonEncode([
+        ServerProfileModel.fromEntity(profile1).toJson(),
+        ServerProfileModel.fromEntity(profile2).toJson(),
+      ]);
+
+      when(() => mockStorage.read(key: SecureStorageService.keyServerProfiles))
+          .thenAnswer((_) async => jsonString);
+
+      final result = await service.getServerProfiles();
+
+      expect(result.length, 2);
+      expect(result[0], equals(profile1));
+      expect(result[1], equals(profile2));
+    });
+
+    test('saveServerProfiles serializes and writes to storage', () async {
+      when(() => mockStorage.write(
+            key: SecureStorageService.keyServerProfiles,
+            value: any(named: 'value'),
+          )).thenAnswer((_) async {});
+
+      await service.saveServerProfiles([profile1, profile2]);
+
+      verify(() => mockStorage.write(
+            key: SecureStorageService.keyServerProfiles,
+            value: any(that: contains('VPS Oracle'), named: 'value'),
+          )).called(1);
+    });
+
+    test('getServerProfileById returns matching profile or null', () async {
+      final jsonString = jsonEncode([
+        ServerProfileModel.fromEntity(profile1).toJson(),
+      ]);
+      when(() => mockStorage.read(key: SecureStorageService.keyServerProfiles))
+          .thenAnswer((_) async => jsonString);
+
+      final found = await service.getServerProfileById('profile-1');
+      final notFound = await service.getServerProfileById('non-existent');
+
+      expect(found, equals(profile1));
+      expect(notFound, isNull);
+    });
+
+    test('saveServerProfile adds new profile and deactivates others if active', () async {
+      final initialJson = jsonEncode([
+        ServerProfileModel.fromEntity(profile1).toJson(), // isActive = true
+      ]);
+
+      when(() => mockStorage.read(key: SecureStorageService.keyServerProfiles))
+          .thenAnswer((_) async => initialJson);
+      when(() => mockStorage.write(
+            key: SecureStorageService.keyServerProfiles,
+            value: any(named: 'value'),
+          )).thenAnswer((_) async {});
+
+      final newActiveProfile = ServerProfile(
+        id: 'profile-3',
+        name: 'MacBook Pro',
+        gatewayUrl: 'https://mbp.local',
+        token: 'sk-mbp',
+        isActive: true,
+      );
+
+      await service.saveServerProfile(newActiveProfile);
+
+      final captured = verify(() => mockStorage.write(
+            key: SecureStorageService.keyServerProfiles,
+            value: captureAny(named: 'value'),
+          )).captured;
+
+      final savedList = (jsonDecode(captured.first as String) as List)
+          .map((m) => ServerProfileModel.fromJson(m as Map<String, dynamic>))
+          .toList();
+
+      expect(savedList.length, 2);
+      expect(savedList.firstWhere((p) => p.id == 'profile-1').isActive, isFalse);
+      expect(savedList.firstWhere((p) => p.id == 'profile-3').isActive, isTrue);
+    });
+
+    test('saveServerProfile updates existing profile', () async {
+      final initialJson = jsonEncode([
+        ServerProfileModel.fromEntity(profile1).toJson(),
+      ]);
+
+      when(() => mockStorage.read(key: SecureStorageService.keyServerProfiles))
+          .thenAnswer((_) async => initialJson);
+      when(() => mockStorage.write(
+            key: SecureStorageService.keyServerProfiles,
+            value: any(named: 'value'),
+          )).thenAnswer((_) async {});
+
+      final updated = profile1.copyWith(name: 'Renamed VPS');
+      await service.saveServerProfile(updated);
+
+      final captured = verify(() => mockStorage.write(
+            key: SecureStorageService.keyServerProfiles,
+            value: captureAny(named: 'value'),
+          )).captured;
+
+      final savedList = (jsonDecode(captured.first as String) as List)
+          .map((m) => ServerProfileModel.fromJson(m as Map<String, dynamic>))
+          .toList();
+
+      expect(savedList.length, 1);
+      expect(savedList.first.name, 'Renamed VPS');
+    });
+
+    test('deleteServerProfile removes profile by id', () async {
+      final initialJson = jsonEncode([
+        ServerProfileModel.fromEntity(profile1).toJson(),
+        ServerProfileModel.fromEntity(profile2).toJson(),
+      ]);
+
+      when(() => mockStorage.read(key: SecureStorageService.keyServerProfiles))
+          .thenAnswer((_) async => initialJson);
+      when(() => mockStorage.write(
+            key: SecureStorageService.keyServerProfiles,
+            value: any(named: 'value'),
+          )).thenAnswer((_) async {});
+
+      await service.deleteServerProfile('profile-1');
+
+      final captured = verify(() => mockStorage.write(
+            key: SecureStorageService.keyServerProfiles,
+            value: captureAny(named: 'value'),
+          )).captured;
+
+      final savedList = (jsonDecode(captured.first as String) as List)
+          .map((m) => ServerProfileModel.fromJson(m as Map<String, dynamic>))
+          .toList();
+
+      expect(savedList.length, 1);
+      expect(savedList.first.id, 'profile-2');
+    });
+
+    test('getActiveServerProfile returns the active profile', () async {
+      final jsonString = jsonEncode([
+        ServerProfileModel.fromEntity(profile1).toJson(), // active
+        ServerProfileModel.fromEntity(profile2).toJson(), // inactive
+      ]);
+
+      when(() => mockStorage.read(key: SecureStorageService.keyServerProfiles))
+          .thenAnswer((_) async => jsonString);
+
+      final active = await service.getActiveServerProfile();
+
+      expect(active, equals(profile1));
+    });
+
+    test('setActiveServerProfile activates target, deactivates others, and syncs settings by default', () async {
+      final jsonString = jsonEncode([
+        ServerProfileModel.fromEntity(profile1).toJson(), // active
+        ServerProfileModel.fromEntity(profile2).toJson(), // inactive
+      ]);
+
+      when(() => mockStorage.read(key: SecureStorageService.keyServerProfiles))
+          .thenAnswer((_) async => jsonString);
+      when(() => mockStorage.write(
+            key: any(named: 'key'),
+            value: any(named: 'value'),
+          )).thenAnswer((_) async {});
+
+      await service.setActiveServerProfile('profile-2', syncSettings: true);
+
+      // Verify server profiles storage write
+      verify(() => mockStorage.write(
+            key: SecureStorageService.keyServerProfiles,
+            value: any(named: 'value'),
+          )).called(1);
+
+      // Verify sync to llm_base_url and llm_api_key
+      verify(() => mockStorage.write(
+            key: SecureStorageService.keyBaseUrl,
+            value: 'http://localhost:8080',
+          )).called(1);
+      verify(() => mockStorage.write(
+            key: SecureStorageService.keyApiKey,
+            value: 'sk-token-2',
+          )).called(1);
     });
   });
 }

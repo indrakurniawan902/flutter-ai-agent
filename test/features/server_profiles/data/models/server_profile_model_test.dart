@@ -1,0 +1,182 @@
+import 'package:flutter_ai_agent/features/pairing/data/models/pairing_payload.dart';
+import 'package:flutter_ai_agent/features/server_profiles/data/models/server_profile_model.dart';
+import 'package:flutter_ai_agent/features/server_profiles/domain/entities/server_profile.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  final testDate = DateTime.utc(2026, 9, 11, 10, 0, 0);
+
+  final tServerProfile = ServerProfile(
+    id: 'vps-oracle',
+    name: 'VPS Oracle',
+    gatewayUrl: 'https://indra-9router.my.id/v1',
+    token: 'sk-test-token-123',
+    isActive: true,
+    lastConnected: testDate,
+  );
+
+  group('ServerProfile Entity', () {
+    test('supports value equality', () {
+      final profile1 = ServerProfile(
+        id: '1',
+        name: 'Dev Server',
+        gatewayUrl: 'http://localhost:8080',
+        token: 'token-1',
+        isActive: false,
+        lastConnected: testDate,
+      );
+
+      final profile2 = ServerProfile(
+        id: '1',
+        name: 'Dev Server',
+        gatewayUrl: 'http://localhost:8080',
+        token: 'token-1',
+        isActive: false,
+        lastConnected: testDate,
+      );
+
+      expect(profile1, equals(profile2));
+    });
+
+    test('copyWith copies and overrides fields', () {
+      final updated = tServerProfile.copyWith(
+        name: 'Oracle Cloud',
+        isActive: false,
+      );
+
+      expect(updated.id, 'vps-oracle');
+      expect(updated.name, 'Oracle Cloud');
+      expect(updated.gatewayUrl, 'https://indra-9router.my.id/v1');
+      expect(updated.token, 'sk-test-token-123');
+      expect(updated.isActive, isFalse);
+      expect(updated.lastConnected, testDate);
+    });
+
+    test('copyWith can clear lastConnected when clearLastConnected is true', () {
+      final updated = tServerProfile.copyWith(
+        clearLastConnected: true,
+      );
+
+      expect(updated.lastConnected, isNull);
+    });
+
+    test('fromPairingPayload creates ServerProfile from PairingPayload', () {
+      final payload = PairingPayload(
+        gatewayUrl: 'https://gateway.example.com',
+        token: 'token-pair-123',
+        profileName: 'MacBook Pro Local',
+        timestamp: testDate,
+      );
+
+      final profile = ServerProfile.fromPairingPayload(
+        payload,
+        id: 'mbp-local',
+        isActive: true,
+      );
+
+      expect(profile.id, 'mbp-local');
+      expect(profile.name, 'MacBook Pro Local');
+      expect(profile.gatewayUrl, 'https://gateway.example.com');
+      expect(profile.token, 'token-pair-123');
+      expect(profile.isActive, isTrue);
+    });
+  });
+
+  group('ServerProfileModel', () {
+    test('is a subclass of ServerProfile entity', () {
+      final model = ServerProfileModel(
+        id: '1',
+        name: 'Test',
+        gatewayUrl: 'https://test.com',
+        token: 'tok',
+      );
+
+      expect(model, isA<ServerProfile>());
+    });
+
+    test('fromJson parses camelCase JSON with ISO-8601 date', () {
+      final json = {
+        'id': 'vps-oracle',
+        'name': 'VPS Oracle',
+        'gatewayUrl': 'https://indra-9router.my.id/v1',
+        'token': 'sk-test-token-123',
+        'isActive': true,
+        'lastConnected': testDate.toIso8601String(),
+      };
+
+      final result = ServerProfileModel.fromJson(json);
+
+      expect(result.id, 'vps-oracle');
+      expect(result.name, 'VPS Oracle');
+      expect(result.gatewayUrl, 'https://indra-9router.my.id/v1');
+      expect(result.token, 'sk-test-token-123');
+      expect(result.isActive, isTrue);
+      expect(result.lastConnected, testDate);
+    });
+
+    test('fromJson parses snake_case JSON with integer millis timestamp', () {
+      final json = {
+        'id': 'vps-oracle',
+        'name': 'VPS Oracle',
+        'gateway_url': 'https://indra-9router.my.id/v1',
+        'token': 'sk-test-token-123',
+        'is_active': true,
+        'last_connected': testDate.millisecondsSinceEpoch,
+      };
+
+      final result = ServerProfileModel.fromJson(json);
+
+      expect(result.id, 'vps-oracle');
+      expect(result.name, 'VPS Oracle');
+      expect(result.gatewayUrl, 'https://indra-9router.my.id/v1');
+      expect(result.token, 'sk-test-token-123');
+      expect(result.isActive, isTrue);
+      expect(result.lastConnected, testDate);
+    });
+
+    test('fromJson parses integer seconds timestamp', () {
+      final seconds = testDate.millisecondsSinceEpoch ~/ 1000;
+      final json = {
+        'id': 'vps-oracle',
+        'name': 'VPS Oracle',
+        'gatewayUrl': 'https://indra-9router.my.id/v1',
+        'token': 'sk-test-token-123',
+        'isActive': false,
+        'lastConnected': seconds,
+      };
+
+      final result = ServerProfileModel.fromJson(json);
+
+      expect(result.lastConnected?.millisecondsSinceEpoch, seconds * 1000);
+      expect(result.isActive, isFalse);
+    });
+
+    test('fromJson handles null or missing optional fields gracefully', () {
+      final json = {
+        'name': 'Dev Server',
+      };
+
+      final result = ServerProfileModel.fromJson(json);
+
+      expect(result.name, 'Dev Server');
+      expect(result.gatewayUrl, '');
+      expect(result.token, '');
+      expect(result.isActive, isFalse);
+      expect(result.lastConnected, isNull);
+    });
+
+    test('toJson produces correct JSON map', () {
+      final model = ServerProfileModel.fromEntity(tServerProfile);
+      final json = model.toJson();
+
+      expect(json, {
+        'id': 'vps-oracle',
+        'name': 'VPS Oracle',
+        'gatewayUrl': 'https://indra-9router.my.id/v1',
+        'token': 'sk-test-token-123',
+        'isActive': true,
+        'lastConnected': testDate.toIso8601String(),
+      });
+    });
+  });
+}

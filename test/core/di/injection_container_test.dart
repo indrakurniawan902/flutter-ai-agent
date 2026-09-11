@@ -10,6 +10,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.d
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart';
+import 'package:flutter_ai_agent/features/server_profiles/domain/server_profile_cubit.dart';
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
 import 'package:flutter_ai_agent/features/settings/domain/settings_cubit.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -24,10 +25,11 @@ void main() {
     await sl.reset();
   });
 
-  test('initDependencies registers FlutterSecureStorage, SecureStorageService, and SettingsCubit', () async {
+  test('initDependencies registers FlutterSecureStorage, SecureStorageService, SettingsCubit, and ServerProfileCubit', () async {
     expect(sl.isRegistered<FlutterSecureStorage>(), isFalse);
     expect(sl.isRegistered<SecureStorageService>(), isFalse);
     expect(sl.isRegistered<SettingsCubit>(), isFalse);
+    expect(sl.isRegistered<ServerProfileCubit>(), isFalse);
     expect(sl.isRegistered<PairingParser>(), isFalse);
 
     await initDependencies();
@@ -35,16 +37,19 @@ void main() {
     expect(sl.isRegistered<FlutterSecureStorage>(), isTrue);
     expect(sl.isRegistered<SecureStorageService>(), isTrue);
     expect(sl.isRegistered<SettingsCubit>(), isTrue);
+    expect(sl.isRegistered<ServerProfileCubit>(), isTrue);
     expect(sl.isRegistered<PairingParser>(), isTrue);
 
     final storage = sl<FlutterSecureStorage>();
     final service = sl<SecureStorageService>();
     final cubit = sl<SettingsCubit>();
+    final profileCubit = sl<ServerProfileCubit>();
     final parser = sl<PairingParser>();
 
     expect(storage, isA<FlutterSecureStorage>());
     expect(service, isA<SecureStorageService>());
     expect(cubit, isA<SettingsCubit>());
+    expect(profileCubit, isA<ServerProfileCubit>());
     expect(parser, isA<PairingParser>());
   });
 
