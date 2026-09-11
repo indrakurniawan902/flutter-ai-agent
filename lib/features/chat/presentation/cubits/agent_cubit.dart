@@ -177,10 +177,17 @@ class AgentCubit extends Cubit<AgentState> {
 
   /// Resets the conversation and returns to idle state.
   void reset() {
+    _runGeneration++;
+    _isCancelled = true;
+    if (_streamCompleter != null && !_streamCompleter!.isCompleted) {
+      _streamCompleter!.complete();
+    }
+    _streamSubscription?.cancel();
+    _streamSubscription = null;
     _messages.clear();
     _pendingToolCall = null;
     _pendingTurnToolCalls.clear();
-    emit(const AgentIdle());
+    if (!isClosed) emit(const AgentIdle());
   }
 
   /// Iterates through remaining tool calls for the current turn.
@@ -334,14 +341,17 @@ class AgentCubit extends Cubit<AgentState> {
         emit(AgentError(failure.message));
       },
       (chunkStream) async {
+        if (_isCancelled || runGeneration != _runGeneration) return;
         final contentBuffer = StringBuffer();
         final Map<int, String> callIds = {};
         final Map<int, String> callNames = {};
         final Map<int, StringBuffer> callArgs = {};
         Object? streamError;
 
-        _streamCompleter = Completer<void>();
-        _streamSubscription = chunkStream.listen(
+        final Completer<void> streamCompleter = Completer<void>();
+        _streamCompleter = streamCompleter;
+        final StreamSubscription<ChatChunk> streamSubscription =
+            chunkStream.listen(
           (chunk) {
             if (_isCancelled || runGeneration != _runGeneration) return;
             if (chunk.contentDelta != null && chunk.contentDelta!.isNotEmpty) {
@@ -368,19 +378,25 @@ class AgentCubit extends Cubit<AgentState> {
           },
           onError: (Object e, StackTrace st) {
             streamError = e;
-            if (_streamCompleter != null && !_streamCompleter!.isCompleted) {
-              _streamCompleter!.complete();
+            if (!streamCompleter.isCompleted) {
+              streamCompleter.complete();
             }
           },
           onDone: () {
-            if (_streamCompleter != null && !_streamCompleter!.isCompleted) {
-              _streamCompleter!.complete();
+            if (!streamCompleter.isCompleted) {
+              streamCompleter.complete();
             }
           },
           cancelOnError: false,
         );
-        await _streamCompleter!.future;
-        _streamSubscription = null;
+        _streamSubscription = streamSubscription;
+        await streamCompleter.future;
+        if (identical(_streamSubscription, streamSubscription)) {
+          _streamSubscription = null;
+        }
+        if (identical(_streamCompleter, streamCompleter)) {
+          _streamCompleter = null;
+        }
 
         if (_isCancelled || runGeneration != _runGeneration) return;
 
