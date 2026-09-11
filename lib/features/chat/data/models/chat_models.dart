@@ -84,6 +84,28 @@ class ChatMessage extends Equatable {
     this.summaryCard,
   });
 
+  ChatMessage copyWith({
+    String? role,
+    String? content,
+    List<ToolCallDelta>? toolCalls,
+    String? toolCallId,
+    String? name,
+    List<ActionStep>? actionSteps,
+    ActionConfirmationData? confirmationCard,
+    SummaryCardData? summaryCard,
+  }) {
+    return ChatMessage(
+      role: role ?? this.role,
+      content: content ?? this.content,
+      toolCalls: toolCalls ?? this.toolCalls,
+      toolCallId: toolCallId ?? this.toolCallId,
+      name: name ?? this.name,
+      actionSteps: actionSteps ?? this.actionSteps,
+      confirmationCard: confirmationCard ?? this.confirmationCard,
+      summaryCard: summaryCard ?? this.summaryCard,
+    );
+  }
+
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     final toolCallsList = json['tool_calls'] as List<dynamic>?;
     return ChatMessage(
