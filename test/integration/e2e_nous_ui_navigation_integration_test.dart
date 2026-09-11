@@ -282,7 +282,7 @@ void main() {
           ),
         ]);
 
-        await tester.pumpWidget(const App());
+        await tester.pumpWidget(const App(splashDuration: Duration.zero));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
 
