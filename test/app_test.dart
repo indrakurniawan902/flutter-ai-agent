@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/app.dart';
 import 'package:flutter_ai_agent/core/di/injection_container.dart';
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
+import 'package:flutter_ai_agent/features/splash/presentation/screens/splash_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -34,18 +35,25 @@ void main() {
     await sl.reset();
   });
 
-  testWidgets('App renders with dark theme', (tester) async {
+  testWidgets('App renders with dark theme and splash screen transitioning to Chat', (tester) async {
     await tester.pumpWidget(const App());
 
     final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
     expect(materialApp.theme?.brightness, Brightness.dark);
+    expect(find.byType(SplashScreen), findsOneWidget);
+
+    // Fast-forward past splash duration and transition to ChatScreen
+    await tester.pump(const Duration(milliseconds: 2500));
+    await tester.pumpAndSettle();
+
     expect(find.text('Flames'), findsOneWidget);
     expect(find.byKey(const Key('chat_settings_button')), findsOneWidget);
   });
 
   testWidgets('App navigates from Chat to SettingsScreen on settings button tap', (tester) async {
     await tester.pumpWidget(const App());
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 2500));
+    await tester.pumpAndSettle();
 
     final settingsButton = find.byKey(const Key('chat_settings_button'));
     await tester.tap(settingsButton);
