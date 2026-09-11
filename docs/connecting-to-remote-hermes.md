@@ -1,110 +1,169 @@
-# Connecting Flames to Any Remote Hermes Agent
+# Connecting Flames to Remote & Local Hermes Instances
 
-Panduan lengkap menghubungkan aplikasi **Flames** di smartphone ke instance **Hermes Agent** milik orang lain (misal: teman kantor, server kantor, atau laptop kedua).
-
----
-
-## 1. Pertanyaan Kunci: Apakah Harus di 1 Network (WiFi yang Sama)?
-
-**Jawabannya: TIDAK HARUS.**
-
-Ada 2 skenario konektivitas:
-
-### Skenario A: Di 1 Jaringan WiFi yang Sama (LAN Lokal)
-- **Kondisi**: HP kamu dan laptop teman terhubung ke WiFi kantor yang sama.
-- **Kelebihan**: Gak butuh kuota internet, latency sangat cepat, gak butuh domain publik.
-- **URL yang dipakai**: IP lokal laptop teman, contoh: `http://192.168.1.45:8642/v1`.
-
-### Skenario B: Beda Jaringan (Remote / WFH / Pakai Data Seluler)
-- **Kondisi**: HP kamu pakai paket data 4G/5G, teman ada di rumah atau beda WiFi.
-- **Kebutuhan**: Laptop teman harus punya pintu masuk publik. Paling mudah & gratis:
-  1. **Cloudflare Tunnel (Paling Recommended)**: `cloudflared tunnel --url http://localhost:8642` → dapet URL HTTPS aman (contoh: `https://hermes-teman.trycloudflare.com/v1`).
-  2. **Tailscale VPN**: HP dan laptop teman gabung ke jaringan Tailscale yang sama → pakai IP Tailscale `http://100.x.y.z:8642/v1`.
-  3. **VPS / Public Domain**: Seperti yang kita pakai di `https://indra-9router.my.id/v1`.
+This guide provides step-by-step instructions for connecting the **Flames** mobile app to any **Hermes Agent** instance—whether running locally on a Mac/laptop via WiFi, on a remote cloud VPS, or on a colleague's machine.
 
 ---
 
-## 2. Langkah di Laptop Teman (Host Hermes)
+## 1. Overview of Connection Scenarios
 
-Minta teman kantormu melakukan 3 langkah ini di laptopnya:
+| Scenario | Network Requirement | Example Base URL | Security / Auth |
+|---|---|---|---|
+| **Local Machine (Mac / PC)** | Same WiFi / LAN | `http://192.168.1.50:8642/v1` | Local Bearer token (`API_SERVER_KEY`) |
+| **Remote Cloud VPS** | Public Internet (Anywhere) | `https://hermes.indra-developer.my.id/v1` | TLS (HTTPS) + Bearer token |
+| **Colleague Machine (Remote)** | Cloudflare Tunnel / VPN | `https://hermes-colleague.trycloudflare.com/v1` | HTTPS + Colleague's Bearer token |
 
-### Langkah 2.1: Aktifkan API Server Hermes
-Buka file konfigurasi Hermes teman: `~/.hermes/config.yaml`
-Pastikan konfigurasi `api_server` aktif dan listen ke `0.0.0.0`:
+---
 
-```yaml
-platforms:
-  api_server:
-    enabled: true
-    host: 0.0.0.0    # Wajib 0.0.0.0 agar bisa diakses device luar di jaringan yang sama
-    port: 8642
+## 2. Setting Up the Host (Hermes Server)
+
+### A. Local Machine Setup (macOS / Linux Laptop)
+
+1. **Find your local LAN IP address**:
+   ```bash
+   # On macOS:
+   ipconfig getifaddr en0
+
+   # On Linux:
+   hostname -I | awk '{print $1}'
+   ```
+   *(Example: `192.168.1.50`)*
+
+2. **Enable the API Server Platform**:
+   Edit `~/.hermes/config.yaml`:
+   ```yaml
+   platforms:
+     api_server:
+       enabled: true
+       host: 0.0.0.0    # Required: Binds to LAN interface instead of localhost only
+       port: 8642
+   ```
+
+3. **Set the Secret Token**:
+   In `~/.hermes/.env`:
+   ```bash
+   API_SERVER_KEY=your-secure-local-token
+   ```
+
+4. **Restart Hermes Gateway**:
+   ```bash
+   hermes gateway restart
+   ```
+
+5. **Verify connectivity**:
+   ```bash
+   curl -i http://localhost:8642/health
+   # Expected response: {"status": "ok", "platform": "hermes-agent"}
+   ```
+
+---
+
+### B. Remote Cloud VPS Setup (Production / Nginx Proxy)
+
+When deploying to a public VPS (such as Oracle Cloud):
+- **Keep Admin Web Dashboards Private**: Do NOT expose the dashboard web UI (`9119`) publicly. Keep it bound to `127.0.0.1` and access it via SSH tunnel (`ssh -N -L 29119:127.0.0.1:9119 oracle`).
+- **Proxy the API Server securely**: Route only `/v1/` and `/p/` via Nginx to the Hermes API Server port (`9120`).
+
+**Nginx Configuration (`/etc/nginx/sites-available/hermes-dashboard`)**:
+```nginx
+server {
+    server_name hermes.indra-developer.my.id;
+
+    listen 443 ssl;
+    ssl_certificate /etc/letsencrypt/live/hermes.indra-developer.my.id/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/hermes.indra-developer.my.id/privkey.pem;
+
+    # Block public access to root dashboard UI
+    location / {
+        return 404;
+    }
+
+    # Proxy OpenAI-compatible API Server & Multiplexed Profiles
+    location ^~ /v1/ {
+        proxy_pass http://127.0.0.1:9120;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_read_timeout 600s;
+    }
+
+    location ^~ /p/ {
+        proxy_pass http://127.0.0.1:9120;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_read_timeout 600s;
+    }
+}
 ```
 
-### Langkah 2.2: Buat Token / Password Akses
-Buka file `~/.hermes/.env` di laptop teman, tentukan API key:
+---
+
+## 3. Configuring Server Profiles in the Flames App
+
+Open **Flames** on your mobile device, navigate to **Settings** → **Server Profiles**, and tap **+ Add Profile**.
+
+### Available Profiles for our Bot Team
+
+| Role | Profile Name | Base / Gateway URL | Model Name | Description |
+|---|---|---|---|---|
+| 👑 **PM Bot** | `Hermes PM` | `https://hermes.indra-developer.my.id/v1` | `hermes-agent` | Project coordinator, task planner, general inquiries |
+| 🛠️ **Dev Bot** | `Hermes Dev` | `https://hermes.indra-developer.my.id/p/dev/v1` | `dev` | Flutter/Dart coding, debugging, architecture & PRs |
+| ⚡ **Ops Bot** | `Hermes Ops` | `https://hermes.indra-developer.my.id/p/ops/v1` | `ops` | VPS management, Docker, Nginx, deployment & monitoring |
+| 🔍 **Research Bot** | `Hermes Research` | `https://hermes.indra-developer.my.id/p/research/v1` | `research` | Deep web research, tech intel, benchmarking |
+
+> **API Key / Token**: Enter the `API_SERVER_KEY` configured in your VPS `~/.hermes/.env`.
+
+### Local Mac Profile (When on Home / Office WiFi)
+- **Profile Name**: `Hermes Mac`
+- **Base / Gateway URL**: `http://192.168.1.50:8642/v1` *(Replace with your Mac's IP)*
+- **API Key / Token**: *(Your Mac's `API_SERVER_KEY`)*
+- **Model Name**: `hermes-agent`
+
+---
+
+## 4. Multi-Profile Sessions & Isolation
+
+1. **Independent Session Stores**:
+   - Each bot profile maintains its own isolated database (`sessions.db` & `state.db`).
+   - Conversations with `Dev Bot` do not leak into or pollute the context of `Ops Bot` or `PM Bot`.
+2. **Conversation Persistence**:
+   - The Flames app sends standard OpenAI chat messages. Hermes maps each conversation to a durable session ID.
+   - Sessions are persistent across mobile network reconnections.
+3. **Instant Switching**:
+   - Switching profiles in the Flames app dropdown immediately targets the selected bot persona and its dedicated workspace without needing re-authentication.
+
+---
+
+## 5. Troubleshooting & Verification
+
+### Test Connection via Terminal
+To test an endpoint before configuring the mobile client:
 ```bash
-API_SERVER_KEY=teman-secret-key-123
+# Test public models list
+curl -s -X GET "https://hermes.indra-developer.my.id/v1/models" \
+  -H "Authorization: Bearer <YOUR_API_SERVER_KEY>"
+
+# Test direct chat completion
+curl -s -X POST "https://hermes.indra-developer.my.id/p/dev/v1/chat/completions" \
+  -H "Authorization: Bearer <YOUR_API_SERVER_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dev",
+    "messages": [{"role": "user", "content": "ping"}]
+  }'
 ```
 
-Lalu restart gateway Hermes di laptopnya:
-```bash
-hermes gateway restart
-```
-
-### Langkah 2.3: Berikan Info URL & Token ke Kamu
-Minta teman cek IP lokalnya:
-- **Mac**: `ipconfig getifaddr en0` (misal: `192.168.1.45`)
-- **Linux**: `hostname -I | awk '{print $1}'`
-- **Windows**: `ipconfig`
-
-Format koneksinya:
-- **Base URL**: `http://192.168.1.45:8642/v1`
-- **Token**: `teman-secret-key-123`
-
-*(Opsional)* Temanmu bisa langsung generate QR code pairing di terminalnya:
-```bash
-qrencode -t ansiutf8 '{"gatewayUrl":"http://192.168.1.45:8642/v1","token":"teman-secret-key-123","profileName":"Hermes Andi"}'
-```
-
----
-
-## 3. Langkah di HP Kamu (App Flames)
-
-### Cara 1: Scan QR Code (Instan)
-1. Buka app **Flames** di HP.
-2. Masuk ke tab **Settings** (icon gerigi).
-3. Tap tombol **Scan QR Code**.
-4. Arahkan kamera HP ke QR Code di layar laptop temanmu.
-5. Profil temanmu otomatis tersimpan dan aktif!
-
-### Cara 2: Input Manual (+ Add Profile)
-1. Buka app **Flames** → masuk ke tab **Settings**.
-2. Di bagian **Server Profiles**, tap **+ Add Profile**.
-3. Masukkan data:
-   - **Profile Name**: `Hermes Andi (Kantor)`
-   - **Gateway / Base URL**: `http://192.168.1.45:8642/v1`
-   - **Token**: `teman-secret-key-123`
-4. Tap **Save Profile**.
-
----
-
-## 4. Cara Konek ke Profile Khusus Teman (Multiplex Profiles)
-
-Kalau teman kantor punya beberapa profile di Hermes-nya (misal punya profile `@dev`, `@ops`, atau profil custom):
-
-Hermes mendukung URL prefix otomatis:
-- **Default / Generalist Profile**: `http://192.168.1.45:8642/v1`
-- **Profile Dev Teman**: `http://192.168.1.45:8642/p/dev/v1`
-- **Profile Ops Teman**: `http://192.168.1.45:8642/p/ops/v1`
-
-Tinggal masukkan URL di atas saat membuat profile baru di Flames.
-
----
-
-## 5. Switch Profil Bebas Kapan Saja
-Di tab **Settings** app Flames, ada dropdown **Server Profiles**:
-- Tap dropdown, kamu bisa bebas pindah antara:
-  - `VPS Oracle` (Hermes kamu di cloud)
-  - `Hermes Mac` (Laptop pribadimu)
-  - `Hermes Andi` (Laptop teman kantormu)
-- Setiap kali profil di-switch, chat berikutnya akan langsung mengarah ke server yang dipilih!
+### Common Issues
+- **`401 Unauthorized`**: Ensure `API_SERVER_KEY` matches the value defined in `~/.hermes/.env` (or `~/.hermes/profiles/<name>/.env` for named sub-profiles).
+- **`404 Not Found`**: Ensure the URL includes `/v1` or `/p/<profile>/v1`. The root domain `/` is intentionally blocked for security.
+- **Connection Refused on LAN**: Verify that the host configuration uses `host: 0.0.0.0` (not `127.0.0.1`) and that the mobile device is on the same WiFi network.
