@@ -11,6 +11,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/clipboard_service.dart
 import 'package:flutter_ai_agent/features/chat/data/tools/device_context_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/notification_triage_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/file_workspace_service.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
@@ -89,6 +90,13 @@ class MockFlutterLocalNotificationsPlugin extends Mock
 class MockCalendarService extends Mock implements CalendarServiceBase {}
 
 class MockNotificationService extends Mock implements NotificationServiceBase {}
+
+// Notification Triage
+class MockNotificationListenerPlatformWrapper extends Mock
+    implements NotificationListenerPlatformWrapper {}
+
+class MockNotificationTriageService extends Mock
+    implements NotificationTriageServiceBase {}
 
 // QR Scanner
 class MockQrScannerController extends Mock implements QrScannerControllerBase {}

@@ -9,6 +9,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/clipboard_service.dart
 import 'package:flutter_ai_agent/features/chat/data/tools/device_context_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/notification_triage_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/file_workspace_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/security_policy.dart';
 
@@ -419,6 +420,60 @@ class ToolRegistry {
           args['directoryPath']?.toString() ?? '',
           recursive: args['recursive'] as bool? ?? false,
         ),
+      ),
+    );
+  }
+
+  void registerNotificationTriageTools(NotificationTriageServiceBase service) {
+    register(
+      RegisteredTool(
+        name: 'read_recent_notifications',
+        description:
+            'Reads recent incoming notifications from device with optional filtering by app name/package (e.g. whatsapp, telegram, sms) and privacy filtering.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'limit': {
+              'type': 'integer',
+              'description':
+                  'Maximum number of recent notifications to retrieve (default: 10)',
+            },
+            'appFilter': {
+              'type': 'string',
+              'description':
+                  'Optional app name or package filter (e.g. "whatsapp", "telegram", "sms")',
+            },
+          },
+        },
+        securityTier: SecurityTier.tier2Permission,
+        execute: (args) => service.readRecentNotificationsFormattedJson(
+          limit: (args['limit'] as num?)?.toInt(),
+          appFilter: args['appFilter']?.toString(),
+        ),
+        checkPermission: () => service.checkPermission(),
+      ),
+    );
+
+    register(
+      RegisteredTool(
+        name: 'extract_latest_otp',
+        description:
+            'Extracts the most recent OTP (one-time password) or verification code from incoming notifications with privacy filtering.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'appFilter': {
+              'type': 'string',
+              'description':
+                  'Optional app filter (e.g. "whatsapp", "telegram", "sms")',
+            },
+          },
+        },
+        securityTier: SecurityTier.tier2Permission,
+        execute: (args) => service.extractLatestOtpFormattedJson(
+          appFilter: args['appFilter']?.toString(),
+        ),
+        checkPermission: () => service.checkPermission(),
       ),
     );
   }

@@ -9,6 +9,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/clipboard_service.dart
 import 'package:flutter_ai_agent/features/chat/data/tools/device_context_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/notification_triage_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/file_workspace_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
@@ -108,6 +109,12 @@ Future<void> initDependencies() async {
     );
   }
 
+  if (!sl.isRegistered<NotificationTriageServiceBase>()) {
+    sl.registerLazySingleton<NotificationTriageServiceBase>(
+      () => NotificationTriageService(),
+    );
+  }
+
   // Tool Registry
   if (!sl.isRegistered<ToolRegistry>()) {
     sl.registerLazySingleton<ToolRegistry>(
@@ -120,6 +127,7 @@ Future<void> initDependencies() async {
         registry.registerCalendarTools(sl<CalendarServiceBase>());
         registry.registerNotificationTools(sl<NotificationServiceBase>());
         registry.registerFileWorkspaceTools(sl<FileWorkspaceServiceBase>());
+        registry.registerNotificationTriageTools(sl<NotificationTriageServiceBase>());
         return registry;
       },
     );

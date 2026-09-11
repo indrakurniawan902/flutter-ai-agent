@@ -552,6 +552,7 @@ void main() {
       expect(find.text('Location'), findsOneWidget);
       expect(find.text('Notifications'), findsOneWidget);
       expect(find.text('Camera & Photos'), findsOneWidget);
+      expect(find.text('Notification Listener'), findsOneWidget);
       expect(find.byKey(const Key('settings_check_permissions_button')), findsOneWidget);
       expect(find.byKey(const Key('settings_open_app_settings_button')), findsOneWidget);
     });

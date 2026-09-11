@@ -3,6 +3,7 @@ import 'package:flutter_ai_agent/core/di/injection_container.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/calendar_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/notification_triage_service.dart';
 import 'package:flutter_ai_agent/features/pairing/data/models/pairing_payload.dart';
 import 'package:flutter_ai_agent/features/pairing/presentation/screens/qr_scanner_screen.dart';
 import 'package:flutter_ai_agent/features/server_profiles/domain/entities/server_profile.dart';
@@ -513,6 +514,12 @@ class _SettingsViewState extends State<_SettingsView> {
             name: 'Camera & Photos',
             description: 'Capture and inspect images for vision tasks',
           ),
+          const Divider(color: Color(0xFF334155), height: 16),
+          _buildPermissionItem(
+            icon: Icons.mark_email_read,
+            name: 'Notification Listener',
+            description: 'Triage alerts and extract OTP verification codes',
+          ),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -614,6 +621,9 @@ class _SettingsViewState extends State<_SettingsView> {
       }
       if (sl.isRegistered<NotificationServiceBase>()) {
         await sl<NotificationServiceBase>().requestPermissions(exactAlarms: true);
+      }
+      if (sl.isRegistered<NotificationTriageServiceBase>()) {
+        await sl<NotificationTriageServiceBase>().requestPermission();
       }
     } catch (_) {}
 

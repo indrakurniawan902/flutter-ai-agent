@@ -274,4 +274,101 @@ void main() {
       verify(() => mockFileService.listFilesFormattedJson('/workspace', recursive: true)).called(1);
     });
   });
+
+  group('registerNotificationTriageTools', () {
+    late MockNotificationTriageService mockTriageService;
+
+    setUp(() {
+      mockTriageService = MockNotificationTriageService();
+      registry.registerNotificationTriageTools(mockTriageService);
+    });
+
+    test('registers read_recent_notifications and extract_latest_otp as tier2', () {
+      expect(registry.hasTool('read_recent_notifications'), isTrue);
+      expect(registry.hasTool('extract_latest_otp'), isTrue);
+      expect(
+        registry.getTool('read_recent_notifications')?.securityTier,
+        SecurityTier.tier2Permission,
+      );
+      expect(
+        registry.getTool('extract_latest_otp')?.securityTier,
+        SecurityTier.tier2Permission,
+      );
+    });
+
+    test('executes read_recent_notifications when permission is granted', () async {
+      when(() => mockTriageService.checkPermission()).thenAnswer((_) async => true);
+      when(() => mockTriageService.readRecentNotificationsFormattedJson(
+            limit: 10,
+            appFilter: 'whatsapp',
+          )).thenAnswer((_) async => const Right('{"count": 0, "notifications": []}'));
+
+      final result = await registry.executeTool(
+        'read_recent_notifications',
+        {'limit': 10, 'appFilter': 'whatsapp'},
+      );
+
+      expect(result, const Right<Failure, String>('{"count": 0, "notifications": []}'));
+      verify(() => mockTriageService.checkPermission()).called(1);
+      verify(() => mockTriageService.readRecentNotificationsFormattedJson(
+            limit: 10,
+            appFilter: 'whatsapp',
+          )).called(1);
+    });
+
+    test('denies read_recent_notifications when permission is denied', () async {
+      when(() => mockTriageService.checkPermission()).thenAnswer((_) async => false);
+
+      final result = await registry.executeTool(
+        'read_recent_notifications',
+        {},
+      );
+
+      expect(
+        result,
+        const Left<Failure, String>(
+          PermissionFailure('Permission denied for tool: read_recent_notifications'),
+        ),
+      );
+      verifyNever(() => mockTriageService.readRecentNotificationsFormattedJson(
+            limit: any(named: 'limit'),
+            appFilter: any(named: 'appFilter'),
+          ));
+    });
+
+    test('executes extract_latest_otp when permission is granted', () async {
+      when(() => mockTriageService.checkPermission()).thenAnswer((_) async => true);
+      when(() => mockTriageService.extractLatestOtpFormattedJson(
+            appFilter: 'sms',
+          )).thenAnswer((_) async => const Right('{"found": true, "otp": "123456"}'));
+
+      final result = await registry.executeTool(
+        'extract_latest_otp',
+        {'appFilter': 'sms'},
+      );
+
+      expect(result, const Right<Failure, String>('{"found": true, "otp": "123456"}'));
+      verify(() => mockTriageService.checkPermission()).called(1);
+      verify(() => mockTriageService.extractLatestOtpFormattedJson(appFilter: 'sms')).called(1);
+    });
+
+    test('denies extract_latest_otp when permission is denied', () async {
+      when(() => mockTriageService.checkPermission()).thenAnswer((_) async => false);
+
+      final result = await registry.executeTool(
+        'extract_latest_otp',
+        {},
+      );
+
+      expect(
+        result,
+        const Left<Failure, String>(
+          PermissionFailure('Permission denied for tool: extract_latest_otp'),
+        ),
+      );
+      verifyNever(() => mockTriageService.extractLatestOtpFormattedJson(
+            appFilter: any(named: 'appFilter'),
+          ));
+    });
+  });
 }
