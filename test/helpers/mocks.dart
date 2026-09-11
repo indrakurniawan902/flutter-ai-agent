@@ -14,6 +14,8 @@ import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.d
 import 'package:flutter_ai_agent/features/chat/domain/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/chat/domain/agent_state.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
+import 'package:flutter_ai_agent/features/gateway/data/gateway_client.dart';
+import 'package:flutter_ai_agent/features/gateway/data/gateway_socket.dart';
 import 'package:flutter_ai_agent/features/pairing/domain/qr_scanner_controller.dart';
 import 'package:flutter_ai_agent/features/server_profiles/domain/server_profile_cubit.dart';
 import 'package:flutter_ai_agent/features/server_profiles/domain/server_profile_state.dart';
@@ -95,5 +97,12 @@ class MockQrScannerController extends Mock implements QrScannerControllerBase {}
 // Server Profiles
 class MockServerProfileCubit extends MockCubit<ServerProfileState>
     implements ServerProfileCubit {}
+
+// Gateway
+class MockGatewaySocket extends Mock implements GatewaySocket {}
+
+class MockGatewaySocketFactory extends Mock implements GatewaySocketFactory {}
+
+class MockGatewayClient extends Mock implements GatewayClient {}
 
 

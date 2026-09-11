@@ -11,6 +11,8 @@ import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart'
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
+import 'package:flutter_ai_agent/features/gateway/data/gateway_client.dart';
+import 'package:flutter_ai_agent/features/gateway/data/gateway_socket.dart';
 import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart';
 import 'package:flutter_ai_agent/features/server_profiles/domain/server_profile_cubit.dart';
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
@@ -121,6 +123,21 @@ Future<void> initDependencies() async {
   if (!sl.isRegistered<PairingParser>()) {
     sl.registerLazySingleton<PairingParser>(
       () => const PairingParser(),
+    );
+  }
+
+  // Features - Gateway
+  if (!sl.isRegistered<GatewaySocketFactory>()) {
+    sl.registerLazySingleton<GatewaySocketFactory>(
+      () => const IoGatewaySocketFactory(),
+    );
+  }
+
+  if (!sl.isRegistered<GatewayClient>()) {
+    sl.registerLazySingleton<GatewayClient>(
+      () => GatewayClient(
+        socketFactory: sl<GatewaySocketFactory>(),
+      ),
     );
   }
 

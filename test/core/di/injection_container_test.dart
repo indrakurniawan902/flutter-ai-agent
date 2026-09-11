@@ -9,6 +9,8 @@ import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart'
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
+import 'package:flutter_ai_agent/features/gateway/data/gateway_client.dart';
+import 'package:flutter_ai_agent/features/gateway/data/gateway_socket.dart';
 import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart';
 import 'package:flutter_ai_agent/features/server_profiles/domain/server_profile_cubit.dart';
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
@@ -31,6 +33,8 @@ void main() {
     expect(sl.isRegistered<SettingsCubit>(), isFalse);
     expect(sl.isRegistered<ServerProfileCubit>(), isFalse);
     expect(sl.isRegistered<PairingParser>(), isFalse);
+    expect(sl.isRegistered<GatewaySocketFactory>(), isFalse);
+    expect(sl.isRegistered<GatewayClient>(), isFalse);
 
     await initDependencies();
 
@@ -39,18 +43,24 @@ void main() {
     expect(sl.isRegistered<SettingsCubit>(), isTrue);
     expect(sl.isRegistered<ServerProfileCubit>(), isTrue);
     expect(sl.isRegistered<PairingParser>(), isTrue);
+    expect(sl.isRegistered<GatewaySocketFactory>(), isTrue);
+    expect(sl.isRegistered<GatewayClient>(), isTrue);
 
     final storage = sl<FlutterSecureStorage>();
     final service = sl<SecureStorageService>();
     final cubit = sl<SettingsCubit>();
     final profileCubit = sl<ServerProfileCubit>();
     final parser = sl<PairingParser>();
+    final socketFactory = sl<GatewaySocketFactory>();
+    final gatewayClient = sl<GatewayClient>();
 
     expect(storage, isA<FlutterSecureStorage>());
     expect(service, isA<SecureStorageService>());
     expect(cubit, isA<SettingsCubit>());
     expect(profileCubit, isA<ServerProfileCubit>());
     expect(parser, isA<PairingParser>());
+    expect(socketFactory, isA<GatewaySocketFactory>());
+    expect(gatewayClient, isA<GatewayClient>());
   });
 
   test('initDependencies registers all chat services and tools in ToolRegistry', () async {
