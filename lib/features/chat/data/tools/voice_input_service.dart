@@ -163,8 +163,8 @@ class VoiceInputService implements VoiceInputServiceBase {
 
   /// Normalizes raw decibel / level input to 0.0 - 1.0 range.
   static double normalizeSoundLevel(double raw) {
-    if (raw.isNaN || raw.isInfinite) return 0.0;
-    if (raw <= 0) {
+    if (raw.isNaN || raw.isInfinite || raw == 0.0) return 0.0;
+    if (raw < 0) {
       // Typically iOS / dB range -60.0 dB to 0.0 dB
       final val = (raw + 60.0) / 60.0;
       return val.clamp(0.0, 1.0);

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dartz/dartz.dart';
@@ -819,6 +820,23 @@ class ToolRegistry {
           return startResult.fold(
             (failure) => Left(failure),
             (_) async {
+              final completer = Completer<void>();
+              final sub = service.statusStream.listen((status) {
+                if (status == VoiceInputStatus.done ||
+                    status == VoiceInputStatus.error) {
+                  if (!completer.isCompleted) completer.complete();
+                }
+              });
+
+              try {
+                await completer.future.timeout(
+                  Duration(seconds: durationSec),
+                  onTimeout: () {},
+                );
+              } finally {
+                await sub.cancel();
+              }
+
               return service.stopListening();
             },
           );

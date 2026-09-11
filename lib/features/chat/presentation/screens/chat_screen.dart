@@ -86,6 +86,9 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _voiceStatusSub?.cancel();
     _voiceErrorSub?.cancel();
+    if (_isVoiceRecording) {
+      _voiceService.cancelListening();
+    }
     if (widget.voiceInputService == null &&
         !sl.isRegistered<VoiceInputServiceBase>()) {
       _voiceService.dispose();

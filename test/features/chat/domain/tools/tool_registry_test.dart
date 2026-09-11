@@ -1,6 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter_ai_agent/core/errors/failures.dart';
 import 'package:flutter_ai_agent/features/chat/data/models/ambient_event.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/voice_input_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/clipboard_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/security_policy.dart';
@@ -520,6 +521,8 @@ void main() {
     test('executes listen_voice_input and returns transcribed text on permission grant', () async {
       when(() => mockVoiceService.checkPermission())
           .thenAnswer((_) async => const Right(true));
+      when(() => mockVoiceService.statusStream)
+          .thenAnswer((_) => Stream.value(VoiceInputStatus.done));
       when(() => mockVoiceService.startListening(
             listenFor: any(named: 'listenFor'),
           )).thenAnswer((_) async => const Right(unit));
