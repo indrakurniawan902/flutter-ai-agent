@@ -339,7 +339,7 @@ void main() {
       expect(msg.thoughtProcess, isNull);
     });
 
-    test('toJson writes thought_process when non-null', () {
+    test('toJson never emits thought_process (display-only state)', () {
       const msg = ChatMessage(
         role: 'assistant',
         content: 'Final answer',
@@ -348,7 +348,9 @@ void main() {
 
       final json = msg.toJson();
 
-      expect(json['thought_process'], 'my thoughts');
+      expect(msg.thoughtProcess, 'my thoughts');
+      expect(json.containsKey('thought_process'), isFalse);
+      expect(json.containsKey('thoughtProcess'), isFalse);
     });
 
     test('toJson omits thought_process when null', () {

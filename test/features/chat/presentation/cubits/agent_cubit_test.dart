@@ -719,5 +719,88 @@ void main() {
       final idle = cubit.state as AgentIdle;
       expect(idle.messages, equals(cubit.messages));
     });
+
+    test(
+        'stale abandoned turn cannot emit after a new sendMessage() has started',
+        () async {
+      toolRegistry.register(
+        RegisteredTool(
+          name: 'slow_action',
+          description: 'Slow tier 1 action',
+          parameters: const {'type': 'object'},
+          securityTier: SecurityTier.tier1Auto,
+          execute: (args) async {
+            await Future.delayed(const Duration(milliseconds: 300));
+            return const Right('stale result');
+          },
+        ),
+      );
+
+      var llmCalls = 0;
+      when(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: any(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+          )).thenAnswer((_) async {
+        llmCalls++;
+        if (llmCalls == 1) {
+          return Right(Stream.fromIterable([
+            const ChatChunk(
+              toolCallDeltas: [
+                ToolCallDelta(
+                  index: 0,
+                  id: 'call_slow',
+                  name: 'slow_action',
+                  argumentsFragment: '{}',
+                ),
+              ],
+              finishReason: 'tool_calls',
+            ),
+          ]));
+        }
+        if (llmCalls == 2) {
+          return Right(Stream.fromIterable([
+            const ChatChunk(
+              contentDelta: 'second answer',
+              finishReason: 'stop',
+            ),
+          ]));
+        }
+        return Right(Stream.fromIterable([
+          const ChatChunk(
+            contentDelta: 'STALE LOOP SHOULD NOT RUN',
+            finishReason: 'stop',
+          ),
+        ]));
+      });
+
+      final firstFuture = cubit.sendMessage('first');
+
+      var attempts = 0;
+      while (cubit.state is! ExecutingTool && attempts < 200) {
+        await Future.delayed(const Duration(milliseconds: 10));
+        attempts++;
+      }
+      expect(cubit.state, isA<ExecutingTool>());
+
+      await cubit.stop();
+      await cubit.sendMessage('second');
+      await firstFuture;
+      // Allow the stale in-flight tool await time to resolve if guards fail.
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      expect(llmCalls, equals(2));
+      expect(cubit.state, isA<AgentSuccess>());
+      expect((cubit.state as AgentSuccess).response, equals('second answer'));
+      expect(
+        cubit.messages.where((m) => m.role == 'tool'),
+        isEmpty,
+        reason: 'stale tool result must be discarded',
+      );
+      expect(cubit.messages.last.role, equals('assistant'));
+      expect(cubit.messages.last.content, equals('second answer'));
+    });
   });
 }

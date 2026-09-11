@@ -33,6 +33,7 @@ class AgentCubit extends Cubit<AgentState> {
   StreamSubscription<ChatChunk>? _streamSubscription;
   Completer<void>? _streamCompleter;
   bool _isCancelled = false;
+  int _runGeneration = 0;
 
   AgentCubit({
     LlmRepository? llmRepository,
@@ -76,10 +77,12 @@ class AgentCubit extends Cubit<AgentState> {
   /// Sends a user message and starts the ReAct loop.
   Future<void> sendMessage(String prompt) async {
     if (prompt.trim().isEmpty) return;
+    _runGeneration++;
+    final int generation = _runGeneration;
     _isCancelled = false;
     await refreshSettings();
     _messages.add(ChatMessage(role: 'user', content: prompt));
-    await _runLoop();
+    await _runLoop(0, generation);
   }
 
   /// Pauses the agent loop and requests user approval for [request].
@@ -91,6 +94,7 @@ class AgentCubit extends Cubit<AgentState> {
   /// User approved the pending Tier 3 tool call. Resumes the agent loop.
   Future<void> approveAction() async {
     if (state is! WaitingApproval) return;
+    final int generation = _runGeneration;
 
     if (_pendingToolCall != null) {
       final pending = _pendingToolCall!;
@@ -101,6 +105,8 @@ class AgentCubit extends Cubit<AgentState> {
         pending.name,
         pending.parameters,
       );
+
+      if (_isCancelled || generation != _runGeneration) return;
 
       final isPermissionFailure = resultEither.fold(
         (failure) => failure is PermissionFailure ? failure : null,
@@ -137,7 +143,7 @@ class AgentCubit extends Cubit<AgentState> {
         content: resultText,
       ));
 
-      await _processPendingToolCalls();
+      await _processPendingToolCalls(generation);
     } else {
       emit(const AgentIdle());
     }
@@ -147,6 +153,7 @@ class AgentCubit extends Cubit<AgentState> {
   /// Emits [RejectedAction] and appends a tool cancellation message, then resumes loop.
   Future<void> rejectAction() async {
     if (state is! WaitingApproval) return;
+    final int generation = _runGeneration;
 
     final waiting = state as WaitingApproval;
     emit(RejectedAction(waiting.request));
@@ -162,7 +169,7 @@ class AgentCubit extends Cubit<AgentState> {
         content: 'Action ${pending.name} was rejected by user.',
       ));
 
-      await _processPendingToolCalls();
+      await _processPendingToolCalls(generation);
     } else {
       emit(const AgentIdle());
     }
@@ -179,9 +186,10 @@ class AgentCubit extends Cubit<AgentState> {
   /// Iterates through remaining tool calls for the current turn.
   /// If a tool requires Tier 3 HITL approval, it pauses and emits [WaitingApproval].
   /// When all tools in the turn complete, it continues the ReAct loop.
-  Future<void> _processPendingToolCalls() async {
+  Future<void> _processPendingToolCalls([int? generation]) async {
+    final int runGeneration = generation ?? _runGeneration;
     while (_pendingTurnToolCalls.isNotEmpty) {
-      if (_isCancelled) return;
+      if (_isCancelled || runGeneration != _runGeneration) return;
       final toolCall = _pendingTurnToolCalls.removeAt(0);
       final toolName = toolCall.name ?? '';
       final callId = toolCall.id ?? 'call_${toolCall.index}';
@@ -226,7 +234,7 @@ class AgentCubit extends Cubit<AgentState> {
         arguments,
       );
 
-      if (_isCancelled) return;
+      if (_isCancelled || runGeneration != _runGeneration) return;
 
       final isPermissionFailure = execResult.fold(
         (failure) => failure is PermissionFailure ? failure : null,
@@ -264,13 +272,14 @@ class AgentCubit extends Cubit<AgentState> {
       ));
     }
 
-    if (_isCancelled) return;
+    if (_isCancelled || runGeneration != _runGeneration) return;
     // All tools in this turn executed; proceed to next LLM turn.
-    await _runLoop(_currentTurn + 1);
+    await _runLoop(_currentTurn + 1, runGeneration);
   }
 
   /// Stops the current streaming / tool execution and returns to idle.
   Future<void> stop() async {
+    _runGeneration++;
     _isCancelled = true;
     if (_streamCompleter != null && !_streamCompleter!.isCompleted) {
       _streamCompleter!.complete();
@@ -279,7 +288,7 @@ class AgentCubit extends Cubit<AgentState> {
     _streamSubscription = null;
     _pendingTurnToolCalls.clear();
     _pendingToolCall = null;
-    emit(AgentIdle(messages: messages));
+    if (!isClosed) emit(AgentIdle(messages: messages));
   }
 
   /// Alias for [stop].
@@ -297,8 +306,9 @@ class AgentCubit extends Cubit<AgentState> {
   }
 
   /// Runs the ReAct loop until LLM provides a final text response or pauses for HITL.
-  Future<void> _runLoop([int turn = 0]) async {
-    if (_isCancelled) return;
+  Future<void> _runLoop([int turn = 0, int? generation]) async {
+    final int runGeneration = generation ?? _runGeneration;
+    if (_isCancelled || runGeneration != _runGeneration) return;
     if (turn >= maxTurns) {
       emit(const AgentError('Maximum ReAct loop turns exceeded.'));
       return;
@@ -320,7 +330,7 @@ class AgentCubit extends Cubit<AgentState> {
 
     await responseEither.fold(
       (failure) async {
-        if (_isCancelled) return;
+        if (_isCancelled || runGeneration != _runGeneration) return;
         emit(AgentError(failure.message));
       },
       (chunkStream) async {
@@ -333,7 +343,7 @@ class AgentCubit extends Cubit<AgentState> {
         _streamCompleter = Completer<void>();
         _streamSubscription = chunkStream.listen(
           (chunk) {
-            if (_isCancelled) return;
+            if (_isCancelled || runGeneration != _runGeneration) return;
             if (chunk.contentDelta != null && chunk.contentDelta!.isNotEmpty) {
               contentBuffer.write(chunk.contentDelta);
               emit(AgentStreaming(
@@ -372,14 +382,14 @@ class AgentCubit extends Cubit<AgentState> {
         await _streamCompleter!.future;
         _streamSubscription = null;
 
-        if (_isCancelled) return;
+        if (_isCancelled || runGeneration != _runGeneration) return;
 
         if (streamError != null) {
           emit(AgentError('Stream interrupted: $streamError'));
           return;
         }
 
-        if (_isCancelled) return;
+        if (_isCancelled || runGeneration != _runGeneration) return;
         // If no tool calls were generated, this is the final text answer.
         if (callIds.isEmpty && callNames.isEmpty && callArgs.isEmpty) {
           final extraction =
@@ -395,7 +405,7 @@ class AgentCubit extends Cubit<AgentState> {
         }
 
         // Tool calls were requested by LLM.
-        if (_isCancelled) return;
+        if (_isCancelled || runGeneration != _runGeneration) return;
         final toolCalls = <ToolCallDelta>[];
         final sortedIndices = {
           ...callIds.keys,
@@ -428,7 +438,7 @@ class AgentCubit extends Cubit<AgentState> {
         _pendingTurnToolCalls.clear();
         _pendingTurnToolCalls.addAll(toolCalls);
 
-        await _processPendingToolCalls();
+        await _processPendingToolCalls(runGeneration);
       },
     );
   }
