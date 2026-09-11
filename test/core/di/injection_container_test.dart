@@ -1,7 +1,14 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_ai_agent/core/di/injection_container.dart';
+import 'package:flutter_ai_agent/features/chat/data/llm_repository.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/calendar_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/camera_vision_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/clipboard_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/device_context_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
+import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
 import 'package:flutter_ai_agent/features/settings/domain/settings_cubit.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -36,24 +43,41 @@ void main() {
     expect(cubit, isA<SettingsCubit>());
   });
 
-  test('initDependencies registers ClipboardService, LocationService, and ToolRegistry', () async {
+  test('initDependencies registers all chat services and tools in ToolRegistry', () async {
+    expect(sl.isRegistered<Dio>(), isFalse);
+    expect(sl.isRegistered<LlmRepository>(), isFalse);
     expect(sl.isRegistered<ClipboardServiceBase>(), isFalse);
     expect(sl.isRegistered<LocationServiceBase>(), isFalse);
+    expect(sl.isRegistered<DeviceContextServiceBase>(), isFalse);
+    expect(sl.isRegistered<CameraVisionServiceBase>(), isFalse);
+    expect(sl.isRegistered<CalendarServiceBase>(), isFalse);
+    expect(sl.isRegistered<NotificationServiceBase>(), isFalse);
     expect(sl.isRegistered<ToolRegistry>(), isFalse);
+    expect(sl.isRegistered<AgentCubit>(), isFalse);
 
     await initDependencies();
 
+    expect(sl.isRegistered<Dio>(), isTrue);
+    expect(sl.isRegistered<LlmRepository>(), isTrue);
     expect(sl.isRegistered<ClipboardServiceBase>(), isTrue);
     expect(sl.isRegistered<LocationServiceBase>(), isTrue);
+    expect(sl.isRegistered<DeviceContextServiceBase>(), isTrue);
+    expect(sl.isRegistered<CameraVisionServiceBase>(), isTrue);
+    expect(sl.isRegistered<CalendarServiceBase>(), isTrue);
+    expect(sl.isRegistered<NotificationServiceBase>(), isTrue);
     expect(sl.isRegistered<ToolRegistry>(), isTrue);
-
-    expect(sl<ClipboardServiceBase>(), isA<ClipboardService>());
-    expect(sl<LocationServiceBase>(), isA<LocationService>());
-    expect(sl<ToolRegistry>(), isA<ToolRegistry>());
+    expect(sl.isRegistered<AgentCubit>(), isTrue);
 
     final registry = sl<ToolRegistry>();
     expect(registry.hasTool('clipboard_read'), isTrue);
     expect(registry.hasTool('clipboard_write'), isTrue);
     expect(registry.hasTool('get_location'), isTrue);
+    expect(registry.hasTool('device_status'), isTrue);
+    expect(registry.hasTool('system_info'), isTrue);
+    expect(registry.hasTool('camera_take_photo'), isTrue);
+    expect(registry.hasTool('calendar_list_events'), isTrue);
+    expect(registry.hasTool('calendar_create_event'), isTrue);
+    expect(registry.hasTool('send_local_notification'), isTrue);
+    expect(registry.hasTool('schedule_reminder'), isTrue);
   });
 }

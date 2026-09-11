@@ -31,6 +31,19 @@ dependencies:
   geolocator: ^14.0.2
   geocoding: ^5.0.0
 
+  # Device tools
+  battery_plus: ^7.1.1
+  device_info_plus: ^12.4.0
+  connectivity_plus: ^7.3.1
+  package_info_plus: ^9.0.1
+  image_picker: ^1.1.2
+  device_calendar: ^4.3.3
+  timezone: ^0.9.4
+  flutter_local_notifications: ^18.0.1
+
+  # UI / Markdown
+  flutter_markdown: ^0.7.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
