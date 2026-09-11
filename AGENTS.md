@@ -92,3 +92,29 @@ flock /tmp/flutter.lock dart run build_runner build --delete-conflicting-outputs
 flutter run --flavor development -t lib/main_development.dart
 flutter run --flavor production -t lib/main_production.dart
 ```
+
+---
+
+## 6. Multi-Agent Orchestration Protocol (Hermes & OpenCode)
+
+To prevent context window overflow and enforce Clean Architecture, work is strictly divided:
+
+### Roles & Boundaries
+- **Hermes Dev (`@dev`) = Tech Lead / Architect**:
+  - Analyzes requirements, plans feature breakdown, and spawns OpenCode workers.
+  - **DILARANG KERAS** menulis atau mengedit file kode aplikasi secara langsung di context Hermes via `write_file` atau `patch`.
+  - Runs independent verification commands (`flock /tmp/flutter.lock flutter analyze` & `flock /tmp/flutter.lock flutter test`).
+  - Manages git commits per verified sub-task and advances Kanban cards.
+- **OpenCode CLI (`opencode run`) = Worker / Code Monkey**:
+  - Receives granular sub-tasks wrapped in `[TASK ASSIGNMENT]` schema.
+  - Executes surgical code modifications strictly within specified `Target Files`.
+  - Strictly follows `docs/architecture.md` (Clean Architecture: Cubits in presentation, services in domain).
+  - Never touches files outside scope or substitutes requested packages.
+
+### Sub-task Definition (Atomic Unit of Work)
+Every sub-task delegated to OpenCode MUST satisfy:
+1. **Single Concern**: Focuses on one layer or component (Data Service, Cubit, UI Screen, or Tests). Never dump an entire full-stack feature in one prompt.
+2. **Explicit Target Files**: Lists exact target files to create/modify and files off-limits.
+3. **Specification Adherence**: Strict negative constraints (e.g. "Do NOT use Bloc", "Do NOT use build_runner for mocks").
+4. **Verifiable Definition of Done (DoD)**: Clear CLI test/lint command that must exit 0.
+
