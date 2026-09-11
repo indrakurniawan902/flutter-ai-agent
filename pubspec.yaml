@@ -1,0 +1,40 @@
+name: flutter_ai_agent
+description: "Mobile AI Agent workstation with device tool calling."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_bloc: ^9.1.0
+  equatable: ^2.0.7
+
+  # DI
+  get_it: ^8.0.3
+
+  # Network
+  dio: ^5.8.0
+
+  # Local storage
+  hive_ce: ^2.19.0
+  hive_ce_flutter: ^1.2.0
+  flutter_secure_storage: ^9.2.4
+
+  # Functional
+  dartz: ^0.10.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  mocktail: ^1.0.4
+  bloc_test: ^10.0.0
+
+flutter:
+  uses-material-design: true
