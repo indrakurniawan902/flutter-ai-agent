@@ -84,7 +84,9 @@ flutter analyze
 flutter test
 
 # VPS-safe execution (respect 2 vCPU limit)
+flock /tmp/flutter.lock flutter analyze
 flock /tmp/flutter.lock flutter test
+flock /tmp/flutter.lock dart run build_runner build --delete-conflicting-outputs
 
 # Run flavors
 flutter run --flavor development -t lib/main_development.dart
