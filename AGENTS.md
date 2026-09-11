@@ -10,13 +10,14 @@ Behavioral guidelines to reduce common LLM coding mistakes for **Flames** (`ai.h
 
 **Before touching any code or making architectural decisions, read the project docs in this order:**
 
-1. [`docs/architecture.md`](./docs/architecture.md) — folder layout, Clean Architecture layers (`data → domain ← presentation`), Cubits in `presentation/cubits/`, domain repository contracts, GetIt DI registration, and testing structure.
+1. [`docs/architecture.md`](./docs/architecture.md) — folder layout, Clean Architecture layers (`data → domain ← presentation`), Cubits in `presentation/screen/<feature>/cubit/`, domain repository contracts, GetIt DI registration, and testing structure.
 2. [`docs/rules.md`](./docs/rules.md) — coding conventions, strict layer rules, state management rules (Cubit only, NO Bloc/events), functional error handling with `Either<Failure, T>`, testing with `mocktail`, and the Definition of Done checklist.
 3. [`docs/design-system.md`](./docs/design-system.md) — dark theme colors, typography, surface cards, HITL modals, and the **zero emoji in chrome** rule.
+4. [`docs/MIGRATION-PLAN.md`](./docs/MIGRATION-PLAN.md) — file-by-file old (feature-first) to new (layer-first) migration mapping.
 
 > **CRITICAL RULE FOR AI AGENTS (OpenCode, Claude Code, Antigravity):**
 > Do **NOT** make assumptions about folder structure, layer boundaries, or naming conventions from memory or context alone — the docs in `docs/` are the **Single Source of Truth** and must be consulted first.
-> - Cubits and States **MUST** be placed in `lib/features/<feature>/presentation/cubits/`, **NEVER** in `domain/`.
+> - Cubits and States **MUST** be placed in `lib/presentation/screen/<feature>/cubit/`, **NEVER** in `domain/`. Note: there is no `lib/features/`.
 > - Do **NOT** create re-export shim files (e.g. `export 'screens/...'`). Place files directly in their target directories.
 
 ---
