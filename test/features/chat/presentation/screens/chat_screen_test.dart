@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_ai_agent/core/di/injection_container.dart';
 import 'package:flutter_ai_agent/features/chat/data/models/chat_models.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
@@ -8,6 +9,11 @@ import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.d
 import 'package:flutter_ai_agent/features/chat/domain/models/tool_call_request.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/screens/chat_screen.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/widgets/action_approval_sheet.dart';
+import 'package:flutter_ai_agent/features/chat/domain/models/action_step.dart';
+import 'package:flutter_ai_agent/features/chat/domain/models/generative_card_data.dart';
+import 'package:flutter_ai_agent/features/chat/presentation/widgets/action_confirmation_card.dart';
+import 'package:flutter_ai_agent/features/chat/presentation/widgets/live_action_stepper_card.dart';
+import 'package:flutter_ai_agent/features/chat/presentation/widgets/summary_card.dart';
 import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_cubit.dart';
 import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_state.dart';
 import 'package:flutter_ai_agent/features/settings/presentation/screens/settings_screen.dart';
@@ -65,6 +71,17 @@ void main() {
       expect(find.text('Autonomous Device Agent'), findsOneWidget);
       expect(find.byKey(const Key('chat_input_field')), findsOneWidget);
       expect(find.byKey(const Key('chat_send_button')), findsOneWidget);
+    });
+
+    testWidgets('renders HeaderConsoleBar with GatewayStatusChip and AchievementTierBadge', (tester) async {
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('header_console_bar')), findsOneWidget);
+      expect(find.byKey(const Key('gateway_status_chip')), findsOneWidget);
+      expect(find.byKey(const Key('achievement_tier_badge')), findsOneWidget);
+      expect(find.text('Running 8644'), findsOneWidget);
+      expect(find.text('Olympian • 47/60 Badges'), findsOneWidget);
     });
 
     testWidgets('send button is disabled when text field is empty', (tester) async {
@@ -267,6 +284,123 @@ void main() {
 
       expect(find.text('Connection timed out to LLM'), findsOneWidget);
       expect(find.byType(SnackBar), findsOneWidget);
+    });
+
+    testWidgets('renders LiveActionStepperCard in chat stream and toggles accordion upon tap', (tester) async {
+      when(() => mockAgentCubit.messages).thenReturn([
+        const ChatMessage(
+          role: 'assistant',
+          actionSteps: [
+            ActionStep(
+              id: 'st_1',
+              title: 'read_clipboard_intel',
+              description: 'Reading clipboard payload',
+              status: ActionStepStatus.done,
+              output: {'content': 'Hermes token'},
+            ),
+            ActionStep(
+              id: 'st_2',
+              title: 'query_context_diagnostics',
+              description: 'Checking battery and sensors',
+              status: ActionStepStatus.inProgress,
+              parameters: {'deep': true},
+            ),
+            ActionStep(
+              id: 'st_3',
+              title: 'sync_telemetry_vault',
+              status: ActionStepStatus.pending,
+            ),
+          ],
+        ),
+      ]);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byType(LiveActionStepperCard), findsOneWidget);
+      expect(find.text('read_clipboard_intel'), findsOneWidget);
+      expect(find.text('query_context_diagnostics'), findsOneWidget);
+      expect(find.text('sync_telemetry_vault'), findsOneWidget);
+
+      // Step states
+      expect(find.byIcon(Icons.check_circle), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byIcon(Icons.radio_button_unchecked), findsOneWidget);
+
+      // Accordion toggle on tap
+      await tester.tap(find.text('read_clipboard_intel'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('Output JSON'), findsOneWidget);
+      expect(find.textContaining('Hermes token'), findsOneWidget);
+    });
+
+    testWidgets('renders ActionConfirmationCard in chat stream and triggers cubit approve action', (tester) async {
+      when(() => mockAgentCubit.approveAction()).thenAnswer((_) async {});
+      when(() => mockAgentCubit.messages).thenReturn([
+        const ChatMessage(
+          role: 'assistant',
+          confirmationCard: ActionConfirmationData(
+            title: 'Authorize Calendar Event',
+            message: 'Agent requests permission to add event to Google Calendar.',
+            primaryActionLabel: 'Grant Access',
+            secondaryActionLabel: 'Deny Access',
+          ),
+        ),
+      ]);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ActionConfirmationCard), findsOneWidget);
+      expect(find.text('Authorize Calendar Event'), findsOneWidget);
+      expect(find.text('Grant Access'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('action_confirmation_primary_btn')));
+      await tester.pumpAndSettle();
+
+      verify(() => mockAgentCubit.approveAction()).called(1);
+    });
+
+    testWidgets('renders SummaryCard in chat stream and triggers copy button', (tester) async {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (MethodCall methodCall) async {
+          if (methodCall.method == 'Clipboard.setData') {
+            return null;
+          }
+          return null;
+        },
+      );
+
+      when(() => mockAgentCubit.messages).thenReturn([
+        const ChatMessage(
+          role: 'assistant',
+          summaryCard: SummaryCardData(
+            title: 'Autonomous Execution Summary',
+            summaryText: 'All requested actions completed cleanly.',
+            items: [
+              SummaryMetricItem(label: 'Tools Called', value: '3'),
+              SummaryMetricItem(label: 'Total Time', value: '450ms'),
+            ],
+          ),
+        ),
+      ]);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SummaryCard), findsOneWidget);
+      expect(find.text('Autonomous Execution Summary'), findsOneWidget);
+      expect(find.text('Tools Called'), findsOneWidget);
+      expect(find.text('3'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('summary_card_copy_btn')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Copied'), findsOneWidget);
     });
   });
 }

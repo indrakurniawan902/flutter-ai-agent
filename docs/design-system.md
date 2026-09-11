@@ -39,18 +39,18 @@
 
 | Token | Hex Value | Usage |
 |---|---|---|
-| `stage` | `#0A0A20` | Terminal background stage |
-| `surface` | `#18182D` | Panel cards, tool call inspection containers |
-| `codeBg` | `#060612` | JSON viewer / code snippet background |
-| `neonAccent` | `#EDFF45` | Status badges, high-contrast highlights |
-| `primaryBlue` | `#0000F2` | Brand identity accent |
-| `brandLift` | `#6E6EFF` | Focus borders, active tabs |
-| `inkPrimary` | `#F5F5F5` | High-contrast body text |
-| `inkMuted` | `#99F5F5F5`| Secondary labels, timestamps, metadata |
-| `hairline` | `#33F5F5F5`| Subtle border lines |
-| `success` | `#6EFFD6` | Approved HITL actions, connected gateway |
-| `warning` | `#FFFFCD42`| Pending HITL approval, reconnecting state |
+| `deepObsidian` / `stage` | `#0A0D14` | Terminal background stage, scaffold |
+| `cardSurface` / `surface` | `#131926` | Panel cards, tool call inspection containers |
+| `border` / `surfaceBorder` | `#1E293B` | Card outlines, dividers, input borders |
+| `electricTeal` / `info` | `#00F2FE` | Primary technical accent, active focus |
+| `accentTeal` | `#008080` | Primary action buttons, FAB, active toggles |
+| `emerald` / `success` | `#10B981` | Running gateway status, connected RPC |
+| `amber` / `warning` | `#F59E0B` | Achievement tier badges, warnings |
 | `danger` | `#FFFF8442`| Rejected actions, execution failures, error states |
+| `inkPrimary` | `#F8FAFC` | High-contrast body text |
+| `inkSecondary` | `#94A3B8`| Secondary labels, timestamps, metadata |
+| `inkMuted` | `#64748B` | Subtle hints, muted labels |
+| `codeBg` | `#060612` | JSON viewer / code snippet background |
 
 ---
 
@@ -73,6 +73,13 @@
   - **Approve**: Green / Accent primary button (`#008080` or `#6EFFD6`).
   - **Reject**: Red / Danger button (`#FFFF8442`).
 - Prevents dismiss without explicit action if critical security action is pending.
+
+### 3.4 Header Console / Status Bar (`HeaderConsoleBar`)
+- Top status header displaying active connection status and agent progression.
+- Components:
+  - **Gateway Status Chip** (`GatewayStatusChip`): Monospace pill with pulsing green dot (`PulsingDot` in `#10B981`) showing gateway connection state (e.g. `Running 8644`).
+  - **Achievement Tier Badge** (`AchievementTierBadge`): Monospace tier pill with amber bolt icon (`Icons.bolt` in `#F59E0B`) displaying gamified rank (e.g. `Olympian • 47/60 Badges`).
+- Border: `#1E293B` bottom border, background `#0A0D14`.
 
 ---
 

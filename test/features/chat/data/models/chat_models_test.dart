@@ -176,6 +176,17 @@ void main() {
       expect(tc['type'], 'function');
       expect(tc['function']['name'], 'get_battery');
     });
+
+    test('copyWith copies and overrides fields correctly', () {
+      const msg = ChatMessage(role: 'user', content: 'Original');
+      final updated = msg.copyWith(content: 'Updated');
+      expect(updated.role, 'user');
+      expect(updated.content, 'Updated');
+
+      final withRole = msg.copyWith(role: 'assistant');
+      expect(withRole.role, 'assistant');
+      expect(withRole.content, 'Original');
+    });
   });
 
   group('ChatChunk', () {

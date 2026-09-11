@@ -9,6 +9,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart'
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
+import 'package:flutter_ai_agent/features/navigation/presentation/cubits/navigation_cubit.dart';
 import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart';
 import 'package:flutter_ai_agent/features/server_profiles/presentation/cubits/server_profile_cubit.dart';
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
@@ -64,6 +65,7 @@ void main() {
     expect(sl.isRegistered<NotificationServiceBase>(), isFalse);
     expect(sl.isRegistered<ToolRegistry>(), isFalse);
     expect(sl.isRegistered<AgentCubit>(), isFalse);
+    expect(sl.isRegistered<NavigationCubit>(), isFalse);
 
     await initDependencies();
 
@@ -77,6 +79,7 @@ void main() {
     expect(sl.isRegistered<NotificationServiceBase>(), isTrue);
     expect(sl.isRegistered<ToolRegistry>(), isTrue);
     expect(sl.isRegistered<AgentCubit>(), isTrue);
+    expect(sl.isRegistered<NavigationCubit>(), isTrue);
 
     final registry = sl<ToolRegistry>();
     expect(registry.hasTool('clipboard_read'), isTrue);

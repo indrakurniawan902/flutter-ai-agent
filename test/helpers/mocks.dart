@@ -14,6 +14,8 @@ import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.d
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
+import 'package:flutter_ai_agent/features/navigation/presentation/cubits/navigation_cubit.dart';
+import 'package:flutter_ai_agent/features/navigation/presentation/cubits/navigation_state.dart';
 import 'package:flutter_ai_agent/features/pairing/domain/qr_scanner_controller.dart';
 import 'package:flutter_ai_agent/features/server_profiles/presentation/cubits/server_profile_cubit.dart';
 import 'package:flutter_ai_agent/features/server_profiles/presentation/cubits/server_profile_state.dart';
@@ -95,5 +97,9 @@ class MockQrScannerController extends Mock implements QrScannerControllerBase {}
 // Server Profiles
 class MockServerProfileCubit extends MockCubit<ServerProfileState>
     implements ServerProfileCubit {}
+
+// Navigation
+class MockNavigationCubit extends MockCubit<NavigationState>
+    implements NavigationCubit {}
 
 

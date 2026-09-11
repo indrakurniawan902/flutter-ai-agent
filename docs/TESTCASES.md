@@ -442,6 +442,103 @@
 
 ---
 
+## Module 8: Hermes Nous UI, Bottom Navigation & Micro-UI (Fase 5)
+
+### TC-NOUS-01: Full 5-Tab Persistent Navigation Shell Cycle
+- **Type**: Positive
+- **Objective**: Verify seamless navigation across all 5 primary tabs in `MainNavigationShell` via `FloatingBottomNavBar`.
+- **Preconditions**: App launched with `HermesTheme.darkTheme`.
+- **Steps**:
+  1. Boot application $\to$ verify Tab 0 (`ChatScreen`) active.
+  2. Tap `nav_item_skills` $\to$ verify Tab 1 (`SkillsHubScreen`) displayed with search field, category pills, and skill cards.
+  3. Tap `nav_item_node` $\to$ verify Tab 2 (`PocketNodeScreen`) displayed with status chip, RPC telemetry card, and ambient switches.
+  4. Tap `nav_item_vault` $\to$ verify Tab 3 (`MemoryVaultScreen`) displayed with FTS5 badge and search input.
+  5. Tap `nav_item_settings` $\to$ verify Tab 4 (`SettingsScreen`) displayed with LLM configuration and server profiles.
+  6. Tap `nav_item_chat` $\to$ return to Tab 0 (`ChatScreen`).
+- **Expected Outcome**:
+  - `IndexedStack` smoothly transitions between tabs without rebuilding unmounted screens.
+  - Floating navigation bar updates active tab indicator accurately.
+  - No flickering or memory leaks across repeated cycles.
+
+### TC-NOUS-02: Cross-Tab State Retention & IndexedStack Preservation
+- **Type**: Positive
+- **Objective**: Confirm that user input, filters, and dynamic screen states are strictly preserved during tab switches.
+- **Preconditions**: User has initialized app on Tab 0.
+- **Steps**:
+  1. In Tab 0 (`ChatScreen`): Type draft prompt `"Persistent prompt state testing"` in `chat_input_field`.
+  2. In Tab 1 (`SkillsHubScreen`): Tap category filter pill `skills_filter_pill_device`.
+  3. In Tab 3 (`MemoryVaultScreen`): Type query `"router"` into `memory_search_input`.
+  4. In Tab 2 (`PocketNodeScreen`): Toggle ambient trigger switch.
+  5. In Tab 4 (`SettingsScreen`): View server profiles list.
+  6. Return to Tab 0, Tab 1, Tab 2, and Tab 3 sequentially.
+- **Expected Outcome**:
+  - Chat text field retains `"Persistent prompt state testing"`.
+  - Skills category pill remains filtered on `device`.
+  - Memory search field retains `"router"`.
+  - Pocket node toggle switch preserves its modified boolean state.
+
+### TC-NOUS-03: HeaderConsoleBar Telemetry & Gateway Status
+- **Type**: Positive
+- **Objective**: Verify HeaderConsoleBar renders GatewayStatusChip and AchievementTierBadge in chat header.
+- **Preconditions**: Chat screen open.
+- **Verification Points**:
+  - `GatewayStatusChip` displays active port/status (e.g., `"Running 8644"`).
+  - `PulsingDot` animates smoothly with emerald/teal hue (forward once in automated tests).
+  - `AchievementTierBadge` renders tier rank (e.g., `"Olympian • 47/60 Badges"`) with lightning bolt material icon.
+  - Zero overflow on narrow viewport widths down to 320px.
+
+### TC-NOUS-04: Live Action Stepper Card Lifecycle & Accordion Inspection
+- **Type**: Positive
+- **Objective**: Verify multi-step tool execution pipelines render using `LiveActionStepperCard`.
+- **Preconditions**: Multi-step tool pipeline dispatched by agent.
+- **Steps**:
+  1. Stream assistant response containing multi-step `actionSteps`.
+  2. Observe progress pill indicating completion ratio (e.g., `"1/3 Completed"`).
+  3. Observe step state indicators: Done (`Icons.check_circle_rounded`), In Progress (Teal spinner), Pending (`Icons.radio_button_unchecked`).
+  4. Tap individual step row to toggle accordion expansion.
+- **Expected Outcome**:
+  - Accordion expands to reveal `Parameters` and `Output JSON` formatted in monospace JetBrains Mono font (`HermesTypography.monospaceCode`).
+  - Tapping again smoothly collapses the section.
+  - Zero emoji characters used in icons or headers.
+
+### TC-NOUS-05: Generative Micro-UI: ActionConfirmationCard & SummaryCard
+- **Type**: Positive
+- **Objective**: Ensure interactive micro-UI cards render in chat stream and handle callbacks cleanly.
+- **Preconditions**: Agent emits `ActionConfirmationData` and `SummaryCardData` in chat message.
+- **Steps**:
+  1. Verify `ActionConfirmationCard` renders title, message, parameters map, danger tier badge, and zero emojis.
+  2. Tap primary authorization button (`action_confirmation_primary_btn`) $\to$ triggers `approveAction()` callback.
+  3. Verify `SummaryCard` renders execution summary text, metric pills (Tools Run, Duration, Status), and copy button.
+  4. Tap copy button (`summary_card_copy_btn`) $\to$ copies summary text to system clipboard and temporarily renders `"Copied"`.
+- **Expected Outcome**:
+  - Both cards render within chat message stream without layout overflow.
+  - Buttons respond instantly to touch interactions and update their states.
+
+### TC-NOUS-06: Tab Switching During Active Streaming / Tool Execution
+- **Type**: Negative
+- **Objective**: Ensure switching tabs while an active stream, ReAct loop, or micro-UI card is active does not corrupt state or crash.
+- **Preconditions**: Chat session contains active conversation history and action stepper cards.
+- **Steps**:
+  1. Trigger multi-step action execution on Tab 0 (`ChatScreen`).
+  2. Switch to Tab 1 (`SkillsHubScreen`) and Tab 4 (`SettingsScreen`).
+  3. Switch back to Tab 0 (`ChatScreen`).
+  4. Submit new prompt into input field.
+- **Expected Outcome**:
+  - Stream/loop does not throw `Bad state` or unhandled exceptions.
+  - All existing messages, stepper cards, and headers remain intact upon returning to Tab 0.
+  - Input field accepts new user messages cleanly.
+
+### TC-NOUS-07: Anti-Slop & Zero-Emoji Conformance Across All 5 Tabs
+- **Type**: Positive
+- **Objective**: Ensure complete application adheres to dark surface `#0F172A`, electric teal `#008080`, and zero emoji in chrome.
+- **Preconditions**: All 5 tabs visited in navigation shell.
+- **Verification Points**:
+  - Material icons (`Icons.*`) used exclusively across navigation bar, app bars, cards, buttons, and status chips.
+  - No decorative gradients, pastel cards, or rainbow highlights.
+  - High-contrast typography adhering to WCAG AA / AAA standards.
+
+---
+
 ## Summary Matrix
 
 | Module | Positive Cases | Negative Cases | Total Cases |
@@ -453,7 +550,8 @@
 | **Module 5: Tier 2 Sensor Tools** | 2 | 3 | 5 |
 | **Module 6: Tier 3 HITL Tools** | 2 | 3 | 5 |
 | **Module 7: Presentation & UI/UX** | 3 | 1 | 4 |
-| **Grand Total** | **15** | **19** | **34** |
+| **Module 8: Hermes Nous UI & Micro-UI** | 6 | 1 | 7 |
+| **Grand Total** | **21** | **20** | **41** |
 
 ---
 _Standardized for Hermes Bot Team: PM Bot (`default`), Dev Bot (`dev`), Ops Bot (`ops`)._

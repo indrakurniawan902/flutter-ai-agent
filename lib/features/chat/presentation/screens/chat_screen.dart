@@ -7,6 +7,10 @@ import 'package:flutter_ai_agent/features/chat/data/models/chat_models.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/widgets/action_approval_sheet.dart';
+import 'package:flutter_ai_agent/features/chat/presentation/widgets/action_confirmation_card.dart';
+import 'package:flutter_ai_agent/features/chat/presentation/widgets/header_console_bar.dart';
+import 'package:flutter_ai_agent/features/chat/presentation/widgets/live_action_stepper_card.dart';
+import 'package:flutter_ai_agent/features/chat/presentation/widgets/summary_card.dart';
 import 'package:flutter_ai_agent/features/settings/presentation/screens/settings_screen.dart';
 
 /// Main Chat Screen displaying streaming conversation, tool call cards,
@@ -141,6 +145,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 return SafeArea(
                   child: Column(
                     children: [
+                      const HeaderConsoleBar(),
                       Expanded(
                         child: messages.isEmpty && state is AgentIdle
                             ? _buildEmptyState(context)
@@ -272,6 +277,39 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildAssistantMessage(BuildContext context, ChatMessage message) {
     final children = <Widget>[];
+
+    // If message contains a live action stepper pipeline
+    if (message.actionSteps != null && message.actionSteps!.isNotEmpty) {
+      children.add(
+        LiveActionStepperCard(
+          steps: message.actionSteps!,
+        ),
+      );
+    }
+
+    // If message contains an action confirmation micro-ui card
+    if (message.confirmationCard != null) {
+      children.add(
+        ActionConfirmationCard(
+          data: message.confirmationCard!,
+          onConfirm: () {
+            context.read<AgentCubit>().approveAction();
+          },
+          onCancel: () {
+            context.read<AgentCubit>().rejectAction();
+          },
+        ),
+      );
+    }
+
+    // If message contains a summary micro-ui card
+    if (message.summaryCard != null) {
+      children.add(
+        SummaryCard(
+          data: message.summaryCard!,
+        ),
+      );
+    }
 
     // If tool calls were initiated
     if (message.toolCalls != null && message.toolCalls!.isNotEmpty) {

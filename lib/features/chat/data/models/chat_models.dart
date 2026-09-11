@@ -1,4 +1,6 @@
 import 'package:equatable/equatable.dart';
+import 'package:flutter_ai_agent/features/chat/domain/models/action_step.dart';
+import 'package:flutter_ai_agent/features/chat/domain/models/generative_card_data.dart';
 
 /// Represents a delta update for a tool call in a streaming response.
 class ToolCallDelta extends Equatable {
@@ -67,6 +69,9 @@ class ChatMessage extends Equatable {
   final List<ToolCallDelta>? toolCalls;
   final String? toolCallId;
   final String? name;
+  final List<ActionStep>? actionSteps;
+  final ActionConfirmationData? confirmationCard;
+  final SummaryCardData? summaryCard;
 
   const ChatMessage({
     required this.role,
@@ -74,7 +79,32 @@ class ChatMessage extends Equatable {
     this.toolCalls,
     this.toolCallId,
     this.name,
+    this.actionSteps,
+    this.confirmationCard,
+    this.summaryCard,
   });
+
+  ChatMessage copyWith({
+    String? role,
+    String? content,
+    List<ToolCallDelta>? toolCalls,
+    String? toolCallId,
+    String? name,
+    List<ActionStep>? actionSteps,
+    ActionConfirmationData? confirmationCard,
+    SummaryCardData? summaryCard,
+  }) {
+    return ChatMessage(
+      role: role ?? this.role,
+      content: content ?? this.content,
+      toolCalls: toolCalls ?? this.toolCalls,
+      toolCallId: toolCallId ?? this.toolCallId,
+      name: name ?? this.name,
+      actionSteps: actionSteps ?? this.actionSteps,
+      confirmationCard: confirmationCard ?? this.confirmationCard,
+      summaryCard: summaryCard ?? this.summaryCard,
+    );
+  }
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     final toolCallsList = json['tool_calls'] as List<dynamic>?;
@@ -118,7 +148,16 @@ class ChatMessage extends Equatable {
   }
 
   @override
-  List<Object?> get props => [role, content, toolCalls, toolCallId, name];
+  List<Object?> get props => [
+        role,
+        content,
+        toolCalls,
+        toolCallId,
+        name,
+        actionSteps,
+        confirmationCard,
+        summaryCard,
+      ];
 }
 
 /// A single chunk from an SSE streaming response.
