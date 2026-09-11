@@ -413,5 +413,34 @@ void main() {
       expect(toolMessages[0].content, equals('Critical action executed'));
       expect(toolMessages[1].content, equals('Info action executed'));
     });
+
+    test('extracts thought tags into thoughtProcess and clean content',
+        () async {
+      when(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: any(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+          )).thenAnswer((_) async {
+        return Right(Stream.fromIterable([
+          const ChatChunk(
+            contentDelta: '<thought>my thoughts</thought>Final answer',
+            finishReason: 'stop',
+          ),
+        ]));
+      });
+
+      await cubit.sendMessage('Hello');
+
+      expect(cubit.state, isA<AgentSuccess>());
+      final success = cubit.state as AgentSuccess;
+      expect(success.response, equals('Final answer'));
+
+      final assistant =
+          cubit.messages.lastWhere((m) => m.role == 'assistant');
+      expect(assistant.thoughtProcess, equals('my thoughts'));
+      expect(assistant.content, equals('Final answer'));
+    });
   });
 }
