@@ -25,5 +25,6 @@ Before writing any code, follow the **superpowers** workflow: **brainstorming** 
 flutter analyze                                          # must be clean
 flutter test                                             # all green
 flock /tmp/flutter.lock flutter test                     # serialized on VPS
-flutter run --flavor dev -t lib/main_dev.dart
+flutter run --flavor development -t lib/main_development.dart
+flutter run --flavor production -t lib/main_production.dart
 ```

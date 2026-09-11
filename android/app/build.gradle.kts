@@ -38,6 +38,22 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    flavorDimensions += "env"
+
+    productFlavors {
+        create("development") {
+            dimension = "env"
+            applicationIdSuffix = ".dev"
+            resValue("string", "app_name", "AI Agent (Dev)")
+            resValue("string", "app_flavor", "development")
+        }
+        create("production") {
+            dimension = "env"
+            resValue("string", "app_name", "AI Agent")
+            resValue("string", "app_flavor", "production")
+        }
+    }
 }
 
 kotlin {

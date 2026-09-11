@@ -1,0 +1,69 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "[DEV] AI Agent",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_development.dart",
+      "args": [
+        "--flavor",
+        "development",
+        "--target",
+        "lib/main_development.dart"
+      ]
+    },
+    {
+      "name": "[DEV Release] AI Agent",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_development.dart",
+      "noDebug": false,
+      "args": [
+        "--flavor",
+        "development",
+        "--release",
+        "--target",
+        "lib/main_development.dart"
+      ]
+    },
+    {
+      "name": "[PROD Release] AI Agent",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_production.dart",
+      "noDebug": false,
+      "args": [
+        "--release",
+        "--flavor",
+        "production",
+        "--target",
+        "lib/main_production.dart"
+      ]
+    },
+    {
+      "name": "[PROD Debug] AI Agent",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_production.dart",
+      "noDebug": false,
+      "args": [
+        "--flavor",
+        "production",
+        "--target",
+        "lib/main_production.dart"
+      ]
+    },
+    {
+      "name": "Flutter Dev (No Debug / Profile)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "profile",
+      "program": "lib/main_development.dart",
+      "args": [
+        "--flavor",
+        "development"
+      ]
+    }
+  ]
+}

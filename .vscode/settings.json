@@ -1,0 +1,14 @@
+{
+  "java.configuration.updateBuildConfiguration": "interactive",
+  "acp.agents": {
+    "hermes-vps": {
+      "command": "npx",
+      "args": [
+        "@anthropic-ai/acp-proxy",
+        "--port",
+        "9120"
+      ],
+      "env": {}
+    }
+  }
+}
