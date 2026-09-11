@@ -67,6 +67,17 @@ void main() {
       expect(find.byKey(const Key('chat_send_button')), findsOneWidget);
     });
 
+    testWidgets('renders HeaderConsoleBar with GatewayStatusChip and AchievementTierBadge', (tester) async {
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('header_console_bar')), findsOneWidget);
+      expect(find.byKey(const Key('gateway_status_chip')), findsOneWidget);
+      expect(find.byKey(const Key('achievement_tier_badge')), findsOneWidget);
+      expect(find.text('Running 8644'), findsOneWidget);
+      expect(find.text('Olympian • 47/60 Badges'), findsOneWidget);
+    });
+
     testWidgets('send button is disabled when text field is empty', (tester) async {
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();

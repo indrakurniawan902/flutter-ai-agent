@@ -1,30 +1,45 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_ai_agent/core/theme/hermes_theme.dart';
 
 class AppTheme {
   AppTheme._();
 
-  static const Color _darkSurface = Color(0xFF0F172A);
-  static const Color _accentTeal = Color(0xFF008080);
+  static const Color darkSurface = HermesColors.deepObsidian;
+  static const Color cardSurface = HermesColors.cardSurface;
+  static const Color border = HermesColors.border;
+  static const Color accentTeal = HermesColors.accentTeal;
+  static const Color electricTeal = HermesColors.electricTeal;
 
   static ThemeData get darkTheme {
     return ThemeData(
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: _darkSurface,
+      scaffoldBackgroundColor: HermesColors.deepObsidian,
       colorScheme: const ColorScheme.dark(
-        surface: _darkSurface,
-        primary: _accentTeal,
-        secondary: _accentTeal,
-        onSurface: Colors.white,
-        onPrimary: Colors.white,
+        surface: HermesColors.cardSurface,
+        primary: HermesColors.electricTeal,
+        secondary: HermesColors.accentTeal,
+        outline: HermesColors.border,
+        outlineVariant: HermesColors.border,
+        onSurface: HermesColors.inkPrimary,
+        onPrimary: HermesColors.deepObsidian,
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: _darkSurface,
-        foregroundColor: Colors.white,
+        backgroundColor: HermesColors.deepObsidian,
+        foregroundColor: HermesColors.inkPrimary,
         elevation: 0,
+        scrolledUnderElevation: 0,
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: _accentTeal,
+        backgroundColor: HermesColors.accentTeal,
         foregroundColor: Colors.white,
+      ),
+      cardTheme: CardThemeData(
+        color: HermesColors.cardSurface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8.0),
+          side: const BorderSide(color: HermesColors.border, width: 0.8),
+        ),
       ),
       useMaterial3: true,
     );

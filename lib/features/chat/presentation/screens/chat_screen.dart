@@ -7,6 +7,7 @@ import 'package:flutter_ai_agent/features/chat/data/models/chat_models.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/widgets/action_approval_sheet.dart';
+import 'package:flutter_ai_agent/features/chat/presentation/widgets/header_console_bar.dart';
 import 'package:flutter_ai_agent/features/settings/presentation/screens/settings_screen.dart';
 
 /// Main Chat Screen displaying streaming conversation, tool call cards,
@@ -141,6 +142,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 return SafeArea(
                   child: Column(
                     children: [
+                      const HeaderConsoleBar(),
                       Expanded(
                         child: messages.isEmpty && state is AgentIdle
                             ? _buildEmptyState(context)
