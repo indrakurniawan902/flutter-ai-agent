@@ -69,6 +69,7 @@ class ChatMessage extends Equatable {
   final List<ToolCallDelta>? toolCalls;
   final String? toolCallId;
   final String? name;
+  final String? thoughtProcess;
   final List<ActionStep>? actionSteps;
   final ActionConfirmationData? confirmationCard;
   final SummaryCardData? summaryCard;
@@ -79,6 +80,7 @@ class ChatMessage extends Equatable {
     this.toolCalls,
     this.toolCallId,
     this.name,
+    this.thoughtProcess,
     this.actionSteps,
     this.confirmationCard,
     this.summaryCard,
@@ -90,6 +92,7 @@ class ChatMessage extends Equatable {
     List<ToolCallDelta>? toolCalls,
     String? toolCallId,
     String? name,
+    String? thoughtProcess,
     List<ActionStep>? actionSteps,
     ActionConfirmationData? confirmationCard,
     SummaryCardData? summaryCard,
@@ -100,6 +103,7 @@ class ChatMessage extends Equatable {
       toolCalls: toolCalls ?? this.toolCalls,
       toolCallId: toolCallId ?? this.toolCallId,
       name: name ?? this.name,
+      thoughtProcess: thoughtProcess ?? this.thoughtProcess,
       actionSteps: actionSteps ?? this.actionSteps,
       confirmationCard: confirmationCard ?? this.confirmationCard,
       summaryCard: summaryCard ?? this.summaryCard,
@@ -116,6 +120,8 @@ class ChatMessage extends Equatable {
           .toList(),
       toolCallId: json['tool_call_id'] as String?,
       name: json['name'] as String?,
+      thoughtProcess: (json['thought_process'] ?? json['thoughtProcess'])
+          as String?,
     );
   }
 
@@ -144,6 +150,9 @@ class ChatMessage extends Equatable {
     if (name != null) {
       map['name'] = name;
     }
+    if (thoughtProcess != null) {
+      map['thought_process'] = thoughtProcess;
+    }
     return map;
   }
 
@@ -154,6 +163,7 @@ class ChatMessage extends Equatable {
         toolCalls,
         toolCallId,
         name,
+        thoughtProcess,
         actionSteps,
         confirmationCard,
         summaryCard,

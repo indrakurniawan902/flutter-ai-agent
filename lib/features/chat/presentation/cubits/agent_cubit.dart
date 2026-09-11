@@ -7,6 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_ai_agent/core/errors/failures.dart';
 import 'package:flutter_ai_agent/features/chat/data/llm_repository.dart';
 import 'package:flutter_ai_agent/features/chat/data/models/chat_models.dart';
+import 'package:flutter_ai_agent/features/chat/domain/utils/thought_extractor.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
 import 'package:flutter_ai_agent/features/chat/domain/models/tool_call_request.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/security_policy.dart';
@@ -322,12 +323,15 @@ class AgentCubit extends Cubit<AgentState> {
 
         // If no tool calls were generated, this is the final text answer.
         if (callIds.isEmpty && callNames.isEmpty && callArgs.isEmpty) {
-          final finalText = contentBuffer.toString();
+          final extraction =
+              ThoughtExtractor.extract(contentBuffer.toString());
+          final cleanText = extraction.cleanContent;
           _messages.add(ChatMessage(
             role: 'assistant',
-            content: finalText,
+            content: cleanText.isEmpty ? null : cleanText,
+            thoughtProcess: extraction.thoughtProcess,
           ));
-          emit(AgentSuccess(finalText, messages: messages));
+          emit(AgentSuccess(cleanText, messages: messages));
           return;
         }
 
@@ -349,9 +353,14 @@ class AgentCubit extends Cubit<AgentState> {
           ));
         }
 
+        final toolExtraction =
+            ThoughtExtractor.extract(contentBuffer.toString());
         _messages.add(ChatMessage(
           role: 'assistant',
-          content: contentBuffer.isEmpty ? null : contentBuffer.toString(),
+          content: toolExtraction.cleanContent.isEmpty
+              ? null
+              : toolExtraction.cleanContent,
+          thoughtProcess: toolExtraction.thoughtProcess,
           toolCalls: toolCalls,
         ));
 
