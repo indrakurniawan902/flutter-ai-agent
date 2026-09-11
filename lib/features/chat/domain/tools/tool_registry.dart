@@ -12,6 +12,8 @@ import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.d
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_triage_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/file_workspace_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/local_memory_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/models/ambient_event.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/ambient_trigger_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/security_policy.dart';
 
 typedef ToolExecutor = Future<Either<Failure, String>> Function(
@@ -570,6 +572,222 @@ class ToolRegistry {
         },
         securityTier: SecurityTier.tier1Auto,
         execute: (args) => service.listMemoriesFormattedJson(args),
+      ),
+    );
+  }
+
+  void registerAmbientTriggerTools(AmbientTriggerServiceBase service) {
+    register(
+      RegisteredTool(
+        name: 'register_geofence',
+        description:
+            'Register a geofence region to trigger proactive events on entry/exit.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'id': {
+              'type': 'string',
+              'description': 'Unique identifier for the geofence region',
+            },
+            'name': {
+              'type': 'string',
+              'description': 'Friendly name of the region (e.g. Office, Home)',
+            },
+            'latitude': {
+              'type': 'number',
+              'description': 'Latitude in degrees (-90.0 to 90.0)',
+            },
+            'longitude': {
+              'type': 'number',
+              'description': 'Longitude in degrees (-180.0 to 180.0)',
+            },
+            'radius_meters': {
+              'type': 'number',
+              'description': 'Radius in meters (default 200.0)',
+            },
+            'trigger_on_enter': {
+              'type': 'boolean',
+              'description': 'Trigger proactive event on entry (default true)',
+            },
+            'trigger_on_exit': {
+              'type': 'boolean',
+              'description': 'Trigger proactive event on exit (default false)',
+            },
+          },
+          'required': ['id', 'name', 'latitude', 'longitude'],
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) async {
+          final id = args['id']?.toString() ?? '';
+          final name = args['name']?.toString() ?? '';
+          final lat = (args['latitude'] as num?)?.toDouble() ?? 0.0;
+          final lon = (args['longitude'] as num?)?.toDouble() ?? 0.0;
+          final radius = (args['radius_meters'] as num?)?.toDouble() ?? 200.0;
+          final onEnter = args['trigger_on_enter'] as bool? ?? true;
+          final onExit = args['trigger_on_exit'] as bool? ?? false;
+
+          final region = GeofenceRegion(
+            id: id,
+            name: name,
+            latitude: lat,
+            longitude: lon,
+            radiusMeters: radius,
+            triggerOnEnter: onEnter,
+            triggerOnExit: onExit,
+          );
+
+          final res = await service.registerGeofence(region);
+          return res.fold(
+            (failure) => Left(failure),
+            (_) => Right(
+              jsonEncode({
+                'status': 'success',
+                'message': 'Geofence registered',
+                'geofence': region.toJson(),
+              }),
+            ),
+          );
+        },
+      ),
+    );
+
+    register(
+      RegisteredTool(
+        name: 'list_geofences',
+        description: 'List all currently registered geofence regions.',
+        parameters: const {
+          'type': 'object',
+          'properties': <String, dynamic>{},
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (_) async {
+          final res = await service.listGeofences();
+          return res.fold(
+            (failure) => Left(failure),
+            (list) => Right(
+              jsonEncode({
+                'count': list.length,
+                'geofences': list.map((g) => g.toJson()).toList(),
+              }),
+            ),
+          );
+        },
+      ),
+    );
+
+    register(
+      RegisteredTool(
+        name: 'remove_geofence',
+        description: 'Remove a geofence region by its ID.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'id': {
+              'type': 'string',
+              'description': 'ID of the geofence region to remove',
+            },
+          },
+          'required': ['id'],
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) async {
+          final id = args['id']?.toString() ?? '';
+          final res = await service.removeGeofence(id);
+          return res.fold(
+            (failure) => Left(failure),
+            (_) => Right(
+              jsonEncode({
+                'status': 'success',
+                'message': 'Geofence removed',
+                'id': id,
+              }),
+            ),
+          );
+        },
+      ),
+    );
+
+    register(
+      RegisteredTool(
+        name: 'check_ambient_status',
+        description:
+            'Check ambient trigger system status, active thresholds, and cooldowns.',
+        parameters: const {
+          'type': 'object',
+          'properties': <String, dynamic>{},
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (_) async {
+          return Right(
+            jsonEncode({
+              'low_battery_threshold': service.lowBatteryThreshold,
+              'critical_battery_threshold': service.criticalBatteryThreshold,
+              'battery_cooldown_minutes':
+                  service.batteryCooldownDuration.inMinutes,
+              'geofence_cooldown_minutes':
+                  service.geofenceCooldownDuration.inMinutes,
+              'registered_geofences_count':
+                  service.registeredGeofences.length,
+              'is_battery_low_in_cooldown':
+                  service.isUnderCooldown('battery_low'),
+              'is_battery_critical_in_cooldown':
+                  service.isUnderCooldown('battery_critical'),
+            }),
+          );
+        },
+      ),
+    );
+
+    register(
+      RegisteredTool(
+        name: 'trigger_ambient_check',
+        description:
+            'Manually evaluate physical phone triggers (battery watchdog & geofences).',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'latitude': {
+              'type': 'number',
+              'description': 'Current latitude override (optional)',
+            },
+            'longitude': {
+              'type': 'number',
+              'description': 'Current longitude override (optional)',
+            },
+            'battery_level': {
+              'type': 'integer',
+              'description': 'Current battery level override (optional)',
+            },
+            'is_charging': {
+              'type': 'boolean',
+              'description': 'Current charging state override (optional)',
+            },
+          },
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) async {
+          final lat = (args['latitude'] as num?)?.toDouble();
+          final lon = (args['longitude'] as num?)?.toDouble();
+          final battery = args['battery_level'] as int?;
+          final charging = args['is_charging'] as bool?;
+
+          final Either<Failure, AmbientCheckResult> res;
+          if (lat != null || lon != null || battery != null || charging != null) {
+            res = await service.checkTriggers(
+              currentLat: lat,
+              currentLon: lon,
+              currentBattery: battery,
+              isCharging: charging,
+            );
+          } else {
+            res = await service.performPeriodicCheck();
+          }
+
+          return res.fold(
+            (failure) => Left(failure),
+            (result) => Right(jsonEncode(result.toJson())),
+          );
+        },
       ),
     );
   }

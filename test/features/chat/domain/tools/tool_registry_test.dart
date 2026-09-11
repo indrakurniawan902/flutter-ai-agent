@@ -1,5 +1,6 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter_ai_agent/core/errors/failures.dart';
+import 'package:flutter_ai_agent/features/chat/data/models/ambient_event.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/clipboard_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/security_policy.dart';
@@ -14,6 +15,15 @@ class MockClipboardService extends Mock implements ClipboardServiceBase {}
 class MockLocationService extends Mock implements LocationServiceBase {}
 
 void main() {
+  setUpAll(() {
+    registerFallbackValue(const GeofenceRegion(
+      id: 'fake',
+      name: 'fake',
+      latitude: 0.0,
+      longitude: 0.0,
+    ));
+  });
+
   late ToolRegistry registry;
   late MockClipboardService mockClipboard;
   late MockLocationService mockLocation;
@@ -413,6 +423,81 @@ void main() {
 
       final listRes = await registry.executeTool('list_memories', {});
       expect(listRes, equals(const Right('{"count":2}')));
+    });
+  });
+
+  group('registerAmbientTriggerTools', () {
+    late MockAmbientTriggerService mockAmbientService;
+
+    setUp(() {
+      mockAmbientService = MockAmbientTriggerService();
+      when(() => mockAmbientService.lowBatteryThreshold).thenReturn(15);
+      when(() => mockAmbientService.criticalBatteryThreshold).thenReturn(5);
+      when(() => mockAmbientService.batteryCooldownDuration)
+          .thenReturn(const Duration(minutes: 30));
+      when(() => mockAmbientService.geofenceCooldownDuration)
+          .thenReturn(const Duration(minutes: 15));
+      when(() => mockAmbientService.registeredGeofences).thenReturn([]);
+      when(() => mockAmbientService.isUnderCooldown(any())).thenReturn(false);
+
+      registry.registerAmbientTriggerTools(mockAmbientService);
+    });
+
+    test('registers 5 ambient tools as tier1Auto', () {
+      expect(registry.hasTool('register_geofence'), isTrue);
+      expect(registry.hasTool('list_geofences'), isTrue);
+      expect(registry.hasTool('remove_geofence'), isTrue);
+      expect(registry.hasTool('check_ambient_status'), isTrue);
+      expect(registry.hasTool('trigger_ambient_check'), isTrue);
+
+      expect(registry.getTool('register_geofence')?.securityTier,
+          equals(SecurityTier.tier1Auto));
+      expect(registry.getTool('list_geofences')?.securityTier,
+          equals(SecurityTier.tier1Auto));
+      expect(registry.getTool('remove_geofence')?.securityTier,
+          equals(SecurityTier.tier1Auto));
+      expect(registry.getTool('check_ambient_status')?.securityTier,
+          equals(SecurityTier.tier1Auto));
+      expect(registry.getTool('trigger_ambient_check')?.securityTier,
+          equals(SecurityTier.tier1Auto));
+    });
+
+    test('executes ambient trigger tools via ToolRegistry successfully', () async {
+      when(() => mockAmbientService.registerGeofence(any()))
+          .thenAnswer((_) async => const Right(null));
+      when(() => mockAmbientService.listGeofences())
+          .thenAnswer((_) async => const Right([]));
+      when(() => mockAmbientService.removeGeofence(any()))
+          .thenAnswer((_) async => const Right(null));
+      when(() => mockAmbientService.performPeriodicCheck())
+          .thenAnswer((_) async => Right(AmbientCheckResult(
+                batteryLevel: 90,
+                isCharging: false,
+                timestamp: DateTime.utc(2026, 9, 11),
+              )));
+
+      final regRes = await registry.executeTool('register_geofence', {
+        'id': 'off',
+        'name': 'Office',
+        'latitude': -6.2,
+        'longitude': 106.8,
+      });
+      expect(regRes.isRight(), isTrue);
+      expect(regRes.getOrElse(() => ''), contains('Office'));
+
+      final listRes = await registry.executeTool('list_geofences', {});
+      expect(listRes.isRight(), isTrue);
+
+      final remRes = await registry.executeTool('remove_geofence', {'id': 'off'});
+      expect(remRes.isRight(), isTrue);
+
+      final statusRes = await registry.executeTool('check_ambient_status', {});
+      expect(statusRes.isRight(), isTrue);
+      expect(statusRes.getOrElse(() => ''), contains('low_battery_threshold'));
+
+      final checkRes = await registry.executeTool('trigger_ambient_check', {});
+      expect(checkRes.isRight(), isTrue);
+      expect(checkRes.getOrElse(() => ''), contains('battery_level'));
     });
   });
 }

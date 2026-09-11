@@ -12,6 +12,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.d
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_triage_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/file_workspace_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/local_memory_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/ambient_trigger_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart';
@@ -122,6 +123,15 @@ Future<void> initDependencies() async {
     );
   }
 
+  if (!sl.isRegistered<AmbientTriggerServiceBase>()) {
+    sl.registerLazySingleton<AmbientTriggerServiceBase>(
+      () => AmbientTriggerService(
+        locationService: sl<LocationServiceBase>(),
+        notificationService: sl<NotificationServiceBase>(),
+      ),
+    );
+  }
+
   // Tool Registry
   if (!sl.isRegistered<ToolRegistry>()) {
     sl.registerLazySingleton<ToolRegistry>(
@@ -136,6 +146,7 @@ Future<void> initDependencies() async {
         registry.registerFileWorkspaceTools(sl<FileWorkspaceServiceBase>());
         registry.registerNotificationTriageTools(sl<NotificationTriageServiceBase>());
         registry.registerMemoryTools(sl<LocalMemoryServiceBase>());
+        registry.registerAmbientTriggerTools(sl<AmbientTriggerServiceBase>());
         return registry;
       },
     );

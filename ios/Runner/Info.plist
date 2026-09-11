@@ -70,6 +70,8 @@
 	<string>Flames requires access to your calendar to view and create events on your behalf.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Flames requires your location to provide location-aware assistance and context.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Flames requires background location to trigger ambient arrival briefings and geofence events.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Flames requires camera access to capture and inspect images for vision tasks.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

@@ -14,6 +14,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.d
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_triage_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/file_workspace_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/local_memory_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/ambient_trigger_service.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
@@ -116,6 +117,16 @@ class MockFilePickerWrapper extends Mock implements FilePickerWrapper {}
 
 // Local Memory
 class MockLocalMemoryService extends Mock implements LocalMemoryServiceBase {}
+
+// Ambient Trigger Service
+class MockAmbientTriggerService extends Mock
+    implements AmbientTriggerServiceBase {}
+
+class MockBatteryPlatformWrapper extends Mock
+    implements BatteryPlatformWrapper {}
+
+class MockWorkmanagerPlatformWrapper extends Mock
+    implements WorkmanagerPlatformWrapper {}
 
 
 
