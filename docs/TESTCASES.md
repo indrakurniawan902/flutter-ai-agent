@@ -17,6 +17,7 @@
 5. [Module 5: Tier 2 Sensor & Perception Tools (Permission-Gated)](#module-5-tier-2-sensor--perception-tools-permission-gated)
 6. [Module 6: Tier 3 State-Modifying Tools & HITL Guardrails](#module-6-tier-3-state-modifying-tools--hitl-guardrails)
 7. [Module 7: Presentation, UI/UX & Edge Cases](#module-7-presentation-uiux--edge-cases)
+8. [Module 8: Local Workspace, Intelligence & Ambient Event Triggers (Fase 3)](#module-8-local-workspace-intelligence--ambient-event-triggers-fase-3)
 
 ---
 
@@ -442,6 +443,114 @@
 
 ---
 
+## Module 8: Local Workspace, Intelligence & Ambient Event Triggers (Fase 3)
+
+### TC-INTEL-01: Document Workspace File Inspection with Line Pagination
+- **Type**: Positive
+- **Objective**: Verify that `FileWorkspaceService` inspects local documents (PDF, CSV, TXT, MD) and supports pagination via `offset` and `maxLines`.
+- **Preconditions**: Storage permissions granted; text document exists in device storage.
+- **Steps**:
+  1. Call tool `read_device_file` with `path: "/sdcard/workspace/report.txt"`, `offset: 0`, `maxLines: 50`.
+  2. Call tool `list_device_files` with `directoryPath: "/sdcard/workspace"`, `recursive: false`.
+- **Expected Outcome**:
+  - First 50 lines returned formatted as clean string with line count header.
+  - Directory listing returns JSON list of file entries with file names, sizes, and timestamps.
+
+### TC-INTEL-02: File Workspace Missing File & Security Boundary Handling
+- **Type**: Negative
+- **Objective**: Gracefully handle missing files, unsupported binary formats, or path traversal attempts without agent crash.
+- **Preconditions**: Tool `read_device_file` invoked.
+- **Steps**:
+  1. Call `read_device_file` with path `"/nonexistent/file.txt"`.
+  2. Call `read_device_file` with relative traversal path `"../../etc/shadow"`.
+- **Expected Outcome**:
+  - Tool returns `Left(StorageFailure)` indicating file was not found or access was restricted.
+  - ReAct agent loop reports the failure clearly to user without throwing unhandled exceptions.
+
+### TC-INTEL-03: Notification Triage & Automatic OTP Extraction with Privacy Masking
+- **Type**: Positive
+- **Objective**: Retrieve incoming device notifications via `NotificationListenerService` and accurately extract OTP codes while protecting PII.
+- **Preconditions**: Notification access permission granted in Android System Settings.
+- **Steps**:
+  1. Receive mock SMS notification: `"Your verification code for Acme Corp is 839201. Valid for 5 minutes."`
+  2. Call tool `extract_latest_otp` with `appFilter: "sms"`.
+  3. Call tool `read_recent_notifications` with `limit: 5`.
+- **Expected Outcome**:
+  - `extract_latest_otp` extracts code `"839201"`, sender `"Acme Corp"`, and timestamp.
+  - Sensitive notification bodies (credit card numbers, personal identifiers) are masked with `[REDACTED]`.
+
+### TC-INTEL-04: Notification Listener Permission Denial Recovery
+- **Type**: Negative
+- **Objective**: Handle Android Notification Listener permission denial with clear guidance for user to enable in settings.
+- **Preconditions**: Notification listener permission is disabled.
+- **Steps**:
+  1. Agent invokes `extract_latest_otp`.
+- **Expected Outcome**:
+  - Tool checks permission, detects ungranted status, and returns `Left(PermissionFailure('Notification listener permission not granted'))`.
+  - UI surfaces prompt for user to grant notification listener access in system settings.
+
+### TC-INTEL-05: Local Persistent Memory CRUD & SQLite FTS5 BM25 Auto-Injection
+- **Type**: Positive
+- **Objective**: Verify that `LocalMemoryService` stores memories in SQLite FTS5, performs BM25 ranking, and automatically injects relevant context into `AgentCubit`.
+- **Preconditions**: Database initialized with FTS5 schema.
+- **Steps**:
+  1. Tool `save_memory` stores key `"user_project"`, content `"Building Flutter AI Agent on Linux ARM"`, tags `["project", "dev"]`.
+  2. User asks prompt: `"What project am I building?"`
+  3. Inspect `AgentCubit.sendMessage()`.
+- **Expected Outcome**:
+  - `searchMemories("What project am I building?", 3)` returns stored memory with highest BM25 score.
+  - `AgentCubit` auto-injects memory into system prompt: `Relevant User & Device Memories: - user_project [project, dev]: Building Flutter AI Agent on Linux ARM`.
+  - LLM response accurately reflects stored context.
+
+### TC-INTEL-06: Geofence Region Transition Detection & Notification Dispatch
+- **Type**: Positive
+- **Objective**: Trigger proactive ambient events when device transitions across registered geofence boundaries.
+- **Preconditions**: Location service active; geofence registered.
+- **Steps**:
+  1. Tool `register_geofence` adds region `"Office"` at coordinates `(-6.2, 106.8)` with radius `200m`.
+  2. Device position updates from outside $(> 500m)$ to inside $(< 100m)$.
+- **Expected Outcome**:
+  - `AmbientTriggerService` fires `AmbientEventType.geofenceEnter` event.
+  - Event emitted on `eventStream` and system notification dispatched: `"Geofence Entered: Welcome to Office"`.
+
+### TC-INTEL-07: Battery Watchdog Thresholds & Charging Suppression
+- **Type**: Positive
+- **Objective**: Verify battery watchdog alerts at low ($\le 15\%$) and critical ($\le 5\%$) levels while suppressing alerts during charging.
+- **Preconditions**: Battery monitoring enabled.
+- **Steps**:
+  1. Battery level drops to $12\%$ while `isCharging = false` $\to$ Check triggered events.
+  2. Charger plugged in (`isCharging = true`) while battery is $12\%$ $\to$ Check triggered events.
+- **Expected Outcome**:
+  - Step 1 triggers `AmbientEventType.batteryLow` event and dispatches power saver notification.
+  - Step 2 suppresses trigger; no duplicate notifications or warnings dispatched while charging.
+
+### TC-INTEL-08: Cooldown Window & Trigger Flood Prevention
+- **Type**: Negative
+- **Objective**: Prevent repetitive notification spam by enforcing cooldown timers between consecutive ambient triggers.
+- **Preconditions**: Cooldown set to 15 minutes.
+- **Steps**:
+  1. Trigger initial `batteryLow` event at timestamp $T$.
+  2. Trigger second `batteryLow` event at timestamp $T + 2\text{ minutes}$.
+- **Expected Outcome**:
+  - First trigger fires successfully.
+  - Second trigger is deduplicated and suppressed by cooldown manager; zero spam notifications.
+
+### TC-INTEL-09: End-to-End Intelligence Pipeline
+- **Type**: Positive
+- **Objective**: Verify full multi-stage autonomous pipeline: File reading $\to$ Notification triage $\to$ Local memory retrieval $\to$ Ambient proactive prompt.
+- **Preconditions**: All Fase 3 services registered in `ToolRegistry` and DI container.
+- **Steps**:
+  1. User prompts agent to inspect `/workspace/incident_report.txt`.
+  2. Agent calls `read_device_file`, parses error report requiring 2FA OTP.
+  3. Agent calls `extract_latest_otp` to triage SMS notifications, recovering code `948210`.
+  4. Agent calls `save_memory` to store OTP in SQLite FTS5.
+  5. User queries stored token; `AgentCubit` auto-retrieves memory into prompt.
+  6. Battery drops to $12\%$; `AmbientTriggerService` pipes proactive alert to `AgentCubit.sendMessage()`.
+- **Expected Outcome**:
+  - Complete 4-stage pipeline executes seamlessly with 100% green verification in `e2e_fase3_intelligence_test.dart`.
+
+---
+
 ## Summary Matrix
 
 | Module | Positive Cases | Negative Cases | Total Cases |
@@ -453,7 +562,8 @@
 | **Module 5: Tier 2 Sensor Tools** | 2 | 3 | 5 |
 | **Module 6: Tier 3 HITL Tools** | 2 | 3 | 5 |
 | **Module 7: Presentation & UI/UX** | 3 | 1 | 4 |
-| **Grand Total** | **15** | **19** | **34** |
+| **Module 8: Local Workspace & Intelligence (Fase 3)** | 6 | 3 | 9 |
+| **Grand Total** | **21** | **22** | **43** |
 
 ---
 _Standardized for Hermes Bot Team: PM Bot (`default`), Dev Bot (`dev`), Ops Bot (`ops`)._
