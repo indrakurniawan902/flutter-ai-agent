@@ -22,10 +22,10 @@ class MobileScannerControllerWrapper implements QrScannerControllerBase {
   Future<void> toggleTorch() async {
     try {
       await controller.toggleTorch();
+      _isTorchOnNotifier.value = !_isTorchOnNotifier.value;
     } catch (_) {
       // Ignored if hardware does not support torch or controller not initialized
     }
-    _isTorchOnNotifier.value = !_isTorchOnNotifier.value;
   }
 
   @override

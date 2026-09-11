@@ -26,9 +26,9 @@ class PairingPayload extends Equatable {
   /// Supports both camelCase and snake_case keys.
   /// Handles timestamp as ISO-8601 String, milliseconds since epoch, or seconds since epoch.
   factory PairingPayload.fromJson(Map<String, dynamic> json) {
-    final gatewayUrl = (json['gatewayUrl'] ?? json['gateway_url'] ?? '') as String;
-    final token = (json['token'] ?? '') as String;
-    final profileName = (json['profileName'] ?? json['profile_name'] ?? '') as String;
+    final gatewayUrl = (json['gatewayUrl'] ?? json['gateway_url'])?.toString().trim() ?? '';
+    final token = (json['token'])?.toString().trim() ?? '';
+    final profileName = (json['profileName'] ?? json['profile_name'])?.toString().trim() ?? '';
 
     final rawTimestamp = json['timestamp'];
     DateTime timestamp;
@@ -40,7 +40,7 @@ class PairingPayload extends Equatable {
         timestamp = DateTime.fromMillisecondsSinceEpoch(rawTimestamp, isUtc: true);
       }
     } else if (rawTimestamp is String) {
-      timestamp = DateTime.parse(rawTimestamp);
+      timestamp = DateTime.tryParse(rawTimestamp) ?? DateTime.now().toUtc();
     } else if (rawTimestamp is DateTime) {
       timestamp = rawTimestamp;
     } else {
@@ -56,7 +56,7 @@ class PairingPayload extends Equatable {
         expiresAt = DateTime.fromMillisecondsSinceEpoch(rawExpiresAt, isUtc: true);
       }
     } else if (rawExpiresAt is String) {
-      expiresAt = DateTime.parse(rawExpiresAt);
+      expiresAt = DateTime.tryParse(rawExpiresAt);
     } else if (rawExpiresAt is DateTime) {
       expiresAt = rawExpiresAt;
     }
