@@ -80,6 +80,7 @@ class LocationService implements LocationServiceBase {
       case 'high':
         return LocationAccuracy.high;
       case 'best':
+        return LocationAccuracy.best;
       default:
         return LocationAccuracy.high;
     }

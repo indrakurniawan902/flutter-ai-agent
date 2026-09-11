@@ -60,18 +60,22 @@ class ToolRegistry {
     String name, [
     Map<String, dynamic> arguments = const {},
   ]) async {
-    final tool = _tools[name];
-    if (tool == null) {
-      return Left(ServerFailure('Tool not found: $name'));
-    }
-    if (tool.securityTier == SecurityTier.tier2Permission &&
-        tool.checkPermission != null) {
-      final granted = await tool.checkPermission!();
-      if (!granted) {
-        return Left(PermissionFailure('Permission denied for tool: $name'));
+    try {
+      final tool = _tools[name];
+      if (tool == null) {
+        return Left(ServerFailure('Tool not found: $name'));
       }
+      if (SecurityPolicy.requiresPermission(tool.securityTier) &&
+          tool.checkPermission != null) {
+        final granted = await tool.checkPermission!();
+        if (!granted) {
+          return Left(PermissionFailure('Permission denied for tool: $name'));
+        }
+      }
+      return await tool.execute(arguments);
+    } catch (e) {
+      return Left(ServerFailure('Tool execution error: $e'));
     }
-    return tool.execute(arguments);
   }
 
   void registerClipboardTools(ClipboardServiceBase clipboardService) {
@@ -103,7 +107,7 @@ class ToolRegistry {
         },
         securityTier: SecurityTier.tier1Auto,
         execute: (args) =>
-            clipboardService.clipboardWrite(args['text'] as String? ?? ''),
+            clipboardService.clipboardWrite(args['text']?.toString() ?? ''),
       ),
     );
   }
