@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_ai_agent/features/chat/domain/models/action_step.dart';
+import 'package:flutter_ai_agent/domain/models/chat/action_step.dart';
 
 void main() {
   group('ActionStep & ActionStepStatus', () {

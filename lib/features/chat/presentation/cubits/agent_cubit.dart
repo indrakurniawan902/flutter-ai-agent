@@ -9,7 +9,7 @@ import 'package:flutter_ai_agent/features/chat/data/llm_repository.dart';
 import 'package:flutter_ai_agent/features/chat/data/models/chat_models.dart';
 import 'package:flutter_ai_agent/features/chat/domain/utils/thought_extractor.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
-import 'package:flutter_ai_agent/features/chat/domain/models/tool_call_request.dart';
+import 'package:flutter_ai_agent/domain/models/chat/tool_call_request.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/security_policy.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';

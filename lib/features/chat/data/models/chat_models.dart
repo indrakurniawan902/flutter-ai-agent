@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
-import 'package:flutter_ai_agent/features/chat/domain/models/action_step.dart';
-import 'package:flutter_ai_agent/features/chat/domain/models/generative_card_data.dart';
+import 'package:flutter_ai_agent/domain/models/chat/action_step.dart';
+import 'package:flutter_ai_agent/domain/models/chat/generative_card_data.dart';
 
 /// Represents a delta update for a tool call in a streaming response.
 class ToolCallDelta extends Equatable {

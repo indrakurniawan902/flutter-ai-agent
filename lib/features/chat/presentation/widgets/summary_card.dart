@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_ai_agent/core/theme/hermes_theme.dart';
-import 'package:flutter_ai_agent/features/chat/domain/models/generative_card_data.dart';
+import 'package:flutter_ai_agent/domain/models/chat/generative_card_data.dart';
 
 /// Generative Micro-UI card providing structured task/action summaries
 /// with 1-tap clipboard copy and share actions.
