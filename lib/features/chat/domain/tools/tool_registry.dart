@@ -909,7 +909,7 @@ class ToolRegistry {
             'action': {
               'type': 'string',
               'description':
-                  'Operation to perform: start, stop, status, update_notification, acquire_wake_lock, release_wake_lock, get_tile_state, set_tile_state, toggle_tile_state',
+                  'Operation to perform: start, stop, status, update_notification, acquire_wake_lock, release_wake_lock, get_tile_state, set_tile_state, toggle_tile_state, toggle_tile',
               'enum': [
                 'start',
                 'stop',
@@ -919,7 +919,8 @@ class ToolRegistry {
                 'release_wake_lock',
                 'get_tile_state',
                 'set_tile_state',
-                'toggle_tile_state'
+                'toggle_tile_state',
+                'toggle_tile'
               ],
             },
             'title': {
@@ -1059,6 +1060,7 @@ class ToolRegistry {
                 })),
               );
 
+            case 'toggle_tile':
             case 'toggle_tile_state':
               final res = await service.toggleTileState();
               return res.fold(

@@ -66,6 +66,13 @@ class FlamesQuickTile : TileService() {
         currentInstance = null
     }
 
+    override fun onDestroy() {
+        if (currentInstance == this) {
+            currentInstance = null
+        }
+        super.onDestroy()
+    }
+
     override fun onClick() {
         super.onClick()
         val tile = qsTile ?: return

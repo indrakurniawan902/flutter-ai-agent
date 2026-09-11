@@ -741,6 +741,65 @@ void main() {
       verify(() => mockBackgroundService.toggleTileState()).called(1);
     });
 
+    test('executes action "update_notification"', () async {
+      when(() => mockBackgroundService.updateNotification(
+            title: any(named: 'title'),
+            content: any(named: 'content'),
+          )).thenAnswer((_) async => const Right(true));
+
+      final result = await registry.executeTool('manage_background_service', {
+        'action': 'update_notification',
+        'title': 'New Title',
+        'content': 'New Content',
+      });
+
+      expect(result.isRight(), isTrue);
+      verify(() => mockBackgroundService.updateNotification(
+            title: 'New Title',
+            content: 'New Content',
+          )).called(1);
+    });
+
+    test('executes action "get_tile_state"', () async {
+      when(() => mockBackgroundService.getTileState())
+          .thenAnswer((_) async => QuickTileState.active);
+
+      final result = await registry.executeTool('manage_background_service', {
+        'action': 'get_tile_state',
+      });
+
+      expect(result.isRight(), isTrue);
+      expect(result.getOrElse(() => ''), contains('"tile_state":"active"'));
+      verify(() => mockBackgroundService.getTileState()).called(1);
+    });
+
+    test('executes action "set_tile_state"', () async {
+      when(() => mockBackgroundService.setTileState(QuickTileState.active))
+          .thenAnswer((_) async => const Right(true));
+
+      final result = await registry.executeTool('manage_background_service', {
+        'action': 'set_tile_state',
+        'active': true,
+      });
+
+      expect(result.isRight(), isTrue);
+      expect(result.getOrElse(() => ''), contains('"tile_state":"active"'));
+      verify(() => mockBackgroundService.setTileState(QuickTileState.active)).called(1);
+    });
+
+    test('executes action "toggle_tile" alias', () async {
+      when(() => mockBackgroundService.toggleTileState())
+          .thenAnswer((_) async => const Right(QuickTileState.inactive));
+
+      final result = await registry.executeTool('manage_background_service', {
+        'action': 'toggle_tile',
+      });
+
+      expect(result.isRight(), isTrue);
+      expect(result.getOrElse(() => ''), contains('"tile_state":"inactive"'));
+      verify(() => mockBackgroundService.toggleTileState()).called(1);
+    });
+
     test('fails validation when action is missing or unsupported', () async {
       final resMissing =
           await registry.executeTool('manage_background_service', {});
