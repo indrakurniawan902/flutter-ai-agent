@@ -13,6 +13,7 @@ import 'package:flutter_ai_agent/features/chat/domain/models/action_step.dart';
 import 'package:flutter_ai_agent/features/chat/domain/models/generative_card_data.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/widgets/action_confirmation_card.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/widgets/live_action_stepper_card.dart';
+import 'package:flutter_ai_agent/features/chat/presentation/widgets/reasoning_card.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/widgets/summary_card.dart';
 import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_cubit.dart';
 import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_state.dart';
@@ -36,6 +37,7 @@ void main() {
     when(() => mockAgentCubit.state).thenReturn(const AgentIdle());
     when(() => mockAgentCubit.messages).thenReturn([]);
     when(() => mockAgentCubit.stream).thenAnswer((_) => stateController.stream);
+    when(() => mockAgentCubit.stop()).thenAnswer((_) async {});
 
     when(() => mockSettingsCubit.state).thenReturn(
       const SettingsLoaded(
@@ -401,6 +403,89 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Copied'), findsOneWidget);
+    });
+
+    testWidgets('renders ReasoningCard above assistant bubble when thoughtProcess is present', (tester) async {
+      when(() => mockAgentCubit.messages).thenReturn([
+        const ChatMessage(
+          role: 'assistant',
+          thoughtProcess: 'Analyzing the query\nFormulating response',
+          content: 'Here is the answer.',
+        ),
+      ]);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ReasoningCard), findsOneWidget);
+      expect(find.text('Thought Process'), findsOneWidget);
+      expect(find.text('Here is the answer.'), findsOneWidget);
+
+      // By default ReasoningCard is collapsed, so thought text is not displayed
+      expect(find.text('Analyzing the query\nFormulating response'), findsNothing);
+
+      // Tap to expand
+      await tester.tap(find.byKey(const Key('reasoning_card_header')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Analyzing the query\nFormulating response'), findsOneWidget);
+    });
+  });
+
+  group('ChatScreen - Stop Generation', () {
+    testWidgets('stop button is not rendered when state is AgentIdle',
+        (tester) async {
+      when(() => mockAgentCubit.state).thenReturn(const AgentIdle());
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+
+      expect(find.byKey(const Key('chat_stop_button')), findsNothing);
+    });
+
+    testWidgets('stop button is rendered when state is AgentThinking',
+        (tester) async {
+      when(() => mockAgentCubit.state).thenReturn(const AgentThinking());
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+
+      expect(find.byKey(const Key('chat_stop_button')), findsOneWidget);
+    });
+
+    testWidgets('stop button is rendered when state is AgentStreaming',
+        (tester) async {
+      when(() => mockAgentCubit.state)
+          .thenReturn(const AgentStreaming('partial'));
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+
+      expect(find.byKey(const Key('chat_stop_button')), findsOneWidget);
+    });
+
+    testWidgets('stop button is rendered when state is ExecutingTool',
+        (tester) async {
+      when(() => mockAgentCubit.state)
+          .thenReturn(const ExecutingTool('get_location'));
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+
+      expect(find.byKey(const Key('chat_stop_button')), findsOneWidget);
+    });
+
+    testWidgets('tapping stop button calls cubit.stop()', (tester) async {
+      when(() => mockAgentCubit.state)
+          .thenReturn(const AgentStreaming('partial'));
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('chat_stop_button')));
+      await tester.pump();
+
+      verify(() => mockAgentCubit.stop()).called(1);
     });
   });
 }

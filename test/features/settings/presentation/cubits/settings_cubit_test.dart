@@ -1,5 +1,6 @@
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter_ai_agent/core/constants/constants.dart';
+import 'package:flutter_ai_agent/features/server_profiles/domain/entities/server_profile.dart';
 import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_cubit.dart';
 import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_state.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -398,6 +399,34 @@ void main() {
       verify: (_) {
         verify(() => mockStorageService.saveApiKey('')).called(1);
       },
+    );
+  });
+
+  group('SettingsCubit - updateFromProfile', () {
+    blocTest<SettingsCubit, SettingsState>(
+      'emits SettingsLoaded with profile properties',
+      build: () => SettingsCubit(
+        secureStorageService: mockStorageService,
+        autoLoad: false,
+      ),
+      act: (cubit) => cubit.updateFromProfile(
+        const ServerProfile(
+          id: 'p1',
+          name: 'VPS Oracle',
+          gatewayUrl: 'https://profile-url.com/v1',
+          token: 'sk-profile-token',
+          model: 'profile-model',
+          temperature: 1.2,
+        ),
+      ),
+      expect: () => [
+        const SettingsLoaded(
+          baseUrl: 'https://profile-url.com/v1',
+          apiKey: 'sk-profile-token',
+          model: 'profile-model',
+          temperature: 1.2,
+        ),
+      ],
     );
   });
 }

@@ -6,10 +6,12 @@ import 'package:flutter_ai_agent/core/di/injection_container.dart';
 import 'package:flutter_ai_agent/features/chat/data/models/chat_models.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
+import 'package:flutter_ai_agent/features/chat/domain/utils/thought_extractor.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/widgets/action_approval_sheet.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/widgets/action_confirmation_card.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/widgets/header_console_bar.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/widgets/live_action_stepper_card.dart';
+import 'package:flutter_ai_agent/features/chat/presentation/widgets/reasoning_card.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/widgets/summary_card.dart';
 import 'package:flutter_ai_agent/features/settings/presentation/screens/settings_screen.dart';
 
@@ -115,6 +117,23 @@ class _ChatScreenState extends State<ChatScreen> {
                   tooltip: 'Reset Conversation',
                   onPressed: () {
                     context.read<AgentCubit>().reset();
+                  },
+                ),
+                BlocBuilder<AgentCubit, AgentState>(
+                  builder: (context, state) {
+                    final isBusy = state is AgentThinking ||
+                        state is AgentStreaming ||
+                        state is ExecutingTool;
+                    if (!isBusy) return const SizedBox.shrink();
+                    return IconButton(
+                      key: const Key('chat_stop_button'),
+                      icon: const Icon(
+                        Icons.stop_circle_outlined,
+                        color: Colors.redAccent,
+                      ),
+                      tooltip: 'Stop Generation',
+                      onPressed: () => context.read<AgentCubit>().stop(),
+                    );
                   },
                 ),
                 IconButton(
@@ -338,6 +357,13 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     }
 
+    if (message.thoughtProcess != null &&
+        message.thoughtProcess!.trim().isNotEmpty) {
+      children.add(
+        ReasoningCard(thoughtProcess: message.thoughtProcess!),
+      );
+    }
+
     if (message.content != null && message.content!.trim().isNotEmpty) {
       children.add(_buildAssistantBubble(context, message.content!));
     }
@@ -390,6 +416,70 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildStreamingBubble(BuildContext context, String partialText) {
     final theme = Theme.of(context);
+    if (partialText.contains('<thought')) {
+      final extraction = ThoughtExtractor.extract(partialText, streaming: true);
+      if (extraction.hasThought) {
+        final cleanContent = extraction.cleanContent;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ReasoningCard(
+              thoughtProcess: extraction.thoughtProcess!,
+              initiallyExpanded: true,
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                margin: const EdgeInsets.symmetric(vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.85,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: theme.colorScheme.primary),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (cleanContent.isEmpty)
+                      Text(
+                        '...',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          height: 1.4,
+                        ),
+                      )
+                    else
+                      MarkdownBody(
+                        data: cleanContent,
+                        styleSheet:
+                            MarkdownStyleSheet.fromTheme(theme).copyWith(
+                          p: theme.textTheme.bodyMedium?.copyWith(
+                            color: const Color(0xFFF8FAFC),
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      }
+    }
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(

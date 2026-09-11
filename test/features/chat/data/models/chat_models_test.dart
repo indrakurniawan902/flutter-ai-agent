@@ -304,4 +304,91 @@ void main() {
       expect(chunk.finishReason, 'tool_calls');
     });
   });
+
+  group('ChatMessage thoughtProcess', () {
+    test('fromJson reads thought_process snake_case', () {
+      final json = <String, dynamic>{
+        'role': 'assistant',
+        'content': 'Final answer',
+        'thought_process': 'my thoughts',
+      };
+
+      final msg = ChatMessage.fromJson(json);
+
+      expect(msg.thoughtProcess, 'my thoughts');
+      expect(msg.content, 'Final answer');
+    });
+
+    test('fromJson reads thoughtProcess camelCase fallback', () {
+      final json = <String, dynamic>{
+        'role': 'assistant',
+        'content': 'Final answer',
+        'thoughtProcess': 'camel thoughts',
+      };
+
+      final msg = ChatMessage.fromJson(json);
+
+      expect(msg.thoughtProcess, 'camel thoughts');
+    });
+
+    test('fromJson defaults thoughtProcess to null when absent', () {
+      final msg = ChatMessage.fromJson(
+        <String, dynamic>{'role': 'assistant', 'content': 'Hi'},
+      );
+
+      expect(msg.thoughtProcess, isNull);
+    });
+
+    test('toJson never emits thought_process (display-only state)', () {
+      const msg = ChatMessage(
+        role: 'assistant',
+        content: 'Final answer',
+        thoughtProcess: 'my thoughts',
+      );
+
+      final json = msg.toJson();
+
+      expect(msg.thoughtProcess, 'my thoughts');
+      expect(json.containsKey('thought_process'), isFalse);
+      expect(json.containsKey('thoughtProcess'), isFalse);
+    });
+
+    test('toJson omits thought_process when null', () {
+      const msg = ChatMessage(role: 'assistant', content: 'Hi');
+
+      final json = msg.toJson();
+
+      expect(json.containsKey('thought_process'), isFalse);
+    });
+
+    test('copyWith overrides thoughtProcess', () {
+      const msg = ChatMessage(role: 'assistant', content: 'Hi');
+
+      final updated = msg.copyWith(thoughtProcess: 'new thoughts');
+
+      expect(updated.thoughtProcess, 'new thoughts');
+      expect(updated.content, 'Hi');
+    });
+
+    test('equality includes thoughtProcess', () {
+      const a = ChatMessage(
+        role: 'assistant',
+        content: 'Hi',
+        thoughtProcess: 't1',
+      );
+      const b = ChatMessage(
+        role: 'assistant',
+        content: 'Hi',
+        thoughtProcess: 't1',
+      );
+      const c = ChatMessage(
+        role: 'assistant',
+        content: 'Hi',
+        thoughtProcess: 't2',
+      );
+
+      expect(a, equals(b));
+      expect(a == c, isFalse);
+    });
+  });
 }

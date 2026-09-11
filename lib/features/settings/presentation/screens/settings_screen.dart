@@ -245,6 +245,12 @@ class _SettingsViewState extends State<_SettingsView> {
                 if (state.activeProfile != null) {
                   _baseUrlController.text = state.activeProfile!.gatewayUrl;
                   _apiKeyController.text = state.activeProfile!.token;
+                  _modelController.text = state.activeProfile!.model;
+                  _temperatureController.text =
+                      state.activeProfile!.temperature.toString();
+                  context
+                      .read<SettingsCubit>()
+                      .updateFromProfile(state.activeProfile!);
                 }
               } else if (state is ServerProfileLoaded && state.activeProfile != null) {
                 if (_baseUrlController.text.isEmpty) {
@@ -252,6 +258,13 @@ class _SettingsViewState extends State<_SettingsView> {
                 }
                 if (_apiKeyController.text.isEmpty) {
                   _apiKeyController.text = state.activeProfile!.token;
+                }
+                if (_modelController.text.isEmpty) {
+                  _modelController.text = state.activeProfile!.model;
+                }
+                if (_temperatureController.text.isEmpty) {
+                  _temperatureController.text =
+                      state.activeProfile!.temperature.toString();
                 }
               } else if (state is ServerProfileError) {
                 ScaffoldMessenger.of(context).showSnackBar(

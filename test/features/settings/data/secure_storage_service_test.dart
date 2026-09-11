@@ -431,6 +431,14 @@ void main() {
             key: SecureStorageService.keyApiKey,
             value: 'sk-token-2',
           )).called(1);
+      verify(() => mockStorage.write(
+            key: SecureStorageService.keyModel,
+            value: profile2.model,
+          )).called(1);
+      verify(() => mockStorage.write(
+            key: SecureStorageService.keyTemperature,
+            value: profile2.temperature.toString(),
+          )).called(1);
     });
   });
 }
