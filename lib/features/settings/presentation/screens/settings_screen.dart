@@ -3,11 +3,11 @@ import 'package:flutter_ai_agent/core/di/injection_container.dart';
 import 'package:flutter_ai_agent/features/pairing/data/models/pairing_payload.dart';
 import 'package:flutter_ai_agent/features/pairing/presentation/screens/qr_scanner_screen.dart';
 import 'package:flutter_ai_agent/features/server_profiles/domain/entities/server_profile.dart';
-import 'package:flutter_ai_agent/features/server_profiles/domain/server_profile_cubit.dart';
-import 'package:flutter_ai_agent/features/server_profiles/domain/server_profile_state.dart';
+import 'package:flutter_ai_agent/features/server_profiles/presentation/cubits/server_profile_cubit.dart';
+import 'package:flutter_ai_agent/features/server_profiles/presentation/cubits/server_profile_state.dart';
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
-import 'package:flutter_ai_agent/features/settings/domain/settings_cubit.dart';
-import 'package:flutter_ai_agent/features/settings/domain/settings_state.dart';
+import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_cubit.dart';
+import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_state.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 /// Screen for viewing and configuring LLM endpoint, credentials, and parameters.

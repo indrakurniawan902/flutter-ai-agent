@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_ai_agent/common/constants.dart';
+import 'package:flutter_ai_agent/core/constants/constants.dart';
 import 'package:flutter_ai_agent/core/theme/app_theme.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/screens/chat_screen.dart';
 

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dartz/dartz.dart';
-import 'package:flutter_ai_agent/common/failures.dart';
+import 'package:flutter_ai_agent/core/errors/failures.dart';
 import 'package:image_picker/image_picker.dart';
 
 /// Image source selection for camera_take_photo.

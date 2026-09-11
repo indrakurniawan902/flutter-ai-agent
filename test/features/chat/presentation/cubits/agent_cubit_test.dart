@@ -1,14 +1,14 @@
 import 'package:dartz/dartz.dart';
-import 'package:flutter_ai_agent/common/failures.dart';
+import 'package:flutter_ai_agent/core/errors/failures.dart';
 import 'package:flutter_ai_agent/features/chat/data/models/chat_models.dart';
-import 'package:flutter_ai_agent/features/chat/domain/agent_cubit.dart';
-import 'package:flutter_ai_agent/features/chat/domain/agent_state.dart';
+import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
+import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/security_policy.dart';
-import 'package:flutter_ai_agent/features/chat/domain/tool_registry.dart';
+import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-import '../../../../test/helpers/mocks.dart';
+import '../../../../helpers/mocks.dart';
 
 void main() {
   late MockLlmRepository mockLlmRepository;

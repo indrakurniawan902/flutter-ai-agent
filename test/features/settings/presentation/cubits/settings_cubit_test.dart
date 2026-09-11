@@ -1,11 +1,11 @@
 import 'package:bloc_test/bloc_test.dart';
-import 'package:flutter_ai_agent/common/constants.dart';
-import 'package:flutter_ai_agent/features/settings/domain/settings_cubit.dart';
-import 'package:flutter_ai_agent/features/settings/domain/settings_state.dart';
+import 'package:flutter_ai_agent/core/constants/constants.dart';
+import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_cubit.dart';
+import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-import '../../../helpers/mocks.dart';
+import '../../../../helpers/mocks.dart';
 
 void main() {
   late MockSecureStorageService mockStorageService;

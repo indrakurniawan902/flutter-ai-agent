@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:dartz/dartz.dart';
-import 'package:flutter_ai_agent/common/failures.dart';
+import 'package:flutter_ai_agent/core/errors/failures.dart';
 import 'package:flutter_ai_agent/features/pairing/data/models/pairing_payload.dart';
 
 /// Parses and validates pairing payloads from QR codes or manual input.

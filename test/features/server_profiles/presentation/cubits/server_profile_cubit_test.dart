@@ -1,8 +1,8 @@
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter_ai_agent/features/pairing/data/models/pairing_payload.dart';
 import 'package:flutter_ai_agent/features/server_profiles/domain/entities/server_profile.dart';
-import 'package:flutter_ai_agent/features/server_profiles/domain/server_profile_cubit.dart';
-import 'package:flutter_ai_agent/features/server_profiles/domain/server_profile_state.dart';
+import 'package:flutter_ai_agent/features/server_profiles/presentation/cubits/server_profile_cubit.dart';
+import 'package:flutter_ai_agent/features/server_profiles/presentation/cubits/server_profile_state.dart';
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';

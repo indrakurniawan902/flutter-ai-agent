@@ -1,7 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/services.dart';
 
-import 'package:flutter_ai_agent/common/failures.dart';
+import 'package:flutter_ai_agent/core/errors/failures.dart';
 
 abstract class ClipboardServiceBase {
   Future<Either<Failure, String>> clipboardRead();
