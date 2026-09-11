@@ -524,4 +524,61 @@ void main() {
           ));
     });
   });
+
+  group('SettingsScreen - App Permissions Overview', () {
+    testWidgets('renders app permissions section and items', (tester) async {
+      when(() => mockSettingsCubit.state).thenReturn(
+        const SettingsLoaded(
+          baseUrl: 'https://indra-9router.my.id/v1',
+          apiKey: '«redacted»',
+          model: 'ag-glm',
+          temperature: 0.7,
+        ),
+      );
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      // Scroll to permissions section
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('settings_permissions_section')),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+
+      expect(find.byKey(const Key('settings_permissions_section')), findsOneWidget);
+      expect(find.text('App Permissions'), findsOneWidget);
+      expect(find.text('Calendar'), findsOneWidget);
+      expect(find.text('Location'), findsOneWidget);
+      expect(find.text('Notifications'), findsOneWidget);
+      expect(find.text('Camera & Photos'), findsOneWidget);
+      expect(find.byKey(const Key('settings_check_permissions_button')), findsOneWidget);
+      expect(find.byKey(const Key('settings_open_app_settings_button')), findsOneWidget);
+    });
+
+    testWidgets('tapping Request All shows SnackBar confirmation', (tester) async {
+      when(() => mockSettingsCubit.state).thenReturn(
+        const SettingsLoaded(
+          baseUrl: 'https://indra-9router.my.id/v1',
+          apiKey: '«redacted»',
+          model: 'ag-glm',
+          temperature: 0.7,
+        ),
+      );
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('settings_check_permissions_button')),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+
+      await tester.tap(find.byKey(const Key('settings_check_permissions_button')));
+      await tester.pump();
+
+      expect(find.text('Permissions check completed'), findsOneWidget);
+    });
+  });
 }

@@ -285,4 +285,101 @@ void main() {
       );
     });
   });
+
+  group('requestPermission', () {
+    test('returns PermissionFailure when location services are disabled', () async {
+      when(() => mockGeolocator.isLocationServiceEnabled())
+          .thenAnswer((_) async => false);
+
+      final result = await service.requestPermission();
+
+      expect(
+        result,
+        const Left<Failure, bool>(
+          PermissionFailure('Location services are disabled. Please enable GPS.'),
+        ),
+      );
+    });
+
+    test('returns Right(true) when already granted (whileInUse)', () async {
+      when(() => mockGeolocator.isLocationServiceEnabled())
+          .thenAnswer((_) async => true);
+      when(() => mockGeolocator.checkPermission())
+          .thenAnswer((_) async => LocationPermission.whileInUse);
+
+      final result = await service.requestPermission();
+
+      expect(result, const Right<Failure, bool>(true));
+    });
+
+    test('requests permission when denied and returns Right(true) if user grants', () async {
+      when(() => mockGeolocator.isLocationServiceEnabled())
+          .thenAnswer((_) async => true);
+      when(() => mockGeolocator.checkPermission())
+          .thenAnswer((_) async => LocationPermission.denied);
+      when(() => mockGeolocator.requestPermission())
+          .thenAnswer((_) async => LocationPermission.whileInUse);
+
+      final result = await service.requestPermission();
+
+      expect(result, const Right<Failure, bool>(true));
+      verify(() => mockGeolocator.requestPermission()).called(1);
+    });
+
+    test('requests permission when denied and returns PermissionFailure if user denies', () async {
+      when(() => mockGeolocator.isLocationServiceEnabled())
+          .thenAnswer((_) async => true);
+      when(() => mockGeolocator.checkPermission())
+          .thenAnswer((_) async => LocationPermission.denied);
+      when(() => mockGeolocator.requestPermission())
+          .thenAnswer((_) async => LocationPermission.denied);
+
+      final result = await service.requestPermission();
+
+      expect(
+        result,
+        const Left<Failure, bool>(
+          PermissionFailure('Location permission denied'),
+        ),
+      );
+    });
+
+    test('returns PermissionFailure when deniedForever', () async {
+      when(() => mockGeolocator.isLocationServiceEnabled())
+          .thenAnswer((_) async => true);
+      when(() => mockGeolocator.checkPermission())
+          .thenAnswer((_) async => LocationPermission.deniedForever);
+
+      final result = await service.requestPermission();
+
+      expect(
+        result,
+        const Left<Failure, bool>(
+          PermissionFailure('Location permission permanently denied'),
+        ),
+      );
+    });
+
+    test('returns ServerFailure when exception occurs', () async {
+      when(() => mockGeolocator.isLocationServiceEnabled())
+          .thenThrow(Exception('GPS error'));
+
+      final result = await service.requestPermission();
+
+      expect(result.isLeft(), isTrue);
+      result.fold(
+        (failure) => expect(failure, isA<ServerFailure>()),
+        (_) => fail('Expected Left'),
+      );
+    });
+
+    test('openAppSettings delegates to geolocator wrapper', () async {
+      when(() => mockGeolocator.openAppSettings()).thenAnswer((_) async => true);
+
+      final result = await service.openAppSettings();
+
+      expect(result, isTrue);
+      verify(() => mockGeolocator.openAppSettings()).called(1);
+    });
+  });
 }

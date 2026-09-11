@@ -300,6 +300,37 @@ void main() {
       expect(result.isLeft(), true);
     });
 
+    test('requests permission when not yet granted and succeeds', () async {
+      // Arrange
+      when(() => mockPlugin.hasPermissions()).thenAnswer(
+        (_) async => Result<bool>()..data = false,
+      );
+      when(() => mockPlugin.requestPermissions()).thenAnswer(
+        (_) async => Result<bool>()..data = true,
+      );
+      when(() => mockPlugin.retrieveCalendars()).thenAnswer(
+        (_) async => calendarResult([Calendar(id: 'cal1', name: 'Work')]),
+      );
+      when(() => mockPlugin.createOrUpdateEvent(any())).thenAnswer(
+        (_) async => Result<String>()..data = 'event-456',
+      );
+
+      // Act
+      final result = await service.createEvent(
+        title: 'Stand-up',
+        startTime: start,
+        endTime: end,
+      );
+
+      // Assert
+      expect(result.isRight(), true);
+      result.fold(
+        (_) => fail('Expected Right'),
+        (eventId) => expect(eventId, 'event-456'),
+      );
+      verify(() => mockPlugin.requestPermissions()).called(1);
+    });
+
     test('returns ServerFailure on exception', () async {
       // Arrange
       when(() => mockPlugin.hasPermissions()).thenThrow(Exception('boom'));
@@ -320,6 +351,46 @@ void main() {
         },
         (_) => fail('Expected Left'),
       );
+    });
+  });
+
+  group('checkPermission and requestPermissions', () {
+    test('checkPermission returns true when granted', () async {
+      when(() => mockPlugin.hasPermissions()).thenAnswer(
+        (_) async => Result<bool>()..data = true,
+      );
+      expect(await service.checkPermission(), isTrue);
+    });
+
+    test('checkPermission returns false when denied', () async {
+      when(() => mockPlugin.hasPermissions()).thenAnswer(
+        (_) async => Result<bool>()..data = false,
+      );
+      expect(await service.checkPermission(), isFalse);
+    });
+
+    test('checkPermission propagates exception', () async {
+      when(() => mockPlugin.hasPermissions()).thenThrow(Exception('fail'));
+      expect(() => service.checkPermission(), throwsA(isA<Exception>()));
+    });
+
+    test('requestPermissions returns true when granted', () async {
+      when(() => mockPlugin.requestPermissions()).thenAnswer(
+        (_) async => Result<bool>()..data = true,
+      );
+      expect(await service.requestPermissions(), isTrue);
+    });
+
+    test('requestPermissions returns false when denied', () async {
+      when(() => mockPlugin.requestPermissions()).thenAnswer(
+        (_) async => Result<bool>()..data = false,
+      );
+      expect(await service.requestPermissions(), isFalse);
+    });
+
+    test('requestPermissions propagates exception', () async {
+      when(() => mockPlugin.requestPermissions()).thenThrow(Exception('fail'));
+      expect(() => service.requestPermissions(), throwsA(isA<Exception>()));
     });
   });
 }

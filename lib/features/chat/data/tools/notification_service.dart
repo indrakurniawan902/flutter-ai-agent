@@ -21,6 +21,9 @@ abstract class NotificationServiceBase {
     required String body,
     required int delayMinutes,
   });
+
+  /// Requests notification and exact alarm permissions JIT.
+  Future<bool> requestPermissions({bool exactAlarms = false});
 }
 
 class NotificationService implements NotificationServiceBase {
@@ -69,12 +72,64 @@ class NotificationService implements NotificationServiceBase {
   }
 
   @override
+  Future<bool> requestPermissions({bool exactAlarms = false}) async {
+    await _ensureInitialized();
+    bool notifGranted = true;
+
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (android != null) {
+      final res = await android.requestNotificationsPermission();
+      if (res != null) {
+        notifGranted = res;
+      }
+      if (exactAlarms) {
+        await android.requestExactAlarmsPermission();
+      }
+    }
+
+    final ios = _plugin.resolvePlatformSpecificImplementation<
+        IOSFlutterLocalNotificationsPlugin>();
+    if (ios != null) {
+      final res = await ios.requestPermissions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      if (res != null) {
+        notifGranted = res;
+      }
+    }
+
+    final macos = _plugin.resolvePlatformSpecificImplementation<
+        MacOSFlutterLocalNotificationsPlugin>();
+    if (macos != null) {
+      final res = await macos.requestPermissions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      if (res != null) {
+        notifGranted = res;
+      }
+    }
+
+    return notifGranted;
+  }
+
+  @override
   Future<Either<Failure, void>> sendLocalNotification({
     required String title,
     required String body,
   }) async {
     try {
       await _ensureInitialized();
+      final granted = await requestPermissions(exactAlarms: false);
+      if (!granted) {
+        return const Left(
+          PermissionFailure('Notification permission denied'),
+        );
+      }
       await _plugin.show(
         _nextId++,
         title,
@@ -101,6 +156,13 @@ class NotificationService implements NotificationServiceBase {
 
     try {
       await _ensureInitialized();
+      final granted = await requestPermissions(exactAlarms: true);
+      if (!granted) {
+        return const Left(
+          PermissionFailure('Notification permission denied'),
+        );
+      }
+
       final scheduledDate = tz.TZDateTime.now(tz.local).add(
         Duration(minutes: delayMinutes),
       );

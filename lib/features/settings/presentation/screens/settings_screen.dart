@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/core/di/injection_container.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/calendar_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
 import 'package:flutter_ai_agent/features/pairing/data/models/pairing_payload.dart';
 import 'package:flutter_ai_agent/features/pairing/presentation/screens/qr_scanner_screen.dart';
 import 'package:flutter_ai_agent/features/server_profiles/domain/entities/server_profile.dart';
@@ -9,6 +12,7 @@ import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.d
 import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_cubit.dart';
 import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_state.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:geolocator/geolocator.dart';
 
 /// Screen for viewing and configuring LLM endpoint, credentials, and parameters.
 class SettingsScreen extends StatelessWidget {
@@ -438,6 +442,10 @@ class _SettingsViewState extends State<_SettingsView> {
                               ),
                       ),
                     ),
+                    const SizedBox(height: 24),
+
+                    // App Permissions Overview Section
+                    _buildPermissionsSection(context),
                   ],
                 ),
               ),
@@ -446,6 +454,188 @@ class _SettingsViewState extends State<_SettingsView> {
         ),
       ),
     );
+  }
+
+  Widget _buildPermissionsSection(BuildContext context) {
+    const tealAccent = Color(0xFF008080);
+
+    return Container(
+      key: const Key('settings_permissions_section'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF334155)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.security, color: tealAccent, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'App Permissions',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Permissions required for native device agent tools.',
+            style: TextStyle(color: Colors.white60, fontSize: 13),
+          ),
+          const SizedBox(height: 12),
+          _buildPermissionItem(
+            icon: Icons.calendar_today,
+            name: 'Calendar',
+            description: 'Read and create device events',
+          ),
+          const Divider(color: Color(0xFF334155), height: 16),
+          _buildPermissionItem(
+            icon: Icons.location_on,
+            name: 'Location',
+            description: 'Provide GPS context for queries',
+          ),
+          const Divider(color: Color(0xFF334155), height: 16),
+          _buildPermissionItem(
+            icon: Icons.notifications,
+            name: 'Notifications',
+            description: 'Send alerts and schedule reminders',
+          ),
+          const Divider(color: Color(0xFF334155), height: 16),
+          _buildPermissionItem(
+            icon: Icons.camera_alt,
+            name: 'Camera & Photos',
+            description: 'Capture and inspect images for vision tasks',
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: const Key('settings_check_permissions_button'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: tealAccent,
+                    side: const BorderSide(color: tealAccent),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  icon: const Icon(Icons.verified_user, size: 16),
+                  label: const Text('Request All', style: TextStyle(fontSize: 13)),
+                  onPressed: () => _onRequestAllPermissions(context),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton.icon(
+                  key: const Key('settings_open_app_settings_button'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF334155),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  icon: const Icon(Icons.settings, size: 16),
+                  label: const Text('System Settings', style: TextStyle(fontSize: 13)),
+                  onPressed: () => _onOpenAppSettings(context),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPermissionItem({
+    required IconData icon,
+    required String name,
+    required String description,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: const Color(0xFF008080)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                name,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                description,
+                style: const TextStyle(color: Colors.white60, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: const Color(0xFF008080).withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: const Color(0xFF008080).withValues(alpha: 0.4)),
+          ),
+          child: const Text(
+            'JIT',
+            style: TextStyle(
+              color: Color(0xFF008080),
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _onRequestAllPermissions(BuildContext context) async {
+    try {
+      if (sl.isRegistered<CalendarServiceBase>()) {
+        await sl<CalendarServiceBase>().requestPermissions();
+      }
+      if (sl.isRegistered<LocationServiceBase>()) {
+        await sl<LocationServiceBase>().requestPermission();
+      }
+      if (sl.isRegistered<NotificationServiceBase>()) {
+        await sl<NotificationServiceBase>().requestPermissions(exactAlarms: true);
+      }
+    } catch (_) {}
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Permissions check completed'),
+          backgroundColor: Color(0xFF008080),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _onOpenAppSettings(BuildContext context) async {
+    try {
+      if (sl.isRegistered<LocationServiceBase>()) {
+        await sl<LocationServiceBase>().openAppSettings();
+      } else {
+        await Geolocator.openAppSettings();
+      }
+    } catch (_) {}
   }
 
   Widget _buildServerProfileSection(BuildContext context) {
