@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get_it/get_it.dart';
 
+import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/features/chat/data/llm_repository.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/calendar_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/camera_vision_service.dart';
@@ -19,7 +20,9 @@ import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_
 
 final sl = GetIt.instance;
 
+@Deprecated('T13.3+: superseded by lib/common/injection (injectable codegen); delete in T13.3-T13.6 once feature registrations migrate')
 Future<void> initDependencies() async {
+  configureInjection();
   // Core / Storage
   if (!sl.isRegistered<FlutterSecureStorage>()) {
     sl.registerLazySingleton<FlutterSecureStorage>(
