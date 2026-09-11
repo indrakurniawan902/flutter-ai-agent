@@ -11,6 +11,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/clipboard_service.dart
 import 'package:flutter_ai_agent/features/chat/data/tools/device_context_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/file_workspace_service.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
@@ -95,5 +96,14 @@ class MockQrScannerController extends Mock implements QrScannerControllerBase {}
 // Server Profiles
 class MockServerProfileCubit extends MockCubit<ServerProfileState>
     implements ServerProfileCubit {}
+
+// File Workspace
+class MockFileWorkspaceService extends Mock
+    implements FileWorkspaceServiceBase {}
+
+class MockFileSystemWrapper extends Mock implements FileSystemWrapper {}
+
+class MockFilePickerWrapper extends Mock implements FilePickerWrapper {}
+
 
 

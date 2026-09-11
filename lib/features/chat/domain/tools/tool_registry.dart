@@ -9,6 +9,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/clipboard_service.dart
 import 'package:flutter_ai_agent/features/chat/data/tools/device_context_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/file_workspace_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/security_policy.dart';
 
 typedef ToolExecutor = Future<Either<Failure, String>> Function(
@@ -353,6 +354,71 @@ class ToolRegistry {
           return res.map((_) =>
               'Reminder scheduled successfully for "$title" in $delay minutes.');
         },
+      ),
+    );
+  }
+
+  void registerFileWorkspaceTools(FileWorkspaceServiceBase service) {
+    register(
+      RegisteredTool(
+        name: 'read_device_file',
+        description:
+            'Reads and inspects documents (PDF, CSV, TXT, MD, etc.) from device storage with line pagination support.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'path': {
+              'type': 'string',
+              'description':
+                  'Absolute or relative file path on device storage to read',
+            },
+            'maxLines': {
+              'type': 'integer',
+              'description':
+                  'Optional maximum number of lines to return (for pagination)',
+            },
+            'offset': {
+              'type': 'integer',
+              'description':
+                  'Optional line offset to start reading from (0-indexed)',
+            },
+          },
+          'required': ['path'],
+        },
+        securityTier: SecurityTier.tier2Permission,
+        execute: (args) => service.readFile(
+          args['path']?.toString() ?? '',
+          maxLines: (args['maxLines'] as num?)?.toInt(),
+          offset: (args['offset'] as num?)?.toInt(),
+        ),
+        checkPermission: () => service.checkPermission(),
+      ),
+    );
+
+    register(
+      RegisteredTool(
+        name: 'list_device_files',
+        description:
+            'Lists files and directories at the specified path on device storage.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'directoryPath': {
+              'type': 'string',
+              'description': 'Directory path to list files from',
+            },
+            'recursive': {
+              'type': 'boolean',
+              'description': 'Whether to list files recursively (default: false)',
+            },
+          },
+          'required': ['directoryPath'],
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) => service.listFilesFormattedJson(
+          args['directoryPath']?.toString() ?? '',
+          recursive: args['recursive'] as bool? ?? false,
+        ),
       ),
     );
   }

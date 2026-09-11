@@ -7,6 +7,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/clipboard_service.dart
 import 'package:flutter_ai_agent/features/chat/data/tools/device_context_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/file_workspace_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart';
@@ -62,6 +63,7 @@ void main() {
     expect(sl.isRegistered<CameraVisionServiceBase>(), isFalse);
     expect(sl.isRegistered<CalendarServiceBase>(), isFalse);
     expect(sl.isRegistered<NotificationServiceBase>(), isFalse);
+    expect(sl.isRegistered<FileWorkspaceServiceBase>(), isFalse);
     expect(sl.isRegistered<ToolRegistry>(), isFalse);
     expect(sl.isRegistered<AgentCubit>(), isFalse);
 
@@ -75,6 +77,7 @@ void main() {
     expect(sl.isRegistered<CameraVisionServiceBase>(), isTrue);
     expect(sl.isRegistered<CalendarServiceBase>(), isTrue);
     expect(sl.isRegistered<NotificationServiceBase>(), isTrue);
+    expect(sl.isRegistered<FileWorkspaceServiceBase>(), isTrue);
     expect(sl.isRegistered<ToolRegistry>(), isTrue);
     expect(sl.isRegistered<AgentCubit>(), isTrue);
 
@@ -89,5 +92,7 @@ void main() {
     expect(registry.hasTool('calendar_create_event'), isTrue);
     expect(registry.hasTool('send_local_notification'), isTrue);
     expect(registry.hasTool('schedule_reminder'), isTrue);
+    expect(registry.hasTool('read_device_file'), isTrue);
+    expect(registry.hasTool('list_device_files'), isTrue);
   });
 }

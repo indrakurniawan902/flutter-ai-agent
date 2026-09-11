@@ -249,6 +249,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "7.0.1"
+  file_picker:
+    dependency: "direct main"
+    description:
+      name: file_picker
+      sha256: "29cc1fdb20613876cc7afc529738c1c0f11a9ca159b010edad0c566ac330847e"
+      url: "https://pub.dev"
+    source: hosted
+    version: "11.0.3"
   file_selector_linux:
     dependency: transitive
     description:
@@ -648,6 +656,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.2.2"
+  intl:
+    dependency: transitive
+    description:
+      name: intl
+      sha256: "1ca20c894b1717686a2319b8548763d812bc0aabdac580420a44c5178c57a867"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.20.3"
   io:
     dependency: transitive
     description:
@@ -1045,6 +1061,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.1"
+  syncfusion_flutter_core:
+    dependency: transitive
+    description:
+      name: syncfusion_flutter_core
+      sha256: "4650a74c688891588afa0291a0e9849395de8bd42ebe5d5c4266f885d318f703"
+      url: "https://pub.dev"
+    source: hosted
+    version: "34.2.7"
+  syncfusion_flutter_pdf:
+    dependency: "direct main"
+    description:
+      name: syncfusion_flutter_pdf
+      sha256: "5d8b54a77c15d35a4a92f4b14f4b31b5d5891d400a6d235a996dce265d7c6414"
+      url: "https://pub.dev"
+    source: hosted
+    version: "34.2.7"
   term_glyph:
     dependency: transitive
     description:
@@ -1193,10 +1225,10 @@ packages:
     dependency: transitive
     description:
       name: xml
-      sha256: "971043b3a0d3da28727e40ed3e0b5d18b742fa5a68665cca88e74b7876d5e025"
+      sha256: "67f0aff7be013d107995e9b75bf4e7f2c3ef2dfdb2c8e68024bba0a7fd5756a4"
       url: "https://pub.dev"
     source: hosted
-    version: "6.6.1"
+    version: "7.0.1"
   yaml:
     dependency: transitive
     description:
@@ -1206,5 +1238,5 @@ packages:
     source: hosted
     version: "3.1.4"
 sdks:
-  dart: ">=3.11.0-0 <4.0.0"
+  dart: ">=3.11.0 <4.0.0"
   flutter: ">=3.38.0"

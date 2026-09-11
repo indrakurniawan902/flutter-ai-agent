@@ -9,6 +9,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/clipboard_service.dart
 import 'package:flutter_ai_agent/features/chat/data/tools/device_context_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/file_workspace_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart';
@@ -101,6 +102,12 @@ Future<void> initDependencies() async {
     );
   }
 
+  if (!sl.isRegistered<FileWorkspaceServiceBase>()) {
+    sl.registerLazySingleton<FileWorkspaceServiceBase>(
+      () => FileWorkspaceService(),
+    );
+  }
+
   // Tool Registry
   if (!sl.isRegistered<ToolRegistry>()) {
     sl.registerLazySingleton<ToolRegistry>(
@@ -112,6 +119,7 @@ Future<void> initDependencies() async {
         registry.registerCameraTools(sl<CameraVisionServiceBase>());
         registry.registerCalendarTools(sl<CalendarServiceBase>());
         registry.registerNotificationTools(sl<NotificationServiceBase>());
+        registry.registerFileWorkspaceTools(sl<FileWorkspaceServiceBase>());
         return registry;
       },
     );

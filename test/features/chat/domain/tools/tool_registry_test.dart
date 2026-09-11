@@ -7,6 +7,8 @@ import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import '../../../../helpers/mocks.dart';
+
 class MockClipboardService extends Mock implements ClipboardServiceBase {}
 
 class MockLocationService extends Mock implements LocationServiceBase {}
@@ -194,6 +196,82 @@ void main() {
           PermissionFailure('Permission denied for tool: get_location'),
         ),
       );
+    });
+  });
+
+  group('registerFileWorkspaceTools', () {
+    late MockFileWorkspaceService mockFileService;
+
+    setUp(() {
+      mockFileService = MockFileWorkspaceService();
+    });
+
+    test('registers read_device_file and list_device_files with correct safety tiers', () {
+      registry.registerFileWorkspaceTools(mockFileService);
+
+      expect(registry.hasTool('read_device_file'), isTrue);
+      expect(registry.hasTool('list_device_files'), isTrue);
+      expect(
+        registry.getTool('read_device_file')?.securityTier,
+        SecurityTier.tier2Permission,
+      );
+      expect(
+        registry.getTool('list_device_files')?.securityTier,
+        SecurityTier.tier1Auto,
+      );
+    });
+
+    test('executes read_device_file when permission is granted', () async {
+      when(() => mockFileService.checkPermission())
+          .thenAnswer((_) async => true);
+      when(() => mockFileService.readFile(any(), maxLines: any(named: 'maxLines'), offset: any(named: 'offset')))
+          .thenAnswer((_) async => const Right('file content'));
+
+      registry.registerFileWorkspaceTools(mockFileService);
+
+      final result = await registry.executeTool(
+        'read_device_file',
+        {'path': '/docs/readme.md', 'maxLines': 10, 'offset': 2},
+      );
+
+      expect(result, const Right<Failure, String>('file content'));
+      verify(() => mockFileService.checkPermission()).called(1);
+      verify(() => mockFileService.readFile('/docs/readme.md', maxLines: 10, offset: 2)).called(1);
+    });
+
+    test('denies read_device_file when permission is denied', () async {
+      when(() => mockFileService.checkPermission())
+          .thenAnswer((_) async => false);
+
+      registry.registerFileWorkspaceTools(mockFileService);
+
+      final result = await registry.executeTool(
+        'read_device_file',
+        {'path': '/docs/readme.md'},
+      );
+
+      expect(
+        result,
+        const Left<Failure, String>(
+          PermissionFailure('Permission denied for tool: read_device_file'),
+        ),
+      );
+      verifyNever(() => mockFileService.readFile(any(), maxLines: any(named: 'maxLines'), offset: any(named: 'offset')));
+    });
+
+    test('executes list_device_files with directory path and recursive flag', () async {
+      when(() => mockFileService.listFilesFormattedJson(any(), recursive: any(named: 'recursive')))
+          .thenAnswer((_) async => const Right('[{"name":"test.txt"}]'));
+
+      registry.registerFileWorkspaceTools(mockFileService);
+
+      final result = await registry.executeTool(
+        'list_device_files',
+        {'directoryPath': '/workspace', 'recursive': true},
+      );
+
+      expect(result, const Right<Failure, String>('[{"name":"test.txt"}]'));
+      verify(() => mockFileService.listFilesFormattedJson('/workspace', recursive: true)).called(1);
     });
   });
 }
