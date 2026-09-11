@@ -9,6 +9,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart'
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
+import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart';
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
 import 'package:flutter_ai_agent/features/settings/domain/settings_cubit.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -27,20 +28,24 @@ void main() {
     expect(sl.isRegistered<FlutterSecureStorage>(), isFalse);
     expect(sl.isRegistered<SecureStorageService>(), isFalse);
     expect(sl.isRegistered<SettingsCubit>(), isFalse);
+    expect(sl.isRegistered<PairingParser>(), isFalse);
 
     await initDependencies();
 
     expect(sl.isRegistered<FlutterSecureStorage>(), isTrue);
     expect(sl.isRegistered<SecureStorageService>(), isTrue);
     expect(sl.isRegistered<SettingsCubit>(), isTrue);
+    expect(sl.isRegistered<PairingParser>(), isTrue);
 
     final storage = sl<FlutterSecureStorage>();
     final service = sl<SecureStorageService>();
     final cubit = sl<SettingsCubit>();
+    final parser = sl<PairingParser>();
 
     expect(storage, isA<FlutterSecureStorage>());
     expect(service, isA<SecureStorageService>());
     expect(cubit, isA<SettingsCubit>());
+    expect(parser, isA<PairingParser>());
   });
 
   test('initDependencies registers all chat services and tools in ToolRegistry', () async {

@@ -14,6 +14,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.d
 import 'package:flutter_ai_agent/features/chat/domain/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/chat/domain/agent_state.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
+import 'package:flutter_ai_agent/features/pairing/domain/qr_scanner_controller.dart';
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
 import 'package:flutter_ai_agent/features/settings/domain/settings_cubit.dart';
 import 'package:flutter_ai_agent/features/settings/domain/settings_state.dart';
@@ -85,3 +86,7 @@ class MockFlutterLocalNotificationsPlugin extends Mock
 class MockCalendarService extends Mock implements CalendarServiceBase {}
 
 class MockNotificationService extends Mock implements NotificationServiceBase {}
+
+// QR Scanner
+class MockQrScannerController extends Mock implements QrScannerControllerBase {}
+

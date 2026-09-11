@@ -42,6 +42,8 @@ void main() {
       expect(find.byKey(const Key('settings_model_field')), findsOneWidget);
       expect(find.byKey(const Key('settings_temperature_field')), findsOneWidget);
       expect(find.byKey(const Key('settings_save_button')), findsOneWidget);
+      expect(find.byKey(const Key('settings_qr_scanner_button')), findsOneWidget);
+      expect(find.byKey(const Key('settings_pair_qr_button')), findsOneWidget);
 
       final baseUrlField = tester.widget<TextFormField>(
         find.byKey(const Key('settings_base_url_field')),

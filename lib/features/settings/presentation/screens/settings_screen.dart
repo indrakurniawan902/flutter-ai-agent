@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/core/di/injection_container.dart';
+import 'package:flutter_ai_agent/features/pairing/data/models/pairing_payload.dart';
+import 'package:flutter_ai_agent/features/pairing/presentation/screens/qr_scanner_screen.dart';
 import 'package:flutter_ai_agent/features/settings/domain/settings_cubit.dart';
 import 'package:flutter_ai_agent/features/settings/domain/settings_state.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -84,6 +86,25 @@ class _SettingsViewState extends State<_SettingsView> {
     context.read<SettingsCubit>().resetToDefaults();
   }
 
+  Future<void> _onScanQr() async {
+    final result = await Navigator.of(context).push<PairingPayload>(
+      MaterialPageRoute(
+        builder: (_) => const QrScannerScreen(),
+      ),
+    );
+
+    if (result != null && mounted) {
+      _baseUrlController.text = result.gatewayUrl;
+      _apiKeyController.text = result.token;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Paired with ${result.profileName}'),
+          backgroundColor: const Color(0xFF008080),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     const tealAccent = Color(0xFF008080);
@@ -94,6 +115,12 @@ class _SettingsViewState extends State<_SettingsView> {
       appBar: AppBar(
         title: const Text('LLM Settings'),
         actions: [
+          IconButton(
+            key: const Key('settings_qr_scanner_button'),
+            tooltip: 'Scan QR Pairing Code',
+            icon: const Icon(Icons.qr_code_scanner),
+            onPressed: _onScanQr,
+          ),
           IconButton(
             key: const Key('settings_reset_button'),
             tooltip: 'Reset to Defaults',
@@ -158,7 +185,22 @@ class _SettingsViewState extends State<_SettingsView> {
                       fontSize: 14,
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    key: const Key('settings_pair_qr_button'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: tealAccent,
+                      side: const BorderSide(color: tealAccent),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    icon: const Icon(Icons.qr_code_scanner),
+                    label: const Text('Scan Gateway QR Code'),
+                    onPressed: _onScanQr,
+                  ),
+                  const SizedBox(height: 20),
                   TextFormField(
                     key: const Key('settings_base_url_field'),
                     controller: _baseUrlController,

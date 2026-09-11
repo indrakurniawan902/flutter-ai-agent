@@ -44,6 +44,9 @@ dependencies:
   # UI / Markdown
   flutter_markdown: ^0.7.4
 
+  # QR Scanner
+  mobile_scanner: ^6.0.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

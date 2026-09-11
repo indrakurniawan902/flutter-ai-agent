@@ -11,6 +11,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart'
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
+import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart';
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
 import 'package:flutter_ai_agent/features/settings/domain/settings_cubit.dart';
 
@@ -106,6 +107,13 @@ Future<void> initDependencies() async {
         registry.registerNotificationTools(sl<NotificationServiceBase>());
         return registry;
       },
+    );
+  }
+
+  // Features - Pairing
+  if (!sl.isRegistered<PairingParser>()) {
+    sl.registerLazySingleton<PairingParser>(
+      () => const PairingParser(),
     );
   }
 
