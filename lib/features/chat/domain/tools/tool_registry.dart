@@ -813,7 +813,8 @@ class ToolRegistry {
         securityTier: SecurityTier.tier2Permission,
         execute: (args) async {
           final durationSec =
-              (args['listenDurationSeconds'] as num?)?.toInt() ?? 10;
+              ((args['listenDurationSeconds'] as num?)?.toInt() ?? 10)
+                  .clamp(1, 60);
           final startResult = await service.startListening(
             listenFor: Duration(seconds: durationSec),
           );
