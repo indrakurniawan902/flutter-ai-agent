@@ -9,6 +9,11 @@ import 'package:flutter_ai_agent/features/chat/data/tools/clipboard_service.dart
 import 'package:flutter_ai_agent/features/chat/data/tools/device_context_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/notification_triage_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/file_workspace_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/local_memory_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/ambient_trigger_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/voice_input_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart';
@@ -101,6 +106,39 @@ Future<void> initDependencies() async {
     );
   }
 
+  if (!sl.isRegistered<FileWorkspaceServiceBase>()) {
+    sl.registerLazySingleton<FileWorkspaceServiceBase>(
+      () => FileWorkspaceService(),
+    );
+  }
+
+  if (!sl.isRegistered<NotificationTriageServiceBase>()) {
+    sl.registerLazySingleton<NotificationTriageServiceBase>(
+      () => NotificationTriageService(),
+    );
+  }
+
+  if (!sl.isRegistered<LocalMemoryServiceBase>()) {
+    sl.registerLazySingleton<LocalMemoryServiceBase>(
+      () => LocalMemoryService(),
+    );
+  }
+
+  if (!sl.isRegistered<AmbientTriggerServiceBase>()) {
+    sl.registerLazySingleton<AmbientTriggerServiceBase>(
+      () => AmbientTriggerService(
+        locationService: sl<LocationServiceBase>(),
+        notificationService: sl<NotificationServiceBase>(),
+      ),
+    );
+  }
+
+  if (!sl.isRegistered<VoiceInputServiceBase>()) {
+    sl.registerLazySingleton<VoiceInputServiceBase>(
+      () => VoiceInputService(),
+    );
+  }
+
   // Tool Registry
   if (!sl.isRegistered<ToolRegistry>()) {
     sl.registerLazySingleton<ToolRegistry>(
@@ -112,6 +150,11 @@ Future<void> initDependencies() async {
         registry.registerCameraTools(sl<CameraVisionServiceBase>());
         registry.registerCalendarTools(sl<CalendarServiceBase>());
         registry.registerNotificationTools(sl<NotificationServiceBase>());
+        registry.registerFileWorkspaceTools(sl<FileWorkspaceServiceBase>());
+        registry.registerNotificationTriageTools(sl<NotificationTriageServiceBase>());
+        registry.registerMemoryTools(sl<LocalMemoryServiceBase>());
+        registry.registerAmbientTriggerTools(sl<AmbientTriggerServiceBase>());
+        registry.registerVoiceTools(sl<VoiceInputServiceBase>());
         return registry;
       },
     );
@@ -131,6 +174,7 @@ Future<void> initDependencies() async {
         llmRepository: sl<LlmRepository>(),
         toolRegistry: sl<ToolRegistry>(),
         secureStorageService: sl<SecureStorageService>(),
+        localMemoryService: sl<LocalMemoryServiceBase>(),
       ),
     );
   }

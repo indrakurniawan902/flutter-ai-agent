@@ -10,6 +10,8 @@ abstract class LocationServiceBase {
   Future<Either<Failure, Map<String, dynamic>>> getLocation({String? accuracy});
   Future<Either<Failure, String>> getLocationFormattedJson({String? accuracy});
   Future<bool> checkPermission();
+  Future<Either<Failure, bool>> requestPermission();
+  Future<bool> openAppSettings();
 }
 
 abstract class GeolocatorPlatformWrapper {
@@ -17,6 +19,7 @@ abstract class GeolocatorPlatformWrapper {
   Future<LocationPermission> checkPermission();
   Future<LocationPermission> requestPermission();
   Future<Position> getCurrentPosition({LocationSettings? locationSettings});
+  Future<bool> openAppSettings();
 }
 
 abstract class GeocodingPlatformWrapper {
@@ -41,6 +44,9 @@ class DefaultGeolocatorPlatformWrapper implements GeolocatorPlatformWrapper {
   @override
   Future<Position> getCurrentPosition({LocationSettings? locationSettings}) =>
       Geolocator.getCurrentPosition(locationSettings: locationSettings);
+
+  @override
+  Future<bool> openAppSettings() => Geolocator.openAppSettings();
 }
 
 class DefaultGeocodingPlatformWrapper implements GeocodingPlatformWrapper {
@@ -71,6 +77,9 @@ class LocationService implements LocationServiceBase {
         permission == LocationPermission.always;
   }
 
+  @override
+  Future<bool> openAppSettings() => _geolocator.openAppSettings();
+
   LocationAccuracy _mapAccuracy(String? accuracy) {
     switch (accuracy) {
       case 'low':
@@ -87,9 +96,7 @@ class LocationService implements LocationServiceBase {
   }
 
   @override
-  Future<Either<Failure, Map<String, dynamic>>> getLocation({
-    String? accuracy,
-  }) async {
+  Future<Either<Failure, bool>> requestPermission() async {
     try {
       final serviceEnabled = await _geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
@@ -111,6 +118,22 @@ class LocationService implements LocationServiceBase {
         return const Left(
           PermissionFailure('Location permission permanently denied'),
         );
+      }
+
+      return const Right(true);
+    } catch (e) {
+      return Left(ServerFailure('Location permission error: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, Map<String, dynamic>>> getLocation({
+    String? accuracy,
+  }) async {
+    try {
+      final permResult = await requestPermission();
+      if (permResult.isLeft()) {
+        return Left((permResult as Left<Failure, bool>).value);
       }
 
       final accuracySetting = _mapAccuracy(accuracy);

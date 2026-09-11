@@ -40,3 +40,8 @@ class StorageFailure extends Failure {
 class PermissionFailure extends Failure {
   const PermissionFailure([super.message = 'Permission denied']);
 }
+
+class ValidationFailure extends Failure {
+  const ValidationFailure([super.message = 'Validation error occurred']);
+}
+

@@ -66,5 +66,19 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Flames requires access to your calendar to view and create events on your behalf.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Flames requires your location to provide location-aware assistance and context.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Flames requires background location to trigger ambient arrival briefings and geofence events.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Flames requires camera access to capture and inspect images for vision tasks.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Flames requires photo library access to inspect photos for vision tasks.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Flames requires microphone access for voice input and speech recognition.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Flames requires speech recognition to transcribe spoken words into agent prompts.</string>
 </dict>
 </plist>

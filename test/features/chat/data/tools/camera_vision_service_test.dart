@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:dartz/dartz.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_ai_agent/core/errors/failures.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/camera_vision_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -238,6 +238,72 @@ void main() {
           imageQuality: 80,
         ),
       ).called(1);
+    });
+
+    test('returns PermissionFailure when camera permission is denied (camera_access_denied)', () async {
+      when(
+        () => mockPicker.pickImage(
+          source: ImageSource.camera,
+          maxWidth: 1024,
+          maxHeight: 1024,
+          imageQuality: 80,
+        ),
+      ).thenThrow(PlatformException(code: 'camera_access_denied', message: 'User denied camera access'));
+
+      final result = await service.takePhoto(source: CameraSource.camera);
+
+      expect(result.isLeft(), isTrue);
+      result.fold(
+        (failure) {
+          expect(failure, isA<PermissionFailure>());
+          expect(failure.message, contains('Camera permission denied'));
+        },
+        (_) => fail('Expected Left'),
+      );
+    });
+
+    test('returns PermissionFailure when gallery permission is denied (photo_access_denied)', () async {
+      when(
+        () => mockPicker.pickImage(
+          source: ImageSource.gallery,
+          maxWidth: 1024,
+          maxHeight: 1024,
+          imageQuality: 80,
+        ),
+      ).thenThrow(PlatformException(code: 'photo_access_denied', message: 'User denied photo access'));
+
+      final result = await service.takePhoto(source: CameraSource.gallery);
+
+      expect(result.isLeft(), isTrue);
+      result.fold(
+        (failure) {
+          expect(failure, isA<PermissionFailure>());
+          expect(failure.message, contains('Photo library permission denied'));
+        },
+        (_) => fail('Expected Left'),
+      );
+    });
+
+    test('returns PermissionFailure when exception message contains denied/permission', () async {
+      when(
+        () => mockPicker.pickImage(
+          source: ImageSource.camera,
+          maxWidth: 1024,
+          maxHeight: 1024,
+          imageQuality: 80,
+        ),
+      ).thenThrow(PlatformException(code: 'error', message: 'Permission was denied by the user'));
+
+      final result = await service.takePhoto(source: CameraSource.camera);
+
+      expect(result.isLeft(), isTrue);
+      result.fold(
+        (failure) {
+          expect(failure, isA<PermissionFailure>());
+          expect(failure.message, contains('permission denied'));
+        },
+        (_) => fail('Expected Left'),
+      );
     });
   });
 }

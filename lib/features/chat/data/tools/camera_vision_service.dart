@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:dartz/dartz.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_ai_agent/core/errors/failures.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -56,7 +56,33 @@ class CameraVisionService implements CameraVisionServiceBase {
       final String base64String = base64Encode(bytes);
 
       return Right(base64String);
+    } on PlatformException catch (e) {
+      final code = e.code.toLowerCase();
+      final msg = (e.message ?? '').toLowerCase();
+      if (code == 'camera_access_denied' ||
+          code == 'photo_access_denied' ||
+          msg.contains('denied') ||
+          msg.contains('permission')) {
+        return Left(
+          PermissionFailure(
+            source == CameraSource.camera
+                ? 'Camera permission denied. Please grant camera access in settings.'
+                : 'Photo library permission denied. Please grant gallery access in settings.',
+          ),
+        );
+      }
+      return Left(ServerFailure('Camera error: ${e.message ?? e.toString()}'));
     } catch (e) {
+      final str = e.toString().toLowerCase();
+      if (str.contains('denied') || str.contains('permission')) {
+        return Left(
+          PermissionFailure(
+            source == CameraSource.camera
+                ? 'Camera permission denied. Please grant camera access in settings.'
+                : 'Photo library permission denied. Please grant gallery access in settings.',
+          ),
+        );
+      }
       return Left(ServerFailure('Camera error: $e'));
     }
   }

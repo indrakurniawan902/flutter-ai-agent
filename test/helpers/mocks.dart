@@ -11,6 +11,11 @@ import 'package:flutter_ai_agent/features/chat/data/tools/clipboard_service.dart
 import 'package:flutter_ai_agent/features/chat/data/tools/device_context_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/notification_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/notification_triage_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/file_workspace_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/local_memory_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/ambient_trigger_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/voice_input_service.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
@@ -89,11 +94,46 @@ class MockCalendarService extends Mock implements CalendarServiceBase {}
 
 class MockNotificationService extends Mock implements NotificationServiceBase {}
 
+// Notification Triage
+class MockNotificationListenerPlatformWrapper extends Mock
+    implements NotificationListenerPlatformWrapper {}
+
+class MockNotificationTriageService extends Mock
+    implements NotificationTriageServiceBase {}
+
 // QR Scanner
 class MockQrScannerController extends Mock implements QrScannerControllerBase {}
 
 // Server Profiles
 class MockServerProfileCubit extends MockCubit<ServerProfileState>
     implements ServerProfileCubit {}
+
+// File Workspace
+class MockFileWorkspaceService extends Mock
+    implements FileWorkspaceServiceBase {}
+
+class MockFileSystemWrapper extends Mock implements FileSystemWrapper {}
+
+class MockFilePickerWrapper extends Mock implements FilePickerWrapper {}
+
+// Local Memory
+class MockLocalMemoryService extends Mock implements LocalMemoryServiceBase {}
+
+// Ambient Trigger Service
+class MockAmbientTriggerService extends Mock
+    implements AmbientTriggerServiceBase {}
+
+class MockBatteryPlatformWrapper extends Mock
+    implements BatteryPlatformWrapper {}
+
+class MockWorkmanagerPlatformWrapper extends Mock
+    implements WorkmanagerPlatformWrapper {}
+
+// Voice Input Service
+class MockSpeechToTextWrapper extends Mock implements SpeechToTextWrapper {}
+
+class MockVoiceInputService extends Mock implements VoiceInputServiceBase {}
+
+
 
 

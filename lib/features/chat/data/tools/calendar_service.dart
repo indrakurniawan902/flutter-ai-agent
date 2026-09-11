@@ -23,6 +23,12 @@ abstract class CalendarServiceBase {
     required DateTime endTime,
     String? description,
   });
+
+  /// Checks whether calendar permissions are currently granted.
+  Future<bool> checkPermission();
+
+  /// Requests calendar permissions JIT and returns true if granted.
+  Future<bool> requestPermissions();
 }
 
 class CalendarService implements CalendarServiceBase {
@@ -32,19 +38,38 @@ class CalendarService implements CalendarServiceBase {
   final DeviceCalendarPlugin _plugin;
 
   @override
+  Future<bool> checkPermission() async {
+    final permResult = await _plugin.hasPermissions();
+    return permResult.isSuccess && (permResult.data ?? false);
+  }
+
+  @override
+  Future<bool> requestPermissions() async {
+    final reqResult = await _plugin.requestPermissions();
+    return reqResult.isSuccess && (reqResult.data ?? false);
+  }
+
+  Future<bool> _ensurePermissions() async {
+    final hasPerm = await checkPermission();
+    if (!hasPerm) {
+      return await requestPermissions();
+    }
+    return true;
+  }
+
+  @override
   Future<Either<Failure, List<Event>>> listEvents({
     required DateTime startDate,
     required DateTime endDate,
   }) async {
     try {
-      final permResult = await _plugin.hasPermissions();
-      if (permResult.isSuccess && !(permResult.data ?? false)) {
-        final reqResult = await _plugin.requestPermissions();
-        if (!reqResult.isSuccess || !(reqResult.data ?? false)) {
-          return const Left(
-            PermissionFailure('Calendar permission denied'),
-          );
-        }
+      final hasPerm = await _ensurePermissions();
+      if (!hasPerm) {
+        return const Left(
+          PermissionFailure(
+            'Calendar permission denied. Please grant calendar access in system settings.',
+          ),
+        );
       }
 
       final calendarsResult = await _plugin.retrieveCalendars();
@@ -82,14 +107,13 @@ class CalendarService implements CalendarServiceBase {
     String? description,
   }) async {
     try {
-      final permResult = await _plugin.hasPermissions();
-      if (permResult.isSuccess && !(permResult.data ?? false)) {
-        final reqResult = await _plugin.requestPermissions();
-        if (!reqResult.isSuccess || !(reqResult.data ?? false)) {
-          return const Left(
-            PermissionFailure('Calendar permission denied'),
-          );
-        }
+      final hasPerm = await _ensurePermissions();
+      if (!hasPerm) {
+        return const Left(
+          PermissionFailure(
+            'Calendar permission denied. Please grant calendar access in system settings.',
+          ),
+        );
       }
 
       final calendarsResult = await _plugin.retrieveCalendars();

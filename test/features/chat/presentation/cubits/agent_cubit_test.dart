@@ -1,6 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter_ai_agent/core/errors/failures.dart';
 import 'package:flutter_ai_agent/features/chat/data/models/chat_models.dart';
+import 'package:flutter_ai_agent/features/chat/data/models/memory_item.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/security_policy.dart';
@@ -412,6 +413,157 @@ void main() {
       expect(toolMessages.length, equals(2));
       expect(toolMessages[0].content, equals('Critical action executed'));
       expect(toolMessages[1].content, equals('Info action executed'));
+    });
+  });
+
+  group('AgentCubit Memory Auto-Injection', () {
+    late MockLocalMemoryService mockMemoryService;
+    late AgentCubit memoryCubit;
+
+    setUp(() {
+      mockMemoryService = MockLocalMemoryService();
+      memoryCubit = AgentCubit(
+        llmRepository: mockLlmRepository,
+        toolRegistry: toolRegistry,
+        localMemoryService: mockMemoryService,
+        baseUrl: baseUrl,
+        model: model,
+        apiKey: 'test-key',
+      );
+    });
+
+    tearDown(() {
+      memoryCubit.close();
+    });
+
+    test('auto-injects relevant top memories into LLM system prompt on sendMessage', () async {
+      final now = DateTime.now();
+      final retrievedMemories = [
+        MemoryItem(
+          id: 1,
+          key: 'user_name',
+          content: 'Indra is the developer of Flames.',
+          tags: const ['profile'],
+          createdAt: now,
+          updatedAt: now,
+        ),
+        MemoryItem(
+          id: 2,
+          key: 'favorite_tool',
+          content: 'Loves using Flutter and Dart.',
+          tags: const ['preferences'],
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ];
+
+      when(() => mockMemoryService.searchMemories('Who am I?', any()))
+          .thenAnswer((_) async => Right(retrievedMemories));
+
+      List<Map<String, dynamic>>? capturedMessages;
+      when(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: any(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+          )).thenAnswer((invocation) async {
+        capturedMessages = List.from(
+          invocation.namedArguments[#messages] as List<Map<String, dynamic>>,
+        );
+        return const Right(Stream.empty());
+      });
+
+      await memoryCubit.sendMessage('Who am I?');
+
+      verify(() => mockMemoryService.searchMemories('Who am I?', 3)).called(1);
+      expect(memoryCubit.activeMemories.length, equals(2));
+
+      expect(capturedMessages, isNotNull);
+      expect(capturedMessages!.isNotEmpty, isTrue);
+
+      final systemMessage = capturedMessages!.firstWhere((m) => m['role'] == 'system');
+      expect(systemMessage['content'], contains('Relevant User & Device Memories:'));
+      expect(systemMessage['content'], contains('Indra is the developer of Flames.'));
+      expect(systemMessage['content'], contains('Loves using Flutter and Dart.'));
+
+      // The user message should be after system message
+      final userMessage = capturedMessages!.firstWhere((m) => m['role'] == 'user');
+      expect(userMessage['content'], equals('Who am I?'));
+    });
+
+    test('does not inject system message when searchMemories returns empty list', () async {
+      when(() => mockMemoryService.searchMemories('Random question', any()))
+          .thenAnswer((_) async => const Right([]));
+
+      List<Map<String, dynamic>>? capturedMessages;
+      when(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: any(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+          )).thenAnswer((invocation) async {
+        capturedMessages = List.from(
+          invocation.namedArguments[#messages] as List<Map<String, dynamic>>,
+        );
+        return const Right(Stream.empty());
+      });
+
+      await memoryCubit.sendMessage('Random question');
+
+      expect(memoryCubit.activeMemories, isEmpty);
+      expect(capturedMessages, isNotNull);
+      final hasSystemMessage = capturedMessages!.any((m) => m['role'] == 'system');
+      expect(hasSystemMessage, isFalse);
+    });
+
+    test('combines baseSystemPrompt with relevant memories', () async {
+      final cubitWithPrompt = AgentCubit(
+        llmRepository: mockLlmRepository,
+        toolRegistry: toolRegistry,
+        localMemoryService: mockMemoryService,
+        systemPrompt: 'You are Flames AI Assistant.',
+        baseUrl: baseUrl,
+        model: model,
+        apiKey: 'test-key',
+      );
+
+      final now = DateTime.now();
+      when(() => mockMemoryService.searchMemories(any(), any()))
+          .thenAnswer((_) async => Right([
+                MemoryItem(
+                  id: 1,
+                  key: 'city',
+                  content: 'Bandung',
+                  createdAt: now,
+                  updatedAt: now,
+                ),
+              ]));
+
+      List<Map<String, dynamic>>? capturedMessages;
+      when(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: any(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+          )).thenAnswer((invocation) async {
+        capturedMessages = List.from(
+          invocation.namedArguments[#messages] as List<Map<String, dynamic>>,
+        );
+        return const Right(Stream.empty());
+      });
+
+      await cubitWithPrompt.sendMessage('Where do I live?');
+
+      expect(capturedMessages, isNotNull);
+      final systemMessage = capturedMessages!.firstWhere((m) => m['role'] == 'system');
+      expect(systemMessage['content'], contains('You are Flames AI Assistant.'));
+      expect(systemMessage['content'], contains('Relevant User & Device Memories:'));
+      expect(systemMessage['content'], contains('Bandung'));
+
+      cubitWithPrompt.close();
     });
   });
 }

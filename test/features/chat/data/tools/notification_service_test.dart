@@ -8,6 +8,12 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../../../../helpers/mocks.dart';
 
+class MockAndroidFlutterLocalNotificationsPlugin extends Mock
+    implements AndroidFlutterLocalNotificationsPlugin {}
+
+class MockIOSFlutterLocalNotificationsPlugin extends Mock
+    implements IOSFlutterLocalNotificationsPlugin {}
+
 void main() {
   late MockFlutterLocalNotificationsPlugin mockPlugin;
   late NotificationService service;
@@ -247,6 +253,128 @@ void main() {
         },
         (_) => fail('Expected Left'),
       );
+    });
+  });
+
+  group('requestPermissions and JIT flow', () {
+    late MockAndroidFlutterLocalNotificationsPlugin mockAndroid;
+    late MockIOSFlutterLocalNotificationsPlugin mockIos;
+
+    setUp(() {
+      mockAndroid = MockAndroidFlutterLocalNotificationsPlugin();
+      mockIos = MockIOSFlutterLocalNotificationsPlugin();
+    });
+
+    test('requests notification permission on Android without exact alarms', () async {
+      when(() => mockPlugin.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>())
+          .thenReturn(mockAndroid);
+      when(() => mockAndroid.requestNotificationsPermission())
+          .thenAnswer((_) async => true);
+
+      final result = await service.requestPermissions(exactAlarms: false);
+
+      expect(result, isTrue);
+      verify(() => mockAndroid.requestNotificationsPermission()).called(1);
+      verifyNever(() => mockAndroid.requestExactAlarmsPermission());
+    });
+
+    test('requests notification and exact alarms permission on Android', () async {
+      when(() => mockPlugin.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>())
+          .thenReturn(mockAndroid);
+      when(() => mockAndroid.requestNotificationsPermission())
+          .thenAnswer((_) async => true);
+      when(() => mockAndroid.requestExactAlarmsPermission())
+          .thenAnswer((_) async => true);
+
+      final result = await service.requestPermissions(exactAlarms: true);
+
+      expect(result, isTrue);
+      verify(() => mockAndroid.requestNotificationsPermission()).called(1);
+      verify(() => mockAndroid.requestExactAlarmsPermission()).called(1);
+    });
+
+    test('requests notification permission on iOS', () async {
+      when(() => mockPlugin.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>())
+          .thenReturn(null);
+      when(() => mockPlugin.resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin>())
+          .thenReturn(mockIos);
+      when(() => mockIos.requestPermissions(
+            alert: any(named: 'alert'),
+            badge: any(named: 'badge'),
+            sound: any(named: 'sound'),
+          )).thenAnswer((_) async => true);
+
+      final result = await service.requestPermissions();
+
+      expect(result, isTrue);
+      verify(() => mockIos.requestPermissions(
+            alert: true,
+            badge: true,
+            sound: true,
+          )).called(1);
+    });
+
+    test('sendLocalNotification returns PermissionFailure when permission denied', () async {
+      when(() => mockPlugin.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>())
+          .thenReturn(mockAndroid);
+      when(() => mockAndroid.requestNotificationsPermission())
+          .thenAnswer((_) async => false);
+
+      final result = await service.sendLocalNotification(
+        title: 'Title',
+        body: 'Body',
+      );
+
+      expect(result.isLeft(), isTrue);
+      result.fold(
+        (failure) {
+          expect(failure, isA<PermissionFailure>());
+          expect(failure.message, contains('denied'));
+        },
+        (_) => fail('Expected Left'),
+      );
+      verifyNever(() => mockPlugin.show(any(), any(), any(), any()));
+    });
+
+    test('scheduleReminder returns PermissionFailure when notification permission denied', () async {
+      when(() => mockPlugin.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>())
+          .thenReturn(mockAndroid);
+      when(() => mockAndroid.requestNotificationsPermission())
+          .thenAnswer((_) async => false);
+      when(() => mockAndroid.requestExactAlarmsPermission())
+          .thenAnswer((_) async => true);
+
+      final result = await service.scheduleReminder(
+        title: 'Title',
+        body: 'Body',
+        delayMinutes: 5,
+      );
+
+      expect(result.isLeft(), isTrue);
+      result.fold(
+        (failure) {
+          expect(failure, isA<PermissionFailure>());
+          expect(failure.message, contains('denied'));
+        },
+        (_) => fail('Expected Left'),
+      );
+      verifyNever(() => mockPlugin.zonedSchedule(
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            uiLocalNotificationDateInterpretation: any(
+              named: 'uiLocalNotificationDateInterpretation',
+            ),
+            androidScheduleMode: any(named: 'androidScheduleMode'),
+          ));
     });
   });
 }

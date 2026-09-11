@@ -6,6 +6,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:flutter_ai_agent/features/chat/data/llm_repository.dart';
 import 'package:flutter_ai_agent/features/chat/data/models/chat_models.dart';
+import 'package:flutter_ai_agent/features/chat/data/models/memory_item.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/local_memory_service.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
 import 'package:flutter_ai_agent/features/chat/domain/models/tool_call_request.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/security_policy.dart';
@@ -19,12 +21,15 @@ class AgentCubit extends Cubit<AgentState> {
   final LlmRepository _llmRepository;
   final ToolRegistry _toolRegistry;
   final SecureStorageService? _secureStorageService;
+  final LocalMemoryServiceBase? _localMemoryService;
   String baseUrl;
   String model;
   String? apiKey;
+  String? systemPrompt;
   final int maxTurns;
 
   final List<ChatMessage> _messages = [];
+  final List<MemoryItem> _activeMemories = [];
   final List<ToolCallDelta> _pendingTurnToolCalls = [];
   ToolCallRequest? _pendingToolCall;
   int _currentTurn = 0;
@@ -33,17 +38,23 @@ class AgentCubit extends Cubit<AgentState> {
     LlmRepository? llmRepository,
     ToolRegistry? toolRegistry,
     SecureStorageService? secureStorageService,
+    LocalMemoryServiceBase? localMemoryService,
     this.baseUrl = 'https://api.openai.com/v1',
     this.model = 'gpt-4o',
     this.apiKey,
+    this.systemPrompt,
     this.maxTurns = 10,
   })  : _llmRepository = llmRepository ?? LlmRepository(dio: Dio()),
         _toolRegistry = toolRegistry ?? ToolRegistry(),
         _secureStorageService = secureStorageService, // ignore: prefer_initializing_formals
+        _localMemoryService = localMemoryService,
         super(const AgentIdle());
 
   /// Full conversation history.
   List<ChatMessage> get messages => List.unmodifiable(_messages);
+
+  /// Active memories injected into current context.
+  List<MemoryItem> get activeMemories => List.unmodifiable(_activeMemories);
 
   /// Current pending tool call awaiting approval, if any.
   ToolCallRequest? get pendingToolCall => _pendingToolCall;
@@ -72,6 +83,22 @@ class AgentCubit extends Cubit<AgentState> {
   Future<void> sendMessage(String prompt) async {
     if (prompt.trim().isEmpty) return;
     await refreshSettings();
+
+    if (_localMemoryService != null) {
+      try {
+        final searchResult =
+            await _localMemoryService.searchMemories(prompt.trim(), 3);
+        searchResult.fold(
+          (_) {},
+          (items) {
+            _activeMemories
+              ..clear()
+              ..addAll(items);
+          },
+        );
+      } catch (_) {}
+    }
+
     _messages.add(ChatMessage(role: 'user', content: prompt));
     await _runLoop();
   }
@@ -142,6 +169,7 @@ class AgentCubit extends Cubit<AgentState> {
   /// Resets the conversation and returns to idle state.
   void reset() {
     _messages.clear();
+    _activeMemories.clear();
     _pendingToolCall = null;
     _pendingTurnToolCalls.clear();
     emit(const AgentIdle());
@@ -224,7 +252,16 @@ class AgentCubit extends Cubit<AgentState> {
     emit(const AgentThinking());
 
     final toolDefs = _toolRegistry.getOpenAiToolDefinitions();
-    final serializedMessages = _messages.map((m) => m.toJson()).toList();
+
+    final serializedMessages = <Map<String, dynamic>>[];
+    final effectiveSystemPrompt = _buildSystemPrompt();
+    if (effectiveSystemPrompt != null && effectiveSystemPrompt.isNotEmpty) {
+      serializedMessages.add({
+        'role': 'system',
+        'content': effectiveSystemPrompt,
+      });
+    }
+    serializedMessages.addAll(_messages.map((m) => m.toJson()));
 
     final responseEither = await _llmRepository.streamCompletion(
       baseUrl: baseUrl,
@@ -315,5 +352,25 @@ class AgentCubit extends Cubit<AgentState> {
         await _processPendingToolCalls();
       },
     );
+  }
+
+  /// Constructs the effective system prompt combining base prompt and auto-injected memories.
+  String? _buildSystemPrompt() {
+    final buffer = StringBuffer();
+    if (systemPrompt != null && systemPrompt!.trim().isNotEmpty) {
+      buffer.writeln(systemPrompt!.trim());
+    }
+
+    if (_activeMemories.isNotEmpty) {
+      if (buffer.isNotEmpty) buffer.writeln();
+      buffer.writeln('Relevant User & Device Memories:');
+      for (final m in _activeMemories) {
+        final tagStr = m.tags.isNotEmpty ? ' [${m.tags.join(', ')}]' : '';
+        buffer.writeln('- ${m.key}$tagStr: ${m.content}');
+      }
+    }
+
+    final text = buffer.toString().trim();
+    return text.isNotEmpty ? text : null;
   }
 }
