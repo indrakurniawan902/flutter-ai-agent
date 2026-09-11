@@ -1,4 +1,4 @@
-package id.indra.flutter_ai_agent
+package ai.hermes.flames
 
 import io.flutter.embedding.android.FlutterActivity
 

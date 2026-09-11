@@ -61,7 +61,7 @@ void main() {
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();
 
-      expect(find.text('AI Agent'), findsOneWidget);
+      expect(find.text('Flames'), findsOneWidget);
       expect(find.text('Autonomous Device Agent'), findsOneWidget);
       expect(find.byKey(const Key('chat_input_field')), findsOneWidget);
       expect(find.byKey(const Key('chat_send_button')), findsOneWidget);

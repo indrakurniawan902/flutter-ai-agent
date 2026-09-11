@@ -81,7 +81,7 @@ class _ChatScreenState extends State<ChatScreen> {
           return Scaffold(
             appBar: AppBar(
               title: const Text(
-                'AI Agent',
+                'Flames',
                 style: TextStyle(fontWeight: FontWeight.w600),
               ),
               actions: [

@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "id.indra.flutter_ai_agent"
+    namespace = "ai.hermes.flames"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -18,7 +18,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "id.indra.flutter_ai_agent"
+        applicationId = "ai.hermes.flames"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -45,12 +45,12 @@ android {
         create("development") {
             dimension = "env"
             applicationIdSuffix = ".dev"
-            resValue("string", "app_name", "AI Agent (Dev)")
+            resValue("string", "app_name", "Flames (Dev)")
             resValue("string", "app_flavor", "development")
         }
         create("production") {
             dimension = "env"
-            resValue("string", "app_name", "AI Agent")
+            resValue("string", "app_name", "Flames")
             resValue("string", "app_flavor", "production")
         }
     }

@@ -39,7 +39,7 @@ void main() {
 
     final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
     expect(materialApp.theme?.brightness, Brightness.dark);
-    expect(find.text('AI Agent'), findsOneWidget);
+    expect(find.text('Flames'), findsOneWidget);
     expect(find.byKey(const Key('chat_settings_button')), findsOneWidget);
   });
 

@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "[DEV] AI Agent",
+      "name": "[DEV] Flames",
       "request": "launch",
       "type": "dart",
       "program": "lib/main_development.dart",
@@ -14,7 +14,7 @@
       ]
     },
     {
-      "name": "[DEV Release] AI Agent",
+      "name": "[DEV Release] Flames",
       "request": "launch",
       "type": "dart",
       "program": "lib/main_development.dart",
@@ -28,7 +28,7 @@
       ]
     },
     {
-      "name": "[PROD Release] AI Agent",
+      "name": "[PROD Release] Flames",
       "request": "launch",
       "type": "dart",
       "program": "lib/main_production.dart",
@@ -42,7 +42,7 @@
       ]
     },
     {
-      "name": "[PROD Debug] AI Agent",
+      "name": "[PROD Debug] Flames",
       "request": "launch",
       "type": "dart",
       "program": "lib/main_production.dart",
