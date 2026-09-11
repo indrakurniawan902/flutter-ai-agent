@@ -17,6 +17,7 @@ import 'package:flutter_ai_agent/features/chat/data/models/ambient_event.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/ambient_trigger_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/voice_input_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/voice_output_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/background_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/security_policy.dart';
 
 typedef ToolExecutor = Future<Either<Failure, String>> Function(
@@ -891,6 +892,188 @@ class ToolRegistry {
               }),
             ),
           );
+        },
+      ),
+    );
+  }
+
+  void registerBackgroundServiceTools(BackgroundServiceBase service) {
+    register(
+      RegisteredTool(
+        name: 'manage_background_service',
+        description:
+            'Controls the background foreground service, safe battery wake-lock, and Android Quick Settings Tile state.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'action': {
+              'type': 'string',
+              'description':
+                  'Operation to perform: start, stop, status, update_notification, acquire_wake_lock, release_wake_lock, get_tile_state, set_tile_state, toggle_tile_state',
+              'enum': [
+                'start',
+                'stop',
+                'status',
+                'update_notification',
+                'acquire_wake_lock',
+                'release_wake_lock',
+                'get_tile_state',
+                'set_tile_state',
+                'toggle_tile_state'
+              ],
+            },
+            'title': {
+              'type': 'string',
+              'description':
+                  'Notification title when action is start or update_notification.',
+            },
+            'content': {
+              'type': 'string',
+              'description':
+                  'Notification body content when action is start or update_notification.',
+            },
+            'timeout_seconds': {
+              'type': 'integer',
+              'description':
+                  'Duration in seconds for wake-lock (clamped safely between 1 and 60 seconds).',
+            },
+            'active': {
+              'type': 'boolean',
+              'description':
+                  'Target tile state when action is set_tile_state.',
+            },
+          },
+          'required': ['action'],
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) async {
+          final action = args['action'] as String?;
+          if (action == null || action.trim().isEmpty) {
+            return const Left(
+              ValidationFailure('action parameter is required'),
+            );
+          }
+
+          switch (action.trim().toLowerCase()) {
+            case 'start':
+              final title = args['title'] as String?;
+              final content = args['content'] as String?;
+              final res = await service.startService(
+                title: title,
+                content: content,
+              );
+              return res.fold(
+                (f) => Left(f),
+                (ok) => Right(jsonEncode({
+                  'status': 'started',
+                  'success': ok,
+                  'title': title ?? 'Flames Agent Active',
+                  'content': content ?? 'Running in background',
+                })),
+              );
+
+            case 'stop':
+              final res = await service.stopService();
+              return res.fold(
+                (f) => Left(f),
+                (ok) => Right(jsonEncode({
+                  'status': 'stopped',
+                  'success': ok,
+                })),
+              );
+
+            case 'status':
+              final isRunning = await service.isRunning();
+              final isHeld = await service.isWakeLockHeld();
+              final tileState = await service.getTileState();
+              return Right(jsonEncode({
+                'is_running': isRunning,
+                'is_wakelock_held': isHeld,
+                'tile_state': tileState.name,
+              }));
+
+            case 'update_notification':
+              final title = args['title'] as String?;
+              final content = args['content'] as String?;
+              if (title == null || content == null) {
+                return const Left(
+                  ValidationFailure('title and content required for update_notification'),
+                );
+              }
+              final res = await service.updateNotification(
+                title: title,
+                content: content,
+              );
+              return res.fold(
+                (f) => Left(f),
+                (ok) => Right(jsonEncode({
+                  'status': 'updated',
+                  'success': ok,
+                  'title': title,
+                  'content': content,
+                })),
+              );
+
+            case 'acquire_wake_lock':
+              final timeoutSeconds = args['timeout_seconds'] as num?;
+              final timeout = timeoutSeconds != null
+                  ? Duration(seconds: timeoutSeconds.toInt())
+                  : null;
+              final res = await service.acquireWakeLock(timeout: timeout);
+              return res.fold(
+                (f) => Left(f),
+                (ok) => Right(jsonEncode({
+                  'status': 'wakelock_acquired',
+                  'success': ok,
+                  'timeout_seconds': (timeout?.inSeconds ?? 30).clamp(1, 60),
+                })),
+              );
+
+            case 'release_wake_lock':
+              final res = await service.releaseWakeLock();
+              return res.fold(
+                (f) => Left(f),
+                (ok) => Right(jsonEncode({
+                  'status': 'wakelock_released',
+                  'success': ok,
+                })),
+              );
+
+            case 'get_tile_state':
+              final tileState = await service.getTileState();
+              return Right(jsonEncode({
+                'tile_state': tileState.name,
+              }));
+
+            case 'set_tile_state':
+              final active = args['active'] as bool? ?? false;
+              final targetState =
+                  active ? QuickTileState.active : QuickTileState.inactive;
+              final res = await service.setTileState(targetState);
+              return res.fold(
+                (f) => Left(f),
+                (ok) => Right(jsonEncode({
+                  'status': 'tile_state_set',
+                  'success': ok,
+                  'tile_state': targetState.name,
+                })),
+              );
+
+            case 'toggle_tile_state':
+              final res = await service.toggleTileState();
+              return res.fold(
+                (f) => Left(f),
+                (newState) => Right(jsonEncode({
+                  'status': 'tile_state_toggled',
+                  'tile_state': newState.name,
+                })),
+              );
+
+            default:
+              return Left(
+                ValidationFailure('Unsupported background action: $action'),
+              );
+          }
         },
       ),
     );

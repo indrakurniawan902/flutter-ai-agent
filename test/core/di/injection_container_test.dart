@@ -13,6 +13,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/local_memory_service.d
 import 'package:flutter_ai_agent/features/chat/data/tools/ambient_trigger_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/voice_input_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/voice_output_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/background_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart';
@@ -77,6 +78,7 @@ void main() {
     expect(sl.isRegistered<VoiceInputServiceBase>(), isFalse);
     expect(sl.isRegistered<TtsClient>(), isFalse);
     expect(sl.isRegistered<VoiceOutputServiceBase>(), isFalse);
+    expect(sl.isRegistered<BackgroundServiceBase>(), isFalse);
     expect(sl.isRegistered<ToolRegistry>(), isFalse);
     expect(sl.isRegistered<AgentCubit>(), isFalse);
 
@@ -97,6 +99,7 @@ void main() {
     expect(sl.isRegistered<VoiceInputServiceBase>(), isTrue);
     expect(sl.isRegistered<TtsClient>(), isTrue);
     expect(sl.isRegistered<VoiceOutputServiceBase>(), isTrue);
+    expect(sl.isRegistered<BackgroundServiceBase>(), isTrue);
     expect(sl.isRegistered<ToolRegistry>(), isTrue);
     expect(sl.isRegistered<AgentCubit>(), isTrue);
 
@@ -126,5 +129,6 @@ void main() {
     expect(registry.hasTool('trigger_ambient_check'), isTrue);
     expect(registry.hasTool('listen_voice_input'), isTrue);
     expect(registry.hasTool('speak_text'), isTrue);
+    expect(registry.hasTool('manage_background_service'), isTrue);
   });
 }

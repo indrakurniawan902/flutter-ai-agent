@@ -15,6 +15,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/local_memory_service.d
 import 'package:flutter_ai_agent/features/chat/data/tools/ambient_trigger_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/voice_input_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/voice_output_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/background_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart';
@@ -158,6 +159,12 @@ Future<void> initDependencies() async {
     );
   }
 
+  if (!sl.isRegistered<BackgroundServiceBase>()) {
+    sl.registerLazySingleton<BackgroundServiceBase>(
+      () => BackgroundService(),
+    );
+  }
+
   // Tool Registry
   if (!sl.isRegistered<ToolRegistry>()) {
     sl.registerLazySingleton<ToolRegistry>(
@@ -175,6 +182,7 @@ Future<void> initDependencies() async {
         registry.registerAmbientTriggerTools(sl<AmbientTriggerServiceBase>());
         registry.registerVoiceTools(sl<VoiceInputServiceBase>());
         registry.registerVoiceOutputTools(sl<VoiceOutputServiceBase>());
+        registry.registerBackgroundServiceTools(sl<BackgroundServiceBase>());
         return registry;
       },
     );

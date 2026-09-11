@@ -2,6 +2,7 @@ import 'package:dartz/dartz.dart';
 import 'package:flutter_ai_agent/core/errors/failures.dart';
 import 'package:flutter_ai_agent/features/chat/data/models/ambient_event.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/voice_input_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/background_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/clipboard_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/location_service.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/security_policy.dart';
@@ -623,6 +624,132 @@ void main() {
         (failure) => expect(failure, isA<ServerFailure>()),
         (_) => fail('Expected Left(ServerFailure)'),
       );
+    });
+  });
+
+  group('ToolRegistry - Background Service Tools', () {
+    late ToolRegistry registry;
+    late MockBackgroundService mockBackgroundService;
+
+    setUp(() {
+      registry = ToolRegistry();
+      mockBackgroundService = MockBackgroundService();
+      registry.registerBackgroundServiceTools(mockBackgroundService);
+    });
+
+    test('registers manage_background_service as tier1 auto tool', () {
+      expect(registry.hasTool('manage_background_service'), isTrue);
+      expect(
+        registry.getTool('manage_background_service')?.securityTier,
+        equals(SecurityTier.tier1Auto),
+      );
+    });
+
+    test('executes action "start" and delegates to backgroundService.startService',
+        () async {
+      when(() => mockBackgroundService.startService(
+            title: any(named: 'title'),
+            content: any(named: 'content'),
+          )).thenAnswer((_) async => const Right(true));
+
+      final result = await registry.executeTool('manage_background_service', {
+        'action': 'start',
+        'title': 'Agent Active',
+        'content': 'Running task in background',
+      });
+
+      expect(result.isRight(), isTrue);
+      verify(() => mockBackgroundService.startService(
+            title: 'Agent Active',
+            content: 'Running task in background',
+          )).called(1);
+    });
+
+    test('executes action "stop" and delegates to backgroundService.stopService',
+        () async {
+      when(() => mockBackgroundService.stopService())
+          .thenAnswer((_) async => const Right(true));
+
+      final result = await registry.executeTool('manage_background_service', {
+        'action': 'stop',
+      });
+
+      expect(result.isRight(), isTrue);
+      verify(() => mockBackgroundService.stopService()).called(1);
+    });
+
+    test('executes action "status" and returns service and wakelock state',
+        () async {
+      when(() => mockBackgroundService.isRunning()).thenAnswer((_) async => true);
+      when(() => mockBackgroundService.isWakeLockHeld())
+          .thenAnswer((_) async => false);
+      when(() => mockBackgroundService.getTileState())
+          .thenAnswer((_) async => QuickTileState.active);
+
+      final result = await registry.executeTool('manage_background_service', {
+        'action': 'status',
+      });
+
+      expect(result.isRight(), isTrue);
+      result.fold(
+        (_) => fail('Expected Right'),
+        (text) {
+          expect(text, contains('"is_running":true'));
+          expect(text, contains('"is_wakelock_held":false'));
+          expect(text, contains('"tile_state":"active"'));
+        },
+      );
+    });
+
+    test('executes action "acquire_wake_lock" with timeout_seconds', () async {
+      when(() => mockBackgroundService.acquireWakeLock(
+            timeout: any(named: 'timeout'),
+          )).thenAnswer((_) async => const Right(true));
+
+      final result = await registry.executeTool('manage_background_service', {
+        'action': 'acquire_wake_lock',
+        'timeout_seconds': 45,
+      });
+
+      expect(result.isRight(), isTrue);
+      verify(() => mockBackgroundService.acquireWakeLock(
+            timeout: const Duration(seconds: 45),
+          )).called(1);
+    });
+
+    test('executes action "release_wake_lock"', () async {
+      when(() => mockBackgroundService.releaseWakeLock())
+          .thenAnswer((_) async => const Right(true));
+
+      final result = await registry.executeTool('manage_background_service', {
+        'action': 'release_wake_lock',
+      });
+
+      expect(result.isRight(), isTrue);
+      verify(() => mockBackgroundService.releaseWakeLock()).called(1);
+    });
+
+    test('executes action "toggle_tile_state"', () async {
+      when(() => mockBackgroundService.toggleTileState())
+          .thenAnswer((_) async => const Right(QuickTileState.active));
+
+      final result = await registry.executeTool('manage_background_service', {
+        'action': 'toggle_tile_state',
+      });
+
+      expect(result.isRight(), isTrue);
+      verify(() => mockBackgroundService.toggleTileState()).called(1);
+    });
+
+    test('fails validation when action is missing or unsupported', () async {
+      final resMissing =
+          await registry.executeTool('manage_background_service', {});
+      final resInvalid = await registry.executeTool('manage_background_service', {
+        'action': 'invalid_action',
+      });
+
+      expect(resMissing.isLeft(), isTrue);
+      expect(resInvalid.isLeft(), isTrue);
     });
   });
 }

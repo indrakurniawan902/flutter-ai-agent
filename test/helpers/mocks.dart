@@ -17,6 +17,7 @@ import 'package:flutter_ai_agent/features/chat/data/tools/local_memory_service.d
 import 'package:flutter_ai_agent/features/chat/data/tools/ambient_trigger_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/voice_input_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/voice_output_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/background_service.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
@@ -141,6 +142,9 @@ class MockAudioPlayerWrapper extends Mock implements AudioPlayerWrapper {}
 class MockTtsClient extends Mock implements TtsClient {}
 
 class MockVoiceOutputService extends Mock implements VoiceOutputServiceBase {}
+
+// Background Service
+class MockBackgroundService extends Mock implements BackgroundServiceBase {}
 
 
 

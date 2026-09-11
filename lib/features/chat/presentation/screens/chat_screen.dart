@@ -8,6 +8,7 @@ import 'package:flutter_ai_agent/core/di/injection_container.dart';
 import 'package:flutter_ai_agent/features/chat/data/models/chat_models.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/voice_input_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/voice_output_service.dart';
+import 'package:flutter_ai_agent/features/chat/data/tools/background_service.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/widgets/action_approval_sheet.dart';
@@ -21,10 +22,12 @@ class ChatScreen extends StatefulWidget {
     super.key,
     this.voiceInputService,
     this.voiceOutputService,
+    this.backgroundService,
   });
 
   final VoiceInputServiceBase? voiceInputService;
   final VoiceOutputServiceBase? voiceOutputService;
+  final BackgroundServiceBase? backgroundService;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -37,10 +40,12 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isComposing = false;
   late final VoiceInputServiceBase _voiceService;
   late final VoiceOutputServiceBase _voiceOutputService;
+  late final BackgroundServiceBase _backgroundService;
   bool _isSpeakerMuted = false;
   AgentCubit? _agentCubit;
   StreamSubscription<VoiceInputStatus>? _voiceStatusSub;
   StreamSubscription<String>? _voiceErrorSub;
+  StreamSubscription<String>? _backgroundActionSub;
   bool _isVoiceRecording = false;
   bool _isHoldToSpeak = false;
 
@@ -59,6 +64,15 @@ class _ChatScreenState extends State<ChatScreen> {
             ? sl<VoiceOutputServiceBase>()
             : VoiceOutputService());
     _isSpeakerMuted = _voiceOutputService.isMuted;
+
+    _backgroundService = widget.backgroundService ??
+        (sl.isRegistered<BackgroundServiceBase>()
+            ? sl<BackgroundServiceBase>()
+            : BackgroundService());
+
+    _backgroundActionSub =
+        _backgroundService.actionStream.listen(_handleBackgroundAction);
+    _checkPendingBackgroundAction();
 
     _voiceStatusSub = _voiceService.statusStream.listen((status) {
       if (!mounted) return;
@@ -98,6 +112,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    _backgroundActionSub?.cancel();
     _voiceStatusSub?.cancel();
     _voiceErrorSub?.cancel();
     if (_isVoiceRecording) {
@@ -112,11 +127,39 @@ class _ChatScreenState extends State<ChatScreen> {
         !sl.isRegistered<VoiceOutputServiceBase>()) {
       _voiceOutputService.dispose();
     }
+    if (widget.backgroundService == null &&
+        !sl.isRegistered<BackgroundServiceBase>()) {
+      _backgroundService.dispose();
+    }
     _textController.removeListener(_onTextChanged);
     _textController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  void _handleBackgroundAction(String action) {
+    if (!mounted) return;
+    switch (action.toLowerCase().trim()) {
+      case 'voice_input':
+        if (!_isVoiceRecording) {
+          _startVoiceInput();
+        }
+        break;
+      case 'quick_status':
+        _agentCubit?.sendMessage(
+          'Quick status check: summarize battery, device context, and agent readiness.',
+        );
+        break;
+    }
+  }
+
+  Future<void> _checkPendingBackgroundAction() async {
+    final pending = await _backgroundService.getPendingAction();
+    if (pending != null && mounted) {
+      _handleBackgroundAction(pending);
+      await _backgroundService.clearPendingAction();
+    }
   }
 
   void _toggleSpeakerMute() {

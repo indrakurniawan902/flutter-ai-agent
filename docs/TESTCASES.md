@@ -620,6 +620,52 @@
   - Returns `Left(Failure)` (`ServerFailure` or `ConnectionFailure`).
   - Error piped to `errorStream`; player queue safely reset to `idle`.
 
+### TC-VOICE-07: Android Quick Settings Tile 1-Tap Activation (T9.3)
+- **Type**: Positive
+- **Objective**: Verify 1-tap activation from notification drawer Quick Tile activates agent voice mode.
+- **Preconditions**: Quick Settings Tile configured in Android notification shade.
+- **Steps**:
+  1. Tap Flames Agent QS Tile.
+  2. Quick tile toggles state to active and collapses shade, launching app with `voice_input` action.
+  3. `ChatScreen` receives pending action and initiates voice listening.
+- **Expected Outcome**:
+  - `FlamesQuickTile` toggles to `active`.
+  - Pending action consumed without duplicate triggers.
+
+### TC-VOICE-08: Foreground Service Persistent Notification with Action Buttons (T9.3)
+- **Type**: Positive
+- **Objective**: Foreground service maintains persistent notification with action controls (Voice Input, Quick Status, Stop).
+- **Preconditions**: Foreground service started via `BackgroundService`.
+- **Steps**:
+  1. Start foreground service with title and content.
+  2. Emit action intent (e.g. `quick_status` or `stop`).
+- **Expected Outcome**:
+  - Notification displayed with action buttons.
+  - Action dispatched to `actionStream` or terminates foreground execution cleanly on stop.
+
+### TC-VOICE-09: Safe WakeLock & Bounded Battery Protection (T9.3)
+- **Type**: Negative / Boundary
+- **Objective**: Prevent battery drain by enforcing bounded timeout on PARTIAL_WAKE_LOCK.
+- **Preconditions**: Background operation started.
+- **Steps**:
+  1. Request WakeLock with timeout exceeding maximum threshold (e.g. 120,000ms).
+  2. Request WakeLock with negative or sub-minimum timeout.
+- **Expected Outcome**:
+  - Timeout clamped within safe bounds (1s - 60s, default 30s).
+  - WakeLock automatically released upon timeout or service destruction.
+
+### TC-VOICE-10: Service Lifecycle & Quick Tile State Toggle (T9.3)
+- **Type**: Positive
+- **Objective**: Verify `manage_background_service` tool properly reports and toggles foreground service and tile states.
+- **Preconditions**: Tool registered in `ToolRegistry`.
+- **Steps**:
+  1. Execute tool with `{"action": "status"}`.
+  2. Execute tool with `{"action": "toggle_tile"}`.
+  3. Execute tool with `{"action": "start", "title": "Custom Title"}`.
+- **Expected Outcome**:
+  - Returns structured JSON containing `is_running`, `tile_state`, and `is_wakelock_held`.
+  - Tile state toggles between active and inactive.
+
 ---
 
 ## Summary Matrix
@@ -634,8 +680,8 @@
 | **Module 6: Tier 3 HITL Tools** | 2 | 3 | 5 |
 | **Module 7: Presentation & UI/UX** | 3 | 1 | 4 |
 | **Module 8: Local Workspace & Intelligence (Fase 3)** | 6 | 3 | 9 |
-| **Module 9: Streaming Voice & Audio (Fase 4)** | 4 | 2 | 6 |
-| **Grand Total** | **25** | **24** | **49** |
+| **Module 9: Streaming Voice & Audio (Fase 4)** | 7 | 3 | 10 |
+| **Grand Total** | **28** | **25** | **53** |
 
 ---
 _Standardized for Hermes Bot Team: PM Bot (`default`), Dev Bot (`dev`), Ops Bot (`ops`)._
