@@ -1,3 +1,4 @@
+import 'package:flutter_ai_agent/core/constants/constants.dart';
 import 'package:flutter_ai_agent/features/pairing/data/models/pairing_payload.dart';
 import 'package:flutter_ai_agent/features/server_profiles/data/models/server_profile_model.dart';
 import 'package:flutter_ai_agent/features/server_profiles/domain/entities/server_profile.dart';
@@ -13,6 +14,8 @@ void main() {
     token: 'sk-test-token-123',
     isActive: true,
     lastConnected: testDate,
+    model: AppConstants.defaultModel,
+    temperature: AppConstants.defaultTemperature,
   );
 
   group('ServerProfile Entity', () {
@@ -102,6 +105,8 @@ void main() {
         'token': 'sk-test-token-123',
         'isActive': true,
         'lastConnected': testDate.toIso8601String(),
+        'model': 'ag-glm',
+        'temperature': 0.7,
       };
 
       final result = ServerProfileModel.fromJson(json);
@@ -112,6 +117,8 @@ void main() {
       expect(result.token, 'sk-test-token-123');
       expect(result.isActive, isTrue);
       expect(result.lastConnected, testDate);
+      expect(result.model, 'ag-glm');
+      expect(result.temperature, 0.7);
     });
 
     test('fromJson parses snake_case JSON with integer millis timestamp', () {
@@ -163,6 +170,38 @@ void main() {
       expect(result.token, '');
       expect(result.isActive, isFalse);
       expect(result.lastConnected, isNull);
+      expect(result.model, AppConstants.defaultModel);
+      expect(result.temperature, AppConstants.defaultTemperature);
+    });
+
+    test('fromJson applies defaults when model is missing or empty', () {
+      final missing = ServerProfileModel.fromJson({'name': 'A'});
+      expect(missing.model, AppConstants.defaultModel);
+
+      final empty = ServerProfileModel.fromJson({'name': 'A', 'model': '  '});
+      expect(empty.model, AppConstants.defaultModel);
+    });
+
+    test('fromJson parses custom model and numeric/string temperature', () {
+      final numeric = ServerProfileModel.fromJson({
+        'name': 'A',
+        'model': 'custom-model',
+        'temperature': 0.3,
+      });
+      expect(numeric.model, 'custom-model');
+      expect(numeric.temperature, 0.3);
+
+      final fromString = ServerProfileModel.fromJson({
+        'name': 'A',
+        'temperature': '0.9',
+      });
+      expect(fromString.temperature, 0.9);
+
+      final invalidString = ServerProfileModel.fromJson({
+        'name': 'A',
+        'temperature': 'not-a-number',
+      });
+      expect(invalidString.temperature, AppConstants.defaultTemperature);
     });
 
     test('toJson produces correct JSON map', () {
@@ -176,7 +215,26 @@ void main() {
         'token': 'sk-test-token-123',
         'isActive': true,
         'lastConnected': testDate.toIso8601String(),
+        'model': 'ag-glm',
+        'temperature': 0.7,
       });
+    });
+
+    test('toJson round-trips custom model and temperature', () {
+      final model = ServerProfileModel(
+        id: '1',
+        name: 'Custom',
+        gatewayUrl: 'https://test.com',
+        token: 'tok',
+        model: 'custom-model',
+        temperature: 0.3,
+      );
+
+      final restored = ServerProfileModel.fromJson(model.toJson());
+
+      expect(restored.model, 'custom-model');
+      expect(restored.temperature, 0.3);
+      expect(restored, model);
     });
   });
 }
