@@ -117,6 +117,23 @@ class _ChatScreenState extends State<ChatScreen> {
                     context.read<AgentCubit>().reset();
                   },
                 ),
+                BlocBuilder<AgentCubit, AgentState>(
+                  builder: (context, state) {
+                    final isBusy = state is AgentThinking ||
+                        state is AgentStreaming ||
+                        state is ExecutingTool;
+                    if (!isBusy) return const SizedBox.shrink();
+                    return IconButton(
+                      key: const Key('chat_stop_button'),
+                      icon: const Icon(
+                        Icons.stop_circle_outlined,
+                        color: Colors.redAccent,
+                      ),
+                      tooltip: 'Stop Generation',
+                      onPressed: () => context.read<AgentCubit>().stop(),
+                    );
+                  },
+                ),
                 IconButton(
                   key: const Key('chat_settings_button'),
                   icon: const Icon(Icons.settings),
