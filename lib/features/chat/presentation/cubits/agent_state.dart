@@ -12,7 +12,12 @@ sealed class AgentState extends Equatable {
 
 /// Agent is idle and ready for user input.
 class AgentIdle extends AgentState {
-  const AgentIdle();
+  final List<ChatMessage> messages;
+
+  const AgentIdle({this.messages = const []});
+
+  @override
+  List<Object?> get props => [messages];
 }
 
 /// Agent has sent request to LLM and is waiting for tokens.

@@ -28,6 +28,9 @@ class AgentCubit extends Cubit<AgentState> {
   final List<ToolCallDelta> _pendingTurnToolCalls = [];
   ToolCallRequest? _pendingToolCall;
   int _currentTurn = 0;
+  StreamSubscription<ChatChunk>? _streamSubscription;
+  Completer<void>? _streamCompleter;
+  bool _isCancelled = false;
 
   AgentCubit({
     LlmRepository? llmRepository,
@@ -71,6 +74,7 @@ class AgentCubit extends Cubit<AgentState> {
   /// Sends a user message and starts the ReAct loop.
   Future<void> sendMessage(String prompt) async {
     if (prompt.trim().isEmpty) return;
+    _isCancelled = false;
     await refreshSettings();
     _messages.add(ChatMessage(role: 'user', content: prompt));
     await _runLoop();
@@ -152,6 +156,7 @@ class AgentCubit extends Cubit<AgentState> {
   /// When all tools in the turn complete, it continues the ReAct loop.
   Future<void> _processPendingToolCalls() async {
     while (_pendingTurnToolCalls.isNotEmpty) {
+      if (_isCancelled) return;
       final toolCall = _pendingTurnToolCalls.removeAt(0);
       final toolName = toolCall.name ?? '';
       final callId = toolCall.id ?? 'call_${toolCall.index}';
@@ -196,6 +201,8 @@ class AgentCubit extends Cubit<AgentState> {
         arguments,
       );
 
+      if (_isCancelled) return;
+
       final resultStr = execResult.fold(
         (failure) => 'Error: ${failure.message}',
         (result) => result,
@@ -209,12 +216,41 @@ class AgentCubit extends Cubit<AgentState> {
       ));
     }
 
+    if (_isCancelled) return;
     // All tools in this turn executed; proceed to next LLM turn.
     await _runLoop(_currentTurn + 1);
   }
 
+  /// Stops the current streaming / tool execution and returns to idle.
+  Future<void> stop() async {
+    _isCancelled = true;
+    if (_streamCompleter != null && !_streamCompleter!.isCompleted) {
+      _streamCompleter!.complete();
+    }
+    await _streamSubscription?.cancel();
+    _streamSubscription = null;
+    _pendingTurnToolCalls.clear();
+    _pendingToolCall = null;
+    emit(AgentIdle(messages: messages));
+  }
+
+  /// Alias for [stop].
+  Future<void> cancel() async => stop();
+
+  @override
+  Future<void> close() async {
+    _isCancelled = true;
+    if (_streamCompleter != null && !_streamCompleter!.isCompleted) {
+      _streamCompleter!.complete();
+    }
+    await _streamSubscription?.cancel();
+    _streamSubscription = null;
+    return super.close();
+  }
+
   /// Runs the ReAct loop until LLM provides a final text response or pauses for HITL.
   Future<void> _runLoop([int turn = 0]) async {
+    if (_isCancelled) return;
     if (turn >= maxTurns) {
       emit(const AgentError('Maximum ReAct loop turns exceeded.'));
       return;
@@ -236,6 +272,7 @@ class AgentCubit extends Cubit<AgentState> {
 
     await responseEither.fold(
       (failure) async {
+        if (_isCancelled) return;
         emit(AgentError(failure.message));
       },
       (chunkStream) async {
@@ -243,9 +280,12 @@ class AgentCubit extends Cubit<AgentState> {
         final Map<int, String> callIds = {};
         final Map<int, String> callNames = {};
         final Map<int, StringBuffer> callArgs = {};
+        Object? streamError;
 
-        try {
-          await for (final chunk in chunkStream) {
+        _streamCompleter = Completer<void>();
+        _streamSubscription = chunkStream.listen(
+          (chunk) {
+            if (_isCancelled) return;
             if (chunk.contentDelta != null && chunk.contentDelta!.isNotEmpty) {
               contentBuffer.write(chunk.contentDelta);
               emit(AgentStreaming(
@@ -267,12 +307,31 @@ class AgentCubit extends Cubit<AgentState> {
                     .write(delta.argumentsFragment);
               }
             }
-          }
-        } catch (e) {
-          emit(AgentError('Stream interrupted: $e'));
+          },
+          onError: (Object e, StackTrace st) {
+            streamError = e;
+            if (_streamCompleter != null && !_streamCompleter!.isCompleted) {
+              _streamCompleter!.complete();
+            }
+          },
+          onDone: () {
+            if (_streamCompleter != null && !_streamCompleter!.isCompleted) {
+              _streamCompleter!.complete();
+            }
+          },
+          cancelOnError: false,
+        );
+        await _streamCompleter!.future;
+        _streamSubscription = null;
+
+        if (_isCancelled) return;
+
+        if (streamError != null) {
+          emit(AgentError('Stream interrupted: $streamError'));
           return;
         }
 
+        if (_isCancelled) return;
         // If no tool calls were generated, this is the final text answer.
         if (callIds.isEmpty && callNames.isEmpty && callArgs.isEmpty) {
           final finalText = contentBuffer.toString();
@@ -285,6 +344,7 @@ class AgentCubit extends Cubit<AgentState> {
         }
 
         // Tool calls were requested by LLM.
+        if (_isCancelled) return;
         final toolCalls = <ToolCallDelta>[];
         final sortedIndices = {
           ...callIds.keys,

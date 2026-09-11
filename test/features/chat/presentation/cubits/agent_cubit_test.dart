@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dartz/dartz.dart';
 import 'package:flutter_ai_agent/core/errors/failures.dart';
 import 'package:flutter_ai_agent/features/chat/data/models/chat_models.dart';
@@ -412,6 +414,171 @@ void main() {
       expect(toolMessages.length, equals(2));
       expect(toolMessages[0].content, equals('Critical action executed'));
       expect(toolMessages[1].content, equals('Info action executed'));
+    });
+
+    test('stop() while streaming cancels stream and emits AgentIdle', () async {
+      final controller = StreamController<ChatChunk>();
+      when(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: any(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+          )).thenAnswer((_) async => Right(controller.stream));
+
+      final sendFuture = cubit.sendMessage('Hello streaming');
+
+      // Wait until loop starts listening.
+      var attempts = 0;
+      while (cubit.state is! AgentThinking &&
+          cubit.state is! AgentStreaming &&
+          attempts < 200) {
+        await Future.delayed(const Duration(milliseconds: 10));
+        attempts++;
+      }
+
+      controller.add(const ChatChunk(contentDelta: 'partial '));
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      await cubit.stop();
+      if (!controller.isClosed) {
+        await controller.close();
+      }
+      await sendFuture;
+
+      expect(cubit.state, isA<AgentIdle>());
+      final idle = cubit.state as AgentIdle;
+      expect(idle.messages, equals(cubit.messages));
+      expect(cubit.messages.length, equals(1));
+      expect(cubit.messages.first.role, equals('user'));
+      expect(cubit.messages.first.content, equals('Hello streaming'));
+    });
+
+    test('cancel() cancels stream and emits AgentIdle', () async {
+      final controller = StreamController<ChatChunk>();
+      when(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: any(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+          )).thenAnswer((_) async => Right(controller.stream));
+
+      final sendFuture = cubit.sendMessage('Hello cancel');
+
+      var attempts = 0;
+      while (cubit.state is! AgentThinking &&
+          cubit.state is! AgentStreaming &&
+          attempts < 200) {
+        await Future.delayed(const Duration(milliseconds: 10));
+        attempts++;
+      }
+
+      controller.add(const ChatChunk(contentDelta: 'partial '));
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      await cubit.cancel();
+      if (!controller.isClosed) {
+        await controller.close();
+      }
+      await sendFuture;
+
+      expect(cubit.state, isA<AgentIdle>());
+      final idle = cubit.state as AgentIdle;
+      expect(idle.messages, equals(cubit.messages));
+      expect(cubit.messages.length, equals(1));
+      expect(cubit.messages.first.content, equals('Hello cancel'));
+    });
+
+    test('stop() while executing tool prevents subsequent tool execution',
+        () async {
+      var firstExecuted = false;
+      var secondExecuted = false;
+
+      toolRegistry.register(
+        RegisteredTool(
+          name: 'slow_action',
+          description: 'Slow tier 1 action',
+          parameters: const {'type': 'object'},
+          securityTier: SecurityTier.tier1Auto,
+          execute: (args) async {
+            firstExecuted = true;
+            await Future.delayed(const Duration(milliseconds: 300));
+            return const Right('slow done');
+          },
+        ),
+      );
+
+      toolRegistry.register(
+        RegisteredTool(
+          name: 'fast_action',
+          description: 'Fast tier 1 action',
+          parameters: const {'type': 'object'},
+          securityTier: SecurityTier.tier1Auto,
+          execute: (args) async {
+            secondExecuted = true;
+            return const Right('fast done');
+          },
+        ),
+      );
+
+      var llmCalls = 0;
+      when(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: any(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+          )).thenAnswer((_) async {
+        llmCalls++;
+        if (llmCalls == 1) {
+          return Right(Stream.fromIterable([
+            const ChatChunk(
+              toolCallDeltas: [
+                ToolCallDelta(
+                  index: 0,
+                  id: 'call_slow',
+                  name: 'slow_action',
+                  argumentsFragment: '{}',
+                ),
+                ToolCallDelta(
+                  index: 1,
+                  id: 'call_fast',
+                  name: 'fast_action',
+                  argumentsFragment: '{}',
+                ),
+              ],
+              finishReason: 'tool_calls',
+            ),
+          ]));
+        }
+        return Right(Stream.fromIterable([
+          const ChatChunk(
+            contentDelta: 'Should not reach here.',
+            finishReason: 'stop',
+          ),
+        ]));
+      });
+
+      final sendFuture = cubit.sendMessage('Run both');
+
+      // Wait until first tool starts executing.
+      var attempts = 0;
+      while (cubit.state is! ExecutingTool && attempts < 200) {
+        await Future.delayed(const Duration(milliseconds: 10));
+        attempts++;
+      }
+      expect(cubit.state, isA<ExecutingTool>());
+
+      await cubit.stop();
+      await sendFuture;
+
+      expect(firstExecuted, isTrue);
+      expect(secondExecuted, isFalse);
+      expect(llmCalls, equals(1));
+      expect(cubit.state, isA<AgentIdle>());
+      final idle = cubit.state as AgentIdle;
+      expect(idle.messages, equals(cubit.messages));
     });
   });
 }
