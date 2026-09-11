@@ -1,4 +1,6 @@
 import 'package:equatable/equatable.dart';
+import 'package:flutter_ai_agent/features/chat/domain/models/action_step.dart';
+import 'package:flutter_ai_agent/features/chat/domain/models/generative_card_data.dart';
 
 /// Represents a delta update for a tool call in a streaming response.
 class ToolCallDelta extends Equatable {
@@ -67,6 +69,9 @@ class ChatMessage extends Equatable {
   final List<ToolCallDelta>? toolCalls;
   final String? toolCallId;
   final String? name;
+  final List<ActionStep>? actionSteps;
+  final ActionConfirmationData? confirmationCard;
+  final SummaryCardData? summaryCard;
 
   const ChatMessage({
     required this.role,
@@ -74,6 +79,9 @@ class ChatMessage extends Equatable {
     this.toolCalls,
     this.toolCallId,
     this.name,
+    this.actionSteps,
+    this.confirmationCard,
+    this.summaryCard,
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
@@ -118,7 +126,16 @@ class ChatMessage extends Equatable {
   }
 
   @override
-  List<Object?> get props => [role, content, toolCalls, toolCallId, name];
+  List<Object?> get props => [
+        role,
+        content,
+        toolCalls,
+        toolCallId,
+        name,
+        actionSteps,
+        confirmationCard,
+        summaryCard,
+      ];
 }
 
 /// A single chunk from an SSE streaming response.
