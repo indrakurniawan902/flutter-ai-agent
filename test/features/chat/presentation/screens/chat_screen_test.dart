@@ -146,7 +146,7 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
 
-    testWidgets('renders tool call and tool result cards', (tester) async {
+    testWidgets('renders tool call and tool result cards and expands JSON content', (tester) async {
       when(() => mockAgentCubit.messages).thenReturn([
         const ChatMessage(
           role: 'assistant',
@@ -172,6 +172,19 @@ void main() {
 
       expect(find.text('Tool: get_location'), findsOneWidget);
       expect(find.text('Result: get_location'), findsOneWidget);
+
+      // Expand tool call card to inspect arguments JSON
+      await tester.tap(find.text('Tool: get_location'));
+      await tester.pumpAndSettle();
+      expect(find.text('{"accuracy": "high"}'), findsOneWidget);
+
+      // Expand tool result card to inspect result JSON
+      await tester.tap(find.text('Result: get_location'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('{"latitude": 37.7749, "longitude": -122.4194}'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('renders ExecutingTool indicator when tool is running', (tester) async {
