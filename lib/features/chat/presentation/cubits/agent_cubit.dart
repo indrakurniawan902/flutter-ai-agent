@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:flutter_ai_agent/core/errors/failures.dart';
 import 'package:flutter_ai_agent/features/chat/data/llm_repository.dart';
 import 'package:flutter_ai_agent/features/chat/data/models/chat_models.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
@@ -95,6 +96,29 @@ class AgentCubit extends Cubit<AgentState> {
         pending.name,
         pending.parameters,
       );
+
+      final isPermissionFailure = resultEither.fold(
+        (failure) => failure is PermissionFailure ? failure : null,
+        (_) => null,
+      );
+
+      if (isPermissionFailure != null) {
+        _pendingTurnToolCalls.clear();
+        _messages.add(ChatMessage(
+          role: 'tool',
+          toolCallId: pending.id,
+          name: pending.name,
+          content: 'Error: ${isPermissionFailure.message}',
+        ));
+        final informativeMessage =
+            'I cannot complete this action because permission was denied (${pending.name}: ${isPermissionFailure.message}). Please grant the required permission in device settings to continue.';
+        _messages.add(ChatMessage(
+          role: 'assistant',
+          content: informativeMessage,
+        ));
+        emit(AgentSuccess(informativeMessage, messages: List.unmodifiable(_messages)));
+        return;
+      }
 
       final resultText = resultEither.fold(
         (failure) => 'Error: ${failure.message}',
@@ -195,6 +219,29 @@ class AgentCubit extends Cubit<AgentState> {
         toolName,
         arguments,
       );
+
+      final isPermissionFailure = execResult.fold(
+        (failure) => failure is PermissionFailure ? failure : null,
+        (_) => null,
+      );
+
+      if (isPermissionFailure != null) {
+        _pendingTurnToolCalls.clear();
+        _messages.add(ChatMessage(
+          role: 'tool',
+          toolCallId: callId,
+          name: toolName,
+          content: 'Error: ${isPermissionFailure.message}',
+        ));
+        final informativeMessage =
+            'I cannot complete this action because permission was denied ($toolName: ${isPermissionFailure.message}). Please grant the required permission in device settings to continue.';
+        _messages.add(ChatMessage(
+          role: 'assistant',
+          content: informativeMessage,
+        ));
+        emit(AgentSuccess(informativeMessage, messages: List.unmodifiable(_messages)));
+        return;
+      }
 
       final resultStr = execResult.fold(
         (failure) => 'Error: ${failure.message}',

@@ -2,6 +2,16 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Flames requires access to your location for location-based tools and context.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Flames requires access to your calendar to view and schedule events.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Flames requires camera access for visual perception and image analysis.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Flames requires photo library access to inspect and process images.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Flames requires microphone access for voice input and audio processing.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
