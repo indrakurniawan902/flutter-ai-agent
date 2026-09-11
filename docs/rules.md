@@ -2,10 +2,13 @@
 
 > Coding conventions and working agreements for **Flames** (`ai.hermes.flames`, package `flutter_ai_agent`).
 > Read this together with [`architecture.md`](./architecture.md) (structure) and
-> [`design-system.md`](./design-system.md) (visuals).
+> [`design-system.md`](./design-system.md) (visuals). For the file-by-file
+> current → target moves, see [`MIGRATION-PLAN.md`](./MIGRATION-PLAN.md).
 >
-> These rules describe how this codebase is actually written. Follow them so new
-> code is indistinguishable from existing code.
+> These rules describe the **target** layer-first conventions for this
+> codebase. The repo still physically lives at the old feature-first layout
+> (`lib/features/...`); follow this document (and the migration plan) when
+> writing or moving code so the tree converges on the target.
 
 ---
 
@@ -13,12 +16,12 @@
 
 1. **Match the surrounding code.** Copy the nearest existing feature's structure, naming, and idioms rather than inventing a new style.
 2. **Respect the layers.** `presentation → domain ← data`. UI never imports `data/` types; `domain` imports nothing framework-specific or data-specific.
-3. **Cubit is Presentation.** Cubits and their States **MUST** reside in `presentation/cubits/`. **NEVER** put a Cubit, State, or `flutter_bloc` import in `domain/`.
-4. **No Shim / Re-export files.** Never leave backward-compatibility shims like `export 'screens/foo_screen.dart';` in feature roots. Place files directly in their target subfolder (`screens/`, `cubits/`, `widgets/`) and import the real path.
+3. **Cubit is Presentation.** Cubits and their States **MUST** reside in `presentation/screen/<feature>/cubit/`. **NEVER** put a Cubit, State, or `flutter_bloc` import in `domain/`.
+4. **No Shim / Re-export files.** Never leave backward-compatibility shims like `export 'screens/foo_screen.dart';` in feature roots or in `domain/`. Place files directly in their target subfolder and import the real path.
 5. **Contract-First Repositories.** Define abstract interfaces in `domain/repositories/` and implement them in `data/repositories/`.
-6. **Functional Error Handling.** Use `Either<Failure, T>` from `dartz`. Catch all HTTP, socket, and storage exceptions at the data layer boundary and translate them to typed `Failure` subclasses from `core/errors/failures.dart`.
+6. **Functional Error Handling.** Use `Either<Failure, T>` from `dartz`. Catch all HTTP, socket, and storage exceptions at the data layer boundary and translate them to typed `Failure` subclasses from `common/failure.dart`.
 7. **Zero Emoji in Chrome.** Never use emojis in UI icons, buttons, navigation headers, or cards. Use `Icons.*` only.
-8. **Test with Mocktail.** Shared mocks live in `test/helpers/mocks.dart`. Use the AAA pattern. Test tree **must mirror** `lib/` (Cubit tests in `test/.../presentation/cubits/`).
+8. **Test with Mocktail.** Shared mocks live in `test/helpers/mocks.dart`. Use the AAA pattern. Test tree **must mirror** `lib/` (Cubit tests in `test/presentation/screen/<feature>/cubit/`).
 9. **VPS CPU Discipline.** When compiling or testing on the VPS (2 vCPU), always serialize heavy commands with `flock /tmp/flutter.lock`. Never run parallel flutter compiles.
 10. **Definition of Done (DoD).** `flutter analyze` clean (0 issues) and `flutter test` 100% green before committing or declaring work complete.
 
@@ -26,20 +29,33 @@
 
 ## 2. Project Structure Rules
 
-- Features live in `lib/features/<feature>/` following Clean Architecture:
-  - `data/`: `datasources/`, `models/`, `repositories/`, `tools/`
-  - `domain/`: `entities/`, `models/`, `repositories/`, `usecases/`, `tools/`
-  - `presentation/`: `cubits/`, `screens/`, `widgets/`
-- Shared/cross-cutting infrastructure belongs in `lib/core/`:
-  - `core/di/`: Dependency injection (`injection_container.dart`)
-  - `core/errors/`: Failures and exception definitions (`failures.dart`)
-  - `core/constants/`: App constants, defaults, storage keys (`constants.dart`)
-  - `core/theme/`: Theme data and colors (`app_theme.dart`, `hermes_theme.dart`)
-  - `core/extensions/`: Shared extensions (`either_extensions.dart`)
-- Test mirrors `lib/`:
-  - Cubit tests go to `test/features/<feature>/presentation/cubits/<feature>_cubit_test.dart` (NOT in domain!).
-  - Screen tests go to `test/features/<feature>/presentation/screens/<feature>_screen_test.dart`.
-  - Repository/Datasource tests go to `test/features/<feature>/data/...`.
+- Layout is **layer-first**: `lib/{common,data,domain,presentation,utils}/`
+  per [`architecture.md §2`](./architecture.md#2-top-level-layout--layers-first-features-inside).
+  There is **no** `lib/features/<feature>/` folder and no
+  `lib/features/<feature>/{data,domain,presentation}` nesting.
+- A "feature" is a *name* repeated across the layers:
+  `data/datasources/remote/<feature>/`, `data/models/<feature>/`,
+  `data/repositories/<feature>_repository_impl.dart`,
+  `domain/entities/<feature>/`, `domain/repositories/<feature>/`,
+  `domain/usecase/<feature>/`, `presentation/screen/<feature>/`.
+- Cross-cutting infrastructure goes in `lib/common/`:
+  - `common/injection/`: DI container and `injection.config.dart` (generated)
+  - `common/constant.dart`: App constants, defaults, storage keys
+  - `common/failure.dart`: `Failure` hierarchy and exceptions
+  - `common/exception.dart`: `ServerException` / `DatabaseException` / `CacheException`
+  - `common/remote_response_mapper.dart`: `ResponseMapper<T>` marker interface
+  - `common/hive_constant.dart`: Hive box names + type IDs
+- Generic helpers and design tokens go in `lib/utils/`:
+  - `utils/app_theme.dart`, `utils/hermes_theme.dart` (tokens)
+  - `utils/either_extensions.dart`, `utils/dio_err_handler.dart` (helpers)
+- Shared widgets go in `lib/presentation/widget/`; screen-local widgets stay
+  inline in the feature's `presentation/screen/<feature>/`.
+- Folder names stay **singular** — `usecase/` (not `usecases/`),
+  `<feature>_datasource.dart` (not `<feature>_datasources.dart`).
+- Local datasources go under `data/datasources/local/<feature>/`, remote ones
+  under `data/datasources/remote/<feature>/` — don't nest one under the other.
+- Tests mirror the same tree under `test/` (`test/domain/usecase/<feature>/`,
+  `test/presentation/screen/<feature>/cubit/`, ...).
 
 ---
 
@@ -55,12 +71,20 @@
 | State | `<Feature>State` | `AgentState`, `AgentStreaming` |
 | Repo interface | `<Feature>Repository` | `LlmRepository`, `ServerProfileRepository` |
 | Repo impl | `<Feature>RepositoryImpl` | `LlmRepositoryImpl` |
-| Remote DataSource | `<Feature>RemoteDataSource` | `LlmRemoteDataSource` |
-| Local DataSource | `<Feature>LocalDataSource` / Service | `SecureStorageService` |
-| Model (DTO) | `<Thing>Model` / `<Thing>Payload` | `ServerProfileModel`, `PairingPayload` |
-| Entity | `<Thing>` / `<Thing>Entity` | `ServerProfile`, `ChatMode` |
+| Usecase | `<Verb><Noun>Usecase` (lowercase `c`) | `SendChatMessageUsecase` |
+| Remote DataSource | `<Feature>Datasource` (abstract) / `...Impl` | `LlmDatasource` / `LlmDatasourceImpl` |
+| Remote model (DTO) | `<Feature>RemoteResponse` | `ChatMessageRemoteResponse` |
+| Local model (Hive) | `<Feature>LocalModel` | `ChatMessageLocalModel` |
+| Entity | `<Thing>` (plain class, no suffix) | `ServerProfile`, `ChatMode` |
 | Screen | `<Thing>Screen` | `ChatScreen`, `SettingsScreen` |
 | Widget | `<Thing>` / `<Thing>Sheet` / `<Thing>Card` | `ActionApprovalSheet`, `ToolCallCard` |
+
+Keep usecase classes suffixed `Usecase` (lowercase `c`), state variants
+suffixed `Error` (not `Failed`), and DTOs suffixed `RemoteResponse` / `LocalModel` —
+pick one and use it consistently across every feature.
+
+JSON keys from an API are sometimes PascalCase or another casing — map them
+with `@JsonKey(name: '...')` to camelCase Dart fields.
 
 ---
 
@@ -69,7 +93,7 @@
 ### Domain Layer
 - **Pure Dart**: Only depends on Dart standard library, `equatable`, and `dartz`.
 - **NO UI dependencies**: Never import `flutter/material.dart`, `flutter_bloc`, `flutter/widgets.dart`.
-- **NO Data dependencies**: Never import anything from `lib/features/<feature>/data/`.
+- **NO Data dependencies**: Never import anything from `data/` (no DTOs, no `data/datasources/`, no `data/repositories/`, no `data/tools/`).
 
 ### Presentation Layer
 - Contains all UI and state management components.
@@ -90,7 +114,8 @@
 2. Do not use events or `Bloc<Event, State>`. Cubit methods are invoked directly by the UI or callers.
 3. Every state must be immutable and extend `Equatable`.
 4. Cubit constructor should accept dependencies via constructor injection (e.g. Repositories or Services) so it can be cleanly mocked with `mocktail` in unit tests.
-5. Provide a factory constructor or register in GetIt container (`injection_container.dart`).
+5. Annotate the cubit `@injectable`; resolve it via `getIt<XCubit>()` as a `State` field on the screen, trigger the initial action in `initState`, and wrap the subtree in `BlocProvider<X>.value(...)`.
+6. `presentation/screen/<feature>/cubit/<feature>_state.dart` is a `part of` the cubit — the pair lives together, never in `domain/`.
 
 ---
 
@@ -100,7 +125,9 @@
 2. Shared mocks are kept central in `test/helpers/mocks.dart`.
 3. Test files follow the AAA (Arrange, Act, Assert) structure.
 4. For Cubit testing, use `blocTest` from `bloc_test` package for state transition assertions.
-5. All tests must be 100% passing before any commit.
+5. **Mock one layer down, never further.** A cubit test mocks its usecase; a usecase test mocks its repository interface; a repository test mocks its datasource.
+6. Test files **strictly mirror** `lib/` under `test/` — `test/<same path>/<file>_test.dart`. Cubit tests go to `test/presentation/screen/<feature>/cubit/<feature>_cubit_test.dart`, NOT in a `test/.../domain/` path.
+7. All tests must be 100% passing before any commit.
 
 ---
 
@@ -108,11 +135,126 @@
 
 Before committing or declaring a task complete:
 
-- [ ] Folder structure matches Clean Architecture (§2).
-- [ ] No misplaced Cubits in `domain/`.
-- [ ] No re-export shim files left behind.
+- [ ] Folder structure matches the layer-first tree (§2) — **no `lib/features/`**.
+- [ ] No misplaced Cubits in `domain/` (no `flutter_bloc` import under `domain/`).
+- [ ] No re-export shim files left behind (delete the shim, update imports).
+- [ ] No DTOs (`*RemoteResponse` / `*LocalModel`) in `domain/`.
+- [ ] No parallel `lib/core/` next to `lib/common/`.
+- [ ] Usecase folders are singular (`domain/usecase/`, not `use cases`/`usecases/`).
+- [ ] Tests mirror the layer tree (`test/presentation/screen/<feature>/cubit/`, ...), not `test/features/`.
 - [ ] Code follows naming conventions (§3).
 - [ ] Zero emoji icons in chrome/UI (§1).
 - [ ] `flutter analyze` runs with **zero issues**.
 - [ ] `flutter test` runs with **100% passing tests**.
-- [ ] All new dependencies registered in `injection_container.dart`.
+- [ ] All new dependencies registered via `@injectable` / `configureInjection()`.
+
+---
+
+## 8. Layout Traps (read this before "fixing" the structure)
+
+These are the specific ways this layout has been broken before. All of them
+make the tree harder to read, none of them are improvements:
+
+- **Do not reintroduce `lib/features/`.** A layer-first tree is the point: all
+  repository contracts are in `domain/repositories/`, all usecases in
+  `domain/usecase/`, all screens in `presentation/screen/`. Folding a feature's
+  three layers into one folder means answering "what calls the network?" now
+  requires opening every feature folder.
+- **Do not leave re-export shim files.** A one-line
+  `export '../presentation/cubits/x_cubit.dart';` sitting in `domain/` is not
+  "backwards compatibility" — it is a cubit in the wrong layer with a decoy
+  path. If something moved, update the imports and delete the shim. (Flames has
+  exactly these today: `lib/features/chat/domain/agent_cubit.dart` and friends —
+  the migration deletes them, see `MIGRATION-PLAN.md`.)
+- **Do not put a Cubit or `flutter_bloc` import in `domain/`.** Not in
+  `domain/`, not in `domain/usecase/`, not anywhere under `domain/`. State
+  management is presentation-only
+  ([`architecture.md §6`](./architecture.md#6-state-management-cubit)).
+- **Do not put DTOs in `domain/`.** `*RemoteResponse` / `*LocalModel` live in
+  `data/models/`; `domain/entities/` holds the plain class the UI consumes,
+  produced by `toDomain()`.
+- **Do not create a parallel `lib/core/` next to `lib/common/`.** Cross-cutting
+  infra has one home (`lib/common/`) plus `lib/utils/` for design tokens and
+  helpers. Two folders holding the same four files is exactly the "berantakan"
+  this convention exists to prevent. (Flames has this today: `lib/core/*` vs
+  `lib/common/*` — the migration collapses them.)
+- **Do not hand-roll DI registration** where an `@injectable` annotation would
+  do — hand-written `sl.register*` lines drift out of sync with the generated
+  `injection.config.dart`.
+
+---
+
+## 9. Networking & Data
+
+- **No raw `Dio` outside datasources.** Datasources receive the injected
+  `Dio` instance via constructor; nothing else should call `Dio` directly.
+- **Error mapping:** catch `DioException` in the repository impl and route
+  it through the shared `DioErrHandler.handleDioError(...)` into a
+  `Failure` — prefer this over a bespoke try/catch per repository.
+- **DTO to Entity boundary:** datasources return `<Feature>RemoteResponse` /
+  `<Feature>LocalModel`, both implementing `ResponseMapper<T>`. Repository
+  impls call `.toDomain()` and return `Either<Failure, Entity>`. The UI layer
+  must never consume a `*RemoteResponse`/`*LocalModel` directly.
+- **Cache-first for cacheable features:** check the local Hive datasource
+  first, fall back to remote, persist remote → local on success. Not every
+  feature needs a cache — only add one where it actually helps.
+- **Model rules:** `json_serializable` DTOs with `@JsonKey(name: '...')`
+  mapping; Hive local models with `@HiveType`/`@HiveField` and a
+  `fromRemote(...)`/`fromDomain(...)` bridge factory.
+
+---
+
+## 10. UI & Widgets
+
+- Colors via `AppTheme` / `HermesColors.*`; text via the theme's typography /
+  shared text widget's named constructors. No bare `TextStyle(...)` or literal
+  hex in new widgets.
+- Reuse `lib/presentation/widget/` components before building new UI;
+  promote a screen-local widget there only when a second feature needs it.
+- Handle all three `BlocBuilder` branches: Loading (`CircularProgressIndicator`)
+  → Error (human-readable message) → Success (content).
+- **Zero emoji in chrome.** `Icons.*` only (`Icons.settings`, `Icons.terminal`,
+  `Icons.security`, ...).
+
+---
+
+## 11. Error Handling & Logging
+
+- Convert exceptions to `Failure` subclasses at the repository boundary
+  (`lib/common/failure.dart`); cubits and UI only ever see `Either<Failure, T>`
+  / a `Failure.message` string, never a raw exception.
+- Datasources throw plain exceptions from `lib/common/exception.dart`
+  (`ServerException`, `DatabaseException`, `CacheException`).
+- **No `print()` in committed code.** Use proper logging if you need
+  runtime visibility.
+
+---
+
+## 12. Code Generation & Tooling
+
+Run codegen after touching `json_serializable` models, `@HiveType` models,
+or `@injectable`/`@LazySingleton`/`@module`-annotated classes:
+
+```bash
+flock /tmp/flutter.lock dart run build_runner build --delete-conflicting-outputs
+```
+
+Lint/analyze before finishing:
+
+```bash
+flock /tmp/flutter.lock flutter analyze
+```
+
+Lints come from the stock `flutter_lints` set via `analysis_options.yaml`
+(no project-specific overrides today). Keep `flutter analyze` output clean —
+fix warnings introduced by your change.
+
+---
+
+## 13. Git & PRs
+
+- Keep changes scoped to the task; avoid drive-by refactors.
+- Don't commit unless asked; stage specific files rather than `git add .`.
+- PR description: what changed, why, what was verified (analyze/build/manual).
+- Intermediate/routine commits on feature branches use `[skip ci]` to save
+  CI quota.
