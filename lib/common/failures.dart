@@ -24,3 +24,7 @@ class NetworkFailure extends Failure {
 class StorageFailure extends Failure {
   const StorageFailure([super.message = 'Storage error occurred']);
 }
+
+class PermissionFailure extends Failure {
+  const PermissionFailure([super.message = 'Permission denied']);
+}
