@@ -1,6 +1,6 @@
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_ai_agent/core/theme/app_theme.dart';
+import 'package:flutter_ai_agent/utils/app_theme.dart';
 import 'package:flutter_ai_agent/features/server_profiles/domain/entities/server_profile.dart';
 import 'package:flutter_ai_agent/features/server_profiles/presentation/cubits/server_profile_cubit.dart';
 import 'package:flutter_ai_agent/features/server_profiles/presentation/cubits/server_profile_state.dart';

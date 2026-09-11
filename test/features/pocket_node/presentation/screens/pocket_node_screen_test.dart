@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_ai_agent/core/theme/hermes_theme.dart';
+import 'package:flutter_ai_agent/utils/hermes_theme.dart';
 import 'package:flutter_ai_agent/features/pocket_node/presentation/screens/pocket_node_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 

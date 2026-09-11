@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_ai_agent/core/constants/constants.dart';
-import 'package:flutter_ai_agent/core/theme/app_theme.dart';
+import 'package:flutter_ai_agent/common/constant.dart';
+import 'package:flutter_ai_agent/utils/app_theme.dart';
 import 'package:flutter_ai_agent/features/navigation/presentation/screens/main_navigation_shell.dart';
 import 'package:flutter_ai_agent/features/splash/presentation/screens/splash_screen.dart';
 

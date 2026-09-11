@@ -1,5 +1,5 @@
 import 'package:bloc_test/bloc_test.dart';
-import 'package:flutter_ai_agent/core/constants/constants.dart';
+import 'package:flutter_ai_agent/common/constant.dart';
 import 'package:flutter_ai_agent/features/server_profiles/domain/entities/server_profile.dart';
 import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_cubit.dart';
 import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_state.dart';
