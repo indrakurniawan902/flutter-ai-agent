@@ -33,12 +33,25 @@ void main() {
     isActive: false,
   );
 
+  setUpAll(() {
+    registerFallbackValue(
+      const ServerProfile(
+        id: 'fallback',
+        name: 'fallback',
+        gatewayUrl: 'https://fallback.com',
+        token: 'fallback',
+      ),
+    );
+  });
+
   setUp(() {
     mockSettingsCubit = MockSettingsCubit();
     mockServerProfileCubit = MockServerProfileCubit();
     when(() => mockServerProfileCubit.state).thenReturn(
       const ServerProfileLoaded(profiles: [], activeProfile: null),
     );
+    when(() => mockSettingsCubit.updateFromProfile(any()))
+        .thenAnswer((_) {});
   });
 
   Widget buildTestWidget({
@@ -522,6 +535,67 @@ void main() {
             token: any(named: 'token'),
             makeActive: any(named: 'makeActive'),
           ));
+    });
+
+    testWidgets(
+        'updates model and temperature fields and calls updateFromProfile when ServerProfileOperationSuccess emitted',
+        (tester) async {
+      when(() => mockSettingsCubit.state).thenReturn(
+        const SettingsLoaded(
+          baseUrl: 'https://old-url.com/v1',
+          apiKey: 'sk-old-key',
+          model: 'old-model',
+          temperature: 0.7,
+        ),
+      );
+
+      final customProfile = ServerProfile(
+        id: 'p-custom',
+        name: 'Custom Server',
+        gatewayUrl: 'https://custom-server.com/v1',
+        token: 'sk-custom-token',
+        isActive: true,
+        model: 'custom-model-x',
+        temperature: 1.2,
+      );
+
+      whenListen(
+        mockServerProfileCubit,
+        Stream.fromIterable([
+          ServerProfileOperationSuccess(
+            profiles: [customProfile],
+            activeProfile: customProfile,
+            message: 'Switched to profile "Custom Server"',
+          ),
+        ]),
+        initialState: const ServerProfileLoaded(profiles: [], activeProfile: null),
+      );
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final modelField = tester.widget<TextFormField>(
+        find.byKey(const Key('settings_model_field')),
+      );
+      expect(modelField.controller?.text, 'custom-model-x');
+
+      final tempField = tester.widget<TextFormField>(
+        find.byKey(const Key('settings_temperature_field')),
+      );
+      expect(tempField.controller?.text, '1.2');
+
+      final baseUrlField = tester.widget<TextFormField>(
+        find.byKey(const Key('settings_base_url_field')),
+      );
+      expect(baseUrlField.controller?.text, 'https://custom-server.com/v1');
+
+      final apiKeyField = tester.widget<TextFormField>(
+        find.byKey(const Key('settings_api_key_field')),
+      );
+      expect(apiKeyField.controller?.text, 'sk-custom-token');
+
+      verify(() => mockSettingsCubit.updateFromProfile(customProfile)).called(1);
     });
   });
 }

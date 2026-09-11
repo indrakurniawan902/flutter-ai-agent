@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:flutter_ai_agent/core/constants/constants.dart';
 import 'package:flutter_ai_agent/features/pairing/data/models/pairing_payload.dart';
 
 /// Represents a configuration profile for a remote or local Hermes server gateway.
@@ -9,6 +10,8 @@ class ServerProfile extends Equatable {
   final String token;
   final bool isActive;
   final DateTime? lastConnected;
+  final String model;
+  final double temperature;
 
   const ServerProfile({
     required this.id,
@@ -17,6 +20,8 @@ class ServerProfile extends Equatable {
     required this.token,
     this.isActive = false,
     this.lastConnected,
+    this.model = AppConstants.defaultModel,
+    this.temperature = AppConstants.defaultTemperature,
   });
 
   /// Creates a copy of this ServerProfile with updated fields.
@@ -28,6 +33,8 @@ class ServerProfile extends Equatable {
     bool? isActive,
     DateTime? lastConnected,
     bool clearLastConnected = false,
+    String? model,
+    double? temperature,
   }) {
     return ServerProfile(
       id: id ?? this.id,
@@ -36,6 +43,8 @@ class ServerProfile extends Equatable {
       token: token ?? this.token,
       isActive: isActive ?? this.isActive,
       lastConnected: clearLastConnected ? null : (lastConnected ?? this.lastConnected),
+      model: model ?? this.model,
+      temperature: temperature ?? this.temperature,
     );
   }
 
@@ -45,6 +54,8 @@ class ServerProfile extends Equatable {
     String? id,
     bool isActive = false,
     DateTime? lastConnected,
+    String? model,
+    double? temperature,
   }) {
     return ServerProfile(
       id: id ?? DateTime.now().millisecondsSinceEpoch.toString(),
@@ -53,6 +64,8 @@ class ServerProfile extends Equatable {
       token: payload.token,
       isActive: isActive,
       lastConnected: lastConnected,
+      model: model ?? AppConstants.defaultModel,
+      temperature: temperature ?? AppConstants.defaultTemperature,
     );
   }
 
@@ -64,6 +77,8 @@ class ServerProfile extends Equatable {
         token,
         isActive,
         lastConnected,
+        model,
+        temperature,
       ];
 
   @override
@@ -75,7 +90,9 @@ class ServerProfile extends Equatable {
           gatewayUrl == other.gatewayUrl &&
           token == other.token &&
           isActive == other.isActive &&
-          lastConnected == other.lastConnected);
+          lastConnected == other.lastConnected &&
+          model == other.model &&
+          temperature == other.temperature);
 
   @override
   int get hashCode => Object.hash(
@@ -85,5 +102,7 @@ class ServerProfile extends Equatable {
         token,
         isActive,
         lastConnected,
+        model,
+        temperature,
       );
 }

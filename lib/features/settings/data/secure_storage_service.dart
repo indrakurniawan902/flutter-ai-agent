@@ -216,6 +216,8 @@ class SecureStorageService {
       await Future.wait([
         saveBaseUrl(active!.gatewayUrl),
         saveApiKey(active!.token),
+        saveModel(active!.model),
+        saveTemperature(active!.temperature),
       ]);
     }
   }

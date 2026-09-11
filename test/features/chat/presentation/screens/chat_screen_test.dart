@@ -37,6 +37,7 @@ void main() {
     when(() => mockAgentCubit.state).thenReturn(const AgentIdle());
     when(() => mockAgentCubit.messages).thenReturn([]);
     when(() => mockAgentCubit.stream).thenAnswer((_) => stateController.stream);
+    when(() => mockAgentCubit.stop()).thenAnswer((_) async {});
 
     when(() => mockSettingsCubit.state).thenReturn(
       const SettingsLoaded(
@@ -428,6 +429,63 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Analyzing the query\nFormulating response'), findsOneWidget);
+    });
+  });
+
+  group('ChatScreen - Stop Generation', () {
+    testWidgets('stop button is not rendered when state is AgentIdle',
+        (tester) async {
+      when(() => mockAgentCubit.state).thenReturn(const AgentIdle());
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+
+      expect(find.byKey(const Key('chat_stop_button')), findsNothing);
+    });
+
+    testWidgets('stop button is rendered when state is AgentThinking',
+        (tester) async {
+      when(() => mockAgentCubit.state).thenReturn(const AgentThinking());
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+
+      expect(find.byKey(const Key('chat_stop_button')), findsOneWidget);
+    });
+
+    testWidgets('stop button is rendered when state is AgentStreaming',
+        (tester) async {
+      when(() => mockAgentCubit.state)
+          .thenReturn(const AgentStreaming('partial'));
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+
+      expect(find.byKey(const Key('chat_stop_button')), findsOneWidget);
+    });
+
+    testWidgets('stop button is rendered when state is ExecutingTool',
+        (tester) async {
+      when(() => mockAgentCubit.state)
+          .thenReturn(const ExecutingTool('get_location'));
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+
+      expect(find.byKey(const Key('chat_stop_button')), findsOneWidget);
+    });
+
+    testWidgets('tapping stop button calls cubit.stop()', (tester) async {
+      when(() => mockAgentCubit.state)
+          .thenReturn(const AgentStreaming('partial'));
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('chat_stop_button')));
+      await tester.pump();
+
+      verify(() => mockAgentCubit.stop()).called(1);
     });
   });
 }

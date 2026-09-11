@@ -1,3 +1,4 @@
+import 'package:flutter_ai_agent/core/constants/constants.dart';
 import 'package:flutter_ai_agent/features/server_profiles/domain/entities/server_profile.dart';
 
 /// Data model representing [ServerProfile] with serialization/deserialization.
@@ -9,6 +10,8 @@ class ServerProfileModel extends ServerProfile {
     required super.token,
     super.isActive = false,
     super.lastConnected,
+    super.model = AppConstants.defaultModel,
+    super.temperature = AppConstants.defaultTemperature,
   });
 
   /// Factory to construct model from a [ServerProfile] entity.
@@ -20,6 +23,8 @@ class ServerProfileModel extends ServerProfile {
       token: entity.token,
       isActive: entity.isActive,
       lastConnected: entity.lastConnected,
+      model: entity.model,
+      temperature: entity.temperature,
     );
   }
 
@@ -48,6 +53,19 @@ class ServerProfileModel extends ServerProfile {
       lastConnected = rawLastConnected;
     }
 
+    final rawModel = (json['model'])?.toString().trim() ?? '';
+    final model =
+        rawModel.isEmpty ? AppConstants.defaultModel : rawModel;
+
+    double temperature = AppConstants.defaultTemperature;
+    final rawTemperature = json['temperature'];
+    if (rawTemperature is num) {
+      temperature = rawTemperature.toDouble();
+    } else if (rawTemperature is String) {
+      temperature = double.tryParse(rawTemperature.trim()) ??
+          AppConstants.defaultTemperature;
+    }
+
     return ServerProfileModel(
       id: id,
       name: name,
@@ -55,6 +73,8 @@ class ServerProfileModel extends ServerProfile {
       token: token,
       isActive: isActive,
       lastConnected: lastConnected,
+      model: model,
+      temperature: temperature,
     );
   }
 
@@ -67,6 +87,8 @@ class ServerProfileModel extends ServerProfile {
       'token': token,
       'isActive': isActive,
       'lastConnected': lastConnected?.toIso8601String(),
+      'model': model,
+      'temperature': temperature,
     };
   }
 }
