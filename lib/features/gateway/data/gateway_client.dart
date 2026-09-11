@@ -113,6 +113,7 @@ class GatewayClient {
     if (_disposed) return;
 
     _manuallyDisconnected = false;
+    _reconnectAttempts = 0;
     _currentGatewayUrl = gatewayUrl;
     _currentToken = token;
 
@@ -267,8 +268,9 @@ class GatewayClient {
       return;
     }
 
+    final exponent = min(20, _reconnectAttempts - 1);
     final delayMs = (options.initialReconnectDelay.inMilliseconds *
-            pow(options.reconnectBackoffFactor, _reconnectAttempts - 1))
+            pow(options.reconnectBackoffFactor, exponent))
         .round();
     final cappedDelayMs = min(delayMs, options.maxReconnectDelay.inMilliseconds);
     final delay = Duration(milliseconds: cappedDelayMs);
@@ -289,7 +291,11 @@ class GatewayClient {
   /// Sends a raw JSON map across the WebSocket.
   void sendJson(Map<String, dynamic> json) {
     if (_socket != null) {
-      _socket!.send(jsonEncode(json));
+      try {
+        _socket!.send(jsonEncode(json));
+      } catch (_) {
+        // Socket write failure
+      }
     }
   }
 
