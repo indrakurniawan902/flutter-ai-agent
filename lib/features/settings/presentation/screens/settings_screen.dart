@@ -176,6 +176,8 @@ class _SettingsViewState extends State<_SettingsView> {
   Widget build(BuildContext context) {
     const tealAccent = Color(0xFF008080);
     const darkSurface = Color(0xFF0F172A);
+    const surfaceContainer = Color(0xFF1E293B);
+    const borderSlate = Color(0xFF334155);
 
     return Scaffold(
       backgroundColor: darkSurface,
@@ -280,6 +282,62 @@ class _SettingsViewState extends State<_SettingsView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    Container(
+                      key: const Key('settings_branding_header'),
+                      padding: const EdgeInsets.all(16),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: surfaceContainer,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: borderSlate, width: 0.8),
+                      ),
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.asset(
+                              'assets/images/flames_logo.png',
+                              key: const Key('settings_branding_logo'),
+                              width: 44,
+                              height: 44,
+                              cacheWidth: 88,
+                              cacheHeight: 88,
+                              fit: BoxFit.contain,
+                              excludeFromSemantics: true,
+                              errorBuilder: (_, _, _) => const Icon(
+                                Icons.bolt,
+                                color: tealAccent,
+                                size: 36,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: const [
+                                Text(
+                                  'Flames AI Agent',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Autonomous Device Workstation',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white70,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                     const Text(
                       'Configure OpenAI-compatible endpoint credentials and model parameters.',
                       style: TextStyle(

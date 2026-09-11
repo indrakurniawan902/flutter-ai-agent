@@ -2,9 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/core/constants/constants.dart';
 import 'package:flutter_ai_agent/core/theme/app_theme.dart';
 import 'package:flutter_ai_agent/features/navigation/presentation/screens/main_navigation_shell.dart';
+import 'package:flutter_ai_agent/features/splash/presentation/screens/splash_screen.dart';
 
 class App extends StatelessWidget {
-  const App({super.key});
+  final Widget? home;
+  final Duration? splashDuration;
+
+  const App({
+    super.key,
+    this.home,
+    this.splashDuration,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -12,7 +20,11 @@ class App extends StatelessWidget {
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
-      home: const MainNavigationShell(),
+      home: home ??
+          SplashScreen(
+            duration: splashDuration ?? const Duration(milliseconds: 2500),
+            nextScreen: const MainNavigationShell(),
+          ),
     );
   }
 }

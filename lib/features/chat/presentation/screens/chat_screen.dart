@@ -84,9 +84,29 @@ class _ChatScreenState extends State<ChatScreen> {
         builder: (context) {
           return Scaffold(
             appBar: AppBar(
-              title: const Text(
-                'Flames',
-                style: TextStyle(fontWeight: FontWeight.w600),
+              title: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Image.asset(
+                      'assets/images/flames_logo.png',
+                      key: const Key('chat_app_bar_logo'),
+                      width: 26,
+                      height: 26,
+                      cacheWidth: 52,
+                      cacheHeight: 52,
+                      fit: BoxFit.contain,
+                      excludeFromSemantics: true,
+                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Flames',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ],
               ),
               actions: [
                 IconButton(
