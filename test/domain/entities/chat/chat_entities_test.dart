@@ -197,7 +197,7 @@ void main() {
       ]));
     });
 
-    test('toJson never emits thought_process or thoughtProcess', () {
+    test('toJson serializes thought_process when present', () {
       const msg = ChatMessage(
         role: 'assistant',
         content: 'Sample content',
@@ -205,7 +205,7 @@ void main() {
       );
 
       final json = msg.toJson();
-      expect(json.containsKey('thought_process'), isFalse);
+      expect(json['thought_process'], equals('Internal thoughts'));
       expect(json.containsKey('thoughtProcess'), isFalse);
       expect(json['role'], equals('assistant'));
       expect(json['content'], equals('Sample content'));
