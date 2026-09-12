@@ -1,7 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter_ai_agent/data/models/chat/chat_remote_response.dart';
+import 'package:injectable/injectable.dart';
 
+@lazySingleton
 class SseParser {
   List<ChatChunkRemoteResponse> parse(String rawText) {
     final chunks = <ChatChunkRemoteResponse>[];

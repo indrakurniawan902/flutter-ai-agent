@@ -3,7 +3,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get_it/get_it.dart';
 
 import 'package:flutter_ai_agent/common/injection/injection.dart';
-import 'package:flutter_ai_agent/features/chat/data/llm_repository.dart';
+import 'package:flutter_ai_agent/data/datasources/remote/chat/chat_datasource.dart';
+import 'package:flutter_ai_agent/data/repositories/chat_repository_impl.dart';
+import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/calendar_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/camera_vision_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/clipboard_service.dart';
@@ -45,7 +47,11 @@ Future<void> initDependencies() async {
   // LLM Repository
   if (!sl.isRegistered<LlmRepository>()) {
     sl.registerLazySingleton<LlmRepository>(
-      () => LlmRepository(dio: sl<Dio>()),
+      () => LlmRepositoryImpl(
+        datasource: sl.isRegistered<ChatDatasource>()
+            ? sl<ChatDatasource>()
+            : ChatDatasourceImpl(dio: sl<Dio>()),
+      ),
     );
   }
 

@@ -5,7 +5,7 @@ import 'package:device_calendar/device_calendar.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_ai_agent/data/datasources/remote/chat/chat_datasource.dart';
-import 'package:flutter_ai_agent/features/chat/data/llm_repository.dart';
+import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/calendar_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/camera_vision_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/clipboard_service.dart';

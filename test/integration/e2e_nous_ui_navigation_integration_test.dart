@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_ai_agent/app.dart';
 import 'package:flutter_ai_agent/core/di/injection_container.dart';
-import 'package:flutter_ai_agent/features/chat/data/models/chat_models.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/models/chat/action_step.dart';
 import 'package:flutter_ai_agent/domain/models/chat/generative_card_data.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
