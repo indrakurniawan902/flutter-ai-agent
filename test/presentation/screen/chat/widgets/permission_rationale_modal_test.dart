@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/app_settings_opener.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/permission_rationale_modal.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
+
+class _MockAppSettingsOpener extends Mock implements AppSettingsOpener {}
 
 void main() {
   Widget buildTestableWidget(Widget child) {
@@ -379,6 +383,139 @@ void main() {
         find.byKey(const Key('permission_rationale_allow_btn')),
         findsOneWidget,
       );
+    });
+  });
+
+  group('PermissionRationaleModal isPermanentlyDenied', () {
+    testWidgets('displays notice and Buka Pengaturan label', (tester) async {
+      await tester.pumpWidget(
+        buildTestableWidget(
+          const PermissionRationaleModal(
+            permissionType: PermissionRationaleType.microphone,
+            isPermanentlyDenied: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(
+          const Key('permission_rationale_permanently_denied_notice'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'Izin ini ditolak permanen. Aktifkan manual dari pengaturan aplikasi di sistem.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Buka Pengaturan'), findsOneWidget);
+      expect(find.text('Izinkan'), findsNothing);
+      expect(containsEmoji(allText(tester)), isFalse);
+    });
+
+    testWidgets('tapping Buka Pengaturan triggers onOpenSettings',
+        (tester) async {
+      var called = false;
+      await tester.pumpWidget(
+        buildTestableWidget(
+          PermissionRationaleModal(
+            permissionType: PermissionRationaleType.microphone,
+            isPermanentlyDenied: true,
+            onOpenSettings: () => called = true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester
+          .tap(find.byKey(const Key('permission_rationale_allow_btn')));
+      await tester.pumpAndSettle();
+
+      expect(called, isTrue);
+    });
+
+    testWidgets(
+        'tapping Buka Pengaturan without callback opens app settings and pops true',
+        (tester) async {
+      final original = AppSettingsOpenerRegistry.instance;
+      final mockOpener = _MockAppSettingsOpener();
+      when(() => mockOpener.openAppSettings()).thenAnswer((_) async => true);
+      AppSettingsOpenerRegistry.instance = mockOpener;
+      addTearDown(() => AppSettingsOpenerRegistry.instance = original);
+
+      bool? result;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () async {
+                  result = await showPermissionRationale(
+                    context,
+                    PermissionRationaleType.microphone,
+                    isPermanentlyDenied: true,
+                  );
+                },
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      expect(find.text('Buka Pengaturan'), findsOneWidget);
+
+      await tester
+          .tap(find.byKey(const Key('permission_rationale_allow_btn')));
+      await tester.pumpAndSettle();
+
+      verify(() => mockOpener.openAppSettings()).called(1);
+      expect(result, isTrue);
+    });
+
+    testWidgets(
+        'pops true even when app settings opener throws',
+        (tester) async {
+      final original = AppSettingsOpenerRegistry.instance;
+      final mockOpener = _MockAppSettingsOpener();
+      when(() => mockOpener.openAppSettings())
+          .thenThrow(Exception('no settings activity'));
+      AppSettingsOpenerRegistry.instance = mockOpener;
+      addTearDown(() => AppSettingsOpenerRegistry.instance = original);
+
+      bool? result;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () async {
+                  result = await showPermissionRationale(
+                    context,
+                    PermissionRationaleType.camera,
+                    isPermanentlyDenied: true,
+                  );
+                },
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      await tester
+          .tap(find.byKey(const Key('permission_rationale_allow_btn')));
+      await tester.pumpAndSettle();
+
+      verify(() => mockOpener.openAppSettings()).called(1);
+      expect(result, isTrue);
     });
   });
 }
