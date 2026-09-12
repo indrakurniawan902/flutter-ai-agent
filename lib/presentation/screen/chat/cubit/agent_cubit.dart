@@ -10,6 +10,7 @@ import 'package:flutter_ai_agent/domain/entities/chat/chat_chunk.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
 import 'package:flutter_ai_agent/domain/models/chat/tool_call_request.dart';
+import 'package:flutter_ai_agent/domain/repositories/chat/chat_local_repository.dart';
 import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/security_policy.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
@@ -25,6 +26,8 @@ class AgentCubit extends Cubit<AgentState> {
   final LlmRepository _llmRepository;
   final ToolRegistry _toolRegistry;
   final SecureStorageService? _secureStorageService;
+  final ChatLocalRepository? _chatLocalRepository;
+  String activeProfileId;
   String baseUrl;
   String model;
   String? apiKey;
@@ -42,6 +45,7 @@ class AgentCubit extends Cubit<AgentState> {
   @factoryMethod
   factory AgentCubit.create({
     required LlmRepository llmRepository,
+    ChatLocalRepository? chatLocalRepository,
   }) =>
       AgentCubit(
         llmRepository: llmRepository,
@@ -51,12 +55,18 @@ class AgentCubit extends Cubit<AgentState> {
         secureStorageService: getIt.isRegistered<SecureStorageService>()
             ? getIt<SecureStorageService>()
             : null,
+        chatLocalRepository: chatLocalRepository ??
+            (getIt.isRegistered<ChatLocalRepository>()
+                ? getIt<ChatLocalRepository>()
+                : null),
       );
 
   AgentCubit({
     LlmRepository? llmRepository,
     ToolRegistry? toolRegistry,
     SecureStorageService? secureStorageService,
+    ChatLocalRepository? chatLocalRepository,
+    this.activeProfileId = 'default',
     this.baseUrl = 'https://api.openai.com/v1',
     this.model = 'gpt-4o',
     this.apiKey,
@@ -64,6 +74,7 @@ class AgentCubit extends Cubit<AgentState> {
   })  : _llmRepository = llmRepository ?? getIt<LlmRepository>(),
         _toolRegistry = toolRegistry ?? ToolRegistry(),
         _secureStorageService = secureStorageService, // ignore: prefer_initializing_formals
+        _chatLocalRepository = chatLocalRepository,
         super(const AgentIdle());
 
   /// Full conversation history.
@@ -71,6 +82,53 @@ class AgentCubit extends Cubit<AgentState> {
 
   /// Current pending tool call awaiting approval, if any.
   ToolCallRequest? get pendingToolCall => _pendingToolCall;
+
+  Future<void> _persistMessages() async {
+    final repo = _chatLocalRepository;
+    if (repo == null) return;
+    try {
+      await repo.saveMessages(activeProfileId, List.unmodifiable(_messages));
+    } catch (_) {
+      // Persistence failures must not break the ReAct loop.
+    }
+  }
+
+  /// Appends [message] to history, persists, and emits idle.
+  void addMessage(ChatMessage message) {
+    _messages.add(message);
+    unawaited(_persistMessages());
+    if (!isClosed) emit(AgentIdle(messages: List.unmodifiable(_messages)));
+  }
+
+  /// Loads persisted messages for [profileId] (or [activeProfileId]).
+  Future<void> loadChatHistory([String? profileId]) async {
+    if (profileId != null && profileId.isNotEmpty) {
+      activeProfileId = profileId;
+    }
+    final repo = _chatLocalRepository;
+    if (repo == null) {
+      if (!isClosed) emit(AgentIdle(messages: List.unmodifiable(_messages)));
+      return;
+    }
+    final result = await repo.getMessages(activeProfileId);
+    result.fold(
+      (_) {
+        if (!isClosed) emit(AgentIdle(messages: List.unmodifiable(_messages)));
+      },
+      (loaded) {
+        _messages
+          ..clear()
+          ..addAll(loaded);
+        if (!isClosed) emit(AgentIdle(messages: List.unmodifiable(_messages)));
+      },
+    );
+  }
+
+  /// Switches active profile and loads its history.
+  Future<void> switchProfile(String newProfileId) async {
+    activeProfileId = newProfileId;
+    await loadChatHistory(newProfileId);
+  }
 
   /// Loads configuration from secure storage if available.
   Future<void> refreshSettings() async {
@@ -100,6 +158,7 @@ class AgentCubit extends Cubit<AgentState> {
     _isCancelled = false;
     await refreshSettings();
     _messages.add(ChatMessage(role: 'user', content: prompt));
+    await _persistMessages();
     await _runLoop(0, generation);
   }
 
@@ -145,6 +204,7 @@ class AgentCubit extends Cubit<AgentState> {
           role: 'assistant',
           content: informativeMessage,
         ));
+        await _persistMessages();
         emit(AgentSuccess(informativeMessage, messages: List.unmodifiable(_messages)));
         return;
       }
@@ -160,6 +220,7 @@ class AgentCubit extends Cubit<AgentState> {
         name: pending.name,
         content: resultText,
       ));
+      await _persistMessages();
 
       await _processPendingToolCalls(generation);
     } else {
@@ -186,6 +247,7 @@ class AgentCubit extends Cubit<AgentState> {
         name: pending.name,
         content: 'Action ${pending.name} was rejected by user.',
       ));
+      await _persistMessages();
 
       await _processPendingToolCalls(generation);
     } else {
@@ -205,6 +267,10 @@ class AgentCubit extends Cubit<AgentState> {
     _messages.clear();
     _pendingToolCall = null;
     _pendingTurnToolCalls.clear();
+    final repo = _chatLocalRepository;
+    if (repo != null) {
+      unawaited(repo.clearMessages(activeProfileId));
+    }
     if (!isClosed) emit(const AgentIdle());
   }
 
@@ -237,6 +303,7 @@ class AgentCubit extends Cubit<AgentState> {
           name: toolName,
           content: 'Error: Tool $toolName not found.',
         ));
+        await _persistMessages();
         continue;
       }
 
@@ -280,6 +347,7 @@ class AgentCubit extends Cubit<AgentState> {
           role: 'assistant',
           content: informativeMessage,
         ));
+        await _persistMessages();
         emit(AgentSuccess(informativeMessage, messages: List.unmodifiable(_messages)));
         return;
       }
@@ -295,6 +363,7 @@ class AgentCubit extends Cubit<AgentState> {
         name: toolName,
         content: resultStr,
       ));
+      await _persistMessages();
     }
 
     if (_isCancelled || runGeneration != _runGeneration) return;
@@ -434,6 +503,7 @@ class AgentCubit extends Cubit<AgentState> {
             content: cleanText.isEmpty ? null : cleanText,
             thoughtProcess: extraction.thoughtProcess,
           ));
+          await _persistMessages();
           emit(AgentSuccess(cleanText, messages: messages));
           return;
         }
@@ -467,6 +537,7 @@ class AgentCubit extends Cubit<AgentState> {
           thoughtProcess: toolExtraction.thoughtProcess,
           toolCalls: toolCalls,
         ));
+        await _persistMessages();
 
         // Enqueue tool calls for this turn and process sequentially.
         _pendingTurnToolCalls.clear();

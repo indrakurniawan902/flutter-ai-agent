@@ -12,6 +12,8 @@
 
 import 'package:dio/dio.dart' as _i361;
 import 'package:flutter_ai_agent/common/injection/modules.dart' as _i225;
+import 'package:flutter_ai_agent/data/datasources/local/chat/chat_local_datasource.dart'
+    as _i613;
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart'
     as _i348;
 import 'package:flutter_ai_agent/data/datasources/remote/chat/chat_datasource.dart'
@@ -34,8 +36,12 @@ import 'package:flutter_ai_agent/data/datasources/tools/chat/location_service.da
     as _i320;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/notification_service.dart'
     as _i89;
+import 'package:flutter_ai_agent/data/repositories/chat_local_repository_impl.dart'
+    as _i92;
 import 'package:flutter_ai_agent/data/repositories/chat_repository_impl.dart'
     as _i236;
+import 'package:flutter_ai_agent/domain/repositories/chat/chat_local_repository.dart'
+    as _i445;
 import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart'
     as _i192;
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart'
@@ -105,6 +111,11 @@ extension GetItInjectableX on _i174.GetIt {
         sseParser: gh<_i598.SseParser>(),
       ),
     );
+    gh.lazySingleton<_i613.ChatLocalDatasource>(
+      () => _i613.ChatLocalDatasourceImpl(
+        storage: gh<_i558.FlutterSecureStorage>(),
+      ),
+    );
     gh.lazySingleton<_i547.ClipboardServiceBase>(
       () => _i105.ClipboardService.create(),
     );
@@ -123,6 +134,12 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i3.DeviceContextServiceBase>(
       () => _i205.DeviceContextService.create(),
     );
+    gh.factory<_i15.AgentCubit>(
+      () => _i15.AgentCubit.create(
+        llmRepository: gh<_i192.LlmRepository>(),
+        chatLocalRepository: gh<_i445.ChatLocalRepository>(),
+      ),
+    );
     gh.lazySingleton<_i348.SecureStorageService>(
       () =>
           _i348.SecureStorageService(storage: gh<_i558.FlutterSecureStorage>()),
@@ -132,6 +149,11 @@ extension GetItInjectableX on _i174.GetIt {
     );
     gh.lazySingleton<_i27.GatewayClientBase>(
       () => gatewayModule.provideGatewayClientBase(gh<_i122.GatewayClient>()),
+    );
+    gh.lazySingleton<_i445.ChatLocalRepository>(
+      () => _i92.ChatLocalRepositoryImpl(
+        datasource: gh<_i613.ChatLocalDatasource>(),
+      ),
     );
     gh.lazySingleton<_i821.QrScannerControllerBase>(
       () => _i319.MobileScannerControllerWrapper(
@@ -153,9 +175,6 @@ extension GetItInjectableX on _i174.GetIt {
         gatewayClient: gh<_i27.GatewayClientBase>(),
         toolRegistry: gh<_i732.ToolRegistry>(),
       ),
-    );
-    gh.factory<_i15.AgentCubit>(
-      () => _i15.AgentCubit.create(llmRepository: gh<_i192.LlmRepository>()),
     );
     gh.factory<_i819.ServerProfileCubit>(
       () => _i819.ServerProfileCubit.create(

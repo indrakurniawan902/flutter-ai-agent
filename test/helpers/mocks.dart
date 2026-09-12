@@ -4,7 +4,9 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:device_calendar/device_calendar.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter_ai_agent/data/datasources/local/chat/chat_local_datasource.dart';
 import 'package:flutter_ai_agent/data/datasources/remote/chat/chat_datasource.dart';
+import 'package:flutter_ai_agent/domain/repositories/chat/chat_local_repository.dart';
 import 'package:flutter_ai_agent/data/datasources/tools/chat/clipboard_service.dart';
 import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/calendar_service.dart';
@@ -47,6 +49,10 @@ class MockDio extends Mock implements Dio {}
 class MockChatDatasource extends Mock implements ChatDatasource {}
 
 class MockLlmRepository extends Mock implements LlmRepository {}
+
+class MockChatLocalRepository extends Mock implements ChatLocalRepository {}
+
+class MockChatLocalDatasource extends Mock implements ChatLocalDatasource {}
 
 class MockToolRegistry extends Mock implements ToolRegistry {}
 
