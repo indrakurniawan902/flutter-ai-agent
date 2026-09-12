@@ -28,6 +28,8 @@ import 'package:flutter_ai_agent/data/datasources/tools/chat/ambient_trigger_ser
     as _i315;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/background_service.dart'
     as _i1033;
+import 'package:flutter_ai_agent/data/datasources/tools/chat/battery_optimization_service.dart'
+    as _i82;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/calendar_service.dart'
     as _i1056;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/camera_vision_service.dart'
@@ -72,6 +74,8 @@ import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart'
     as _i290;
 import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart'
     as _i791;
+import 'package:flutter_ai_agent/domain/tools/chat/battery_optimization_service.dart'
+    as _i879;
 import 'package:flutter_ai_agent/domain/tools/chat/calendar_service.dart'
     as _i1020;
 import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart'
@@ -215,6 +219,9 @@ extension GetItInjectableX on _i174.GetIt {
 
     gh.lazySingleton<_i791.SkillsRegistryService>(
       () => _i791.SkillsRegistryService(),
+    );
+    gh.lazySingleton<_i879.BatteryOptimizationServiceBase>(
+      () => _i82.BatteryOptimizationService.create(),
     );
     gh.lazySingleton<_i348.SecureStorageService>(
       () =>

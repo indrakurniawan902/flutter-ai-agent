@@ -2,10 +2,13 @@ package ai.hermes.flames
 
 import android.Manifest
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.annotation.NonNull
 import androidx.core.app.ActivityCompat
@@ -19,6 +22,7 @@ class MainActivity : FlutterActivity() {
     private val NOTIFICATION_CHANNEL = "ai.hermes.flames/notification_listener"
     private val BACKGROUND_CHANNEL = "ai.hermes.flames/background_service"
     private val CONTACTS_CHANNEL = "ai.hermes.flames/contacts"
+    private val BATTERY_CHANNEL = "ai.hermes.flames/battery_optimization"
 
     private val CONTACTS_PERMISSION_REQUEST_CODE = 1001
     private var pendingContactsResult: MethodChannel.Result? = null
@@ -190,6 +194,42 @@ class MainActivity : FlutterActivity() {
                                 arrayOf(Manifest.permission.READ_CONTACTS),
                                 CONTACTS_PERMISSION_REQUEST_CODE
                             )
+                        }
+                    }
+                    else -> {
+                        result.notImplemented()
+                    }
+                }
+            }
+
+        // Battery Optimization Channel
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BATTERY_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "isIgnoringBatteryOptimizations" -> {
+                        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                        val isIgnoring = powerManager?.isIgnoringBatteryOptimizations(packageName) ?: false
+                        result.success(isIgnoring)
+                    }
+                    "requestIgnoreBatteryOptimizations" -> {
+                        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                        val isIgnoring = powerManager?.isIgnoringBatteryOptimizations(packageName) ?: false
+                        if (isIgnoring) {
+                            result.success(true)
+                        } else {
+                            try {
+                                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                    data = Uri.parse("package:$packageName")
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                startActivity(intent)
+                            } catch (_: Exception) {
+                                val fallback = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                startActivity(fallback)
+                            }
+                            result.success(true)
                         }
                     }
                     else -> {

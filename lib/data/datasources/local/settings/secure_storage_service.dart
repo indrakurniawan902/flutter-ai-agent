@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter_ai_agent/data/models/server_profiles/server_profile_model.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/ambient_trigger_settings.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:injectable/injectable.dart';
@@ -32,6 +33,7 @@ class SecureStorageService {
   static const String keyModel = 'llm_model';
   static const String keyTemperature = 'llm_temperature';
   static const String keyServerProfiles = 'server_profiles_list';
+  static const String keyAmbientTriggerSettings = 'ambient_trigger_settings';
 
   final FlutterSecureStorage _storage;
 
@@ -221,6 +223,23 @@ class SecureStorageService {
         saveModel(active!.model),
         saveTemperature(active!.temperature),
       ]);
+    }
+  }
+
+  Future<void> saveAmbientTriggerSettings(AmbientTriggerSettings settings) async {
+    await _storage.write(key: keyAmbientTriggerSettings, value: jsonEncode(settings.toJson()));
+  }
+
+  Future<AmbientTriggerSettings> getAmbientTriggerSettings() async {
+    final raw = await _storage.read(key: keyAmbientTriggerSettings);
+    if (raw == null || raw.trim().isEmpty) return const AmbientTriggerSettings();
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) return AmbientTriggerSettings.fromJson(decoded);
+      if (decoded is Map) return AmbientTriggerSettings.fromJson(Map<String, dynamic>.from(decoded));
+      return const AmbientTriggerSettings();
+    } catch (_) {
+      return const AmbientTriggerSettings();
     }
   }
 
