@@ -138,7 +138,7 @@ extension GetItInjectableX on _i174.GetIt {
       () => storageModule.provideSecureStorage(),
     );
     gh.lazySingleton<_i122.GatewayClient>(
-      () => gatewayModule.provideGatewayClient(),
+      () => gatewayModule.provideGatewayClient(gh<_i732.ToolRegistry>()),
     );
     gh.lazySingleton<_i598.SseParser>(() => _i598.SseParser());
     gh.lazySingleton<_i301.PairingParser>(() => const _i301.PairingParser());
