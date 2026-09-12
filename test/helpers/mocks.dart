@@ -24,6 +24,10 @@ import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/serve
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_state.dart';
+import 'package:flutter_ai_agent/data/datasources/remote/gateway/gateway_socket.dart';
+import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
+import 'package:flutter_ai_agent/domain/services/gateway/gateway_rpc_receiver.dart';
+import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_rpc_cubit.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
@@ -105,5 +109,18 @@ class MockServerProfileCubit extends MockCubit<ServerProfileState>
 // Navigation
 class MockNavigationCubit extends MockCubit<NavigationState>
     implements NavigationCubit {}
+
+// Gateway RPC
+class MockGatewayClient extends Mock implements GatewayClientBase {}
+
+class MockGatewayRpcCubit extends MockCubit<GatewayRpcState>
+    implements GatewayRpcCubit {}
+
+class MockGatewayDeviceRpcReceiver extends Mock
+    implements GatewayRpcReceiverBase {}
+
+class MockGatewaySocket extends Mock implements GatewaySocket {}
+
+class MockGatewaySocketFactory extends Mock implements GatewaySocketFactory {}
 
 
