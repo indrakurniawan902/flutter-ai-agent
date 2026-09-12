@@ -9,7 +9,7 @@ class MobileScannerControllerWrapper implements QrScannerControllerBase {
   final MobileScannerController controller;
   final ValueNotifier<bool> _isTorchOnNotifier;
 
-  MobileScannerControllerWrapper({MobileScannerController? controller})
+  MobileScannerControllerWrapper({@ignoreParam MobileScannerController? controller})
       : controller = controller ??
             MobileScannerController(
               formats: const [BarcodeFormat.qrCode],

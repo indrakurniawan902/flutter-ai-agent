@@ -12,7 +12,7 @@ class SkillsCubit extends Cubit<SkillsState> {
 
   SkillsCubit({
     required SkillsRegistryService skillsRegistryService,
-    bool autoLoad = true,
+    @ignoreParam bool autoLoad = true,
   })  : _skillsRegistryService = skillsRegistryService,
         super(const SkillsInitial()) {
     if (autoLoad) {

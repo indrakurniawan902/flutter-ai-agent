@@ -15,8 +15,10 @@ class DefaultSystemSettingsPlatformWrapper
   @override
   Future<bool> openSystemSettings(String settingType) async {
     try {
-      return await _channel.invokeMethod<bool>('openSystemSettings',
-              settingType) ??
+      return await _channel.invokeMethod<bool>(
+            'openSystemSettings',
+            <String, dynamic>{'type': settingType},
+          ) ??
           false;
     } catch (_) {
       return false;
