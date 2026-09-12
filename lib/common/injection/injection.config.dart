@@ -156,20 +156,7 @@ extension GetItInjectableX on _i174.GetIt {
         storage: gh<_i558.FlutterSecureStorage>(),
       ),
     );
-    gh.lazySingleton<_i732.ToolRegistry>(
-      () => _i732.ToolRegistry(
-        clipboardService: gh<_i547.ClipboardServiceBase>(),
-        locationService: gh<_i292.LocationServiceBase>(),
-        deviceContextService: gh<_i3.DeviceContextServiceBase>(),
-        cameraVisionService: gh<_i815.CameraVisionServiceBase>(),
-        calendarService: gh<_i1020.CalendarServiceBase>(),
-        notificationService: gh<_i919.NotificationServiceBase>(),
-        voiceInputService: gh<_i652.VoiceInputServiceBase>(),
-        voiceOutputService: gh<_i45.VoiceOutputServiceBase>(),
-        backgroundService: gh<_i791.BackgroundServiceBase>(),
-        contactLauncherTools: gh<_i777.ContactLauncherTools>(),
-      ),
-    );
+
     gh.lazySingleton<_i547.ClipboardServiceBase>(
       () => _i105.ClipboardService.create(),
     );
@@ -222,12 +209,7 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i652.VoiceInputServiceBase>(
       () => _i845.VoiceInputService.create(),
     );
-    gh.factory<_i15.AgentCubit>(
-      () => _i15.AgentCubit.create(
-        llmRepository: gh<_i192.LlmRepository>(),
-        chatLocalRepository: gh<_i445.ChatLocalRepository>(),
-      ),
-    );
+
     gh.lazySingleton<_i791.SkillsRegistryService>(
       () => _i791.SkillsRegistryService(),
     );
@@ -256,6 +238,7 @@ extension GetItInjectableX on _i174.GetIt {
         voiceInputService: gh<_i652.VoiceInputServiceBase>(),
         voiceOutputService: gh<_i45.VoiceOutputServiceBase>(),
         backgroundService: gh<_i791.BackgroundServiceBase>(),
+        contactLauncherTools: gh<_i777.ContactLauncherTools>(),
       ),
     );
     gh.lazySingleton<_i396.NotificationTriageServiceBase>(
