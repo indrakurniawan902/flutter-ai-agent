@@ -9,6 +9,7 @@ import 'calendar_service.dart';
 import 'background_service.dart';
 import 'camera_vision_service.dart';
 import 'clipboard_service.dart';
+import 'contact_launcher_tools.dart';
 import 'device_context_service.dart';
 import 'location_service.dart';
 import 'notification_service.dart';
@@ -58,6 +59,7 @@ class RegisteredTool {
 @lazySingleton
 class ToolRegistry {
   final Map<String, RegisteredTool> _tools = {};
+  final Map<String, bool> _toolEnabledStates = {};
 
   ToolRegistry({
     ClipboardServiceBase? clipboardService,
@@ -69,6 +71,7 @@ class ToolRegistry {
     VoiceInputServiceBase? voiceInputService,
     VoiceOutputServiceBase? voiceOutputService,
     BackgroundServiceBase? backgroundService,
+    ContactLauncherTools? contactLauncherTools,
   }) {
     if (clipboardService != null) registerClipboardTools(clipboardService);
     if (locationService != null) registerLocationTools(locationService);
@@ -83,11 +86,26 @@ class ToolRegistry {
     if (backgroundService != null) {
       registerBackgroundServiceTools(backgroundService);
     }
+    if (contactLauncherTools != null) {
+      registerContactLauncherTools(contactLauncherTools);
+    }
   }
 
   void register(RegisteredTool tool) {
     _tools[tool.name] = tool;
+    _toolEnabledStates.putIfAbsent(tool.name, () => true);
   }
+
+  void unregister(String name) {
+    _tools.remove(name);
+    _toolEnabledStates.remove(name);
+  }
+
+  void setToolEnabled(String name, bool enabled) {
+    _toolEnabledStates[name] = enabled;
+  }
+
+  bool isToolEnabled(String name) => _toolEnabledStates[name] ?? true;
 
   bool hasTool(String name) => _tools.containsKey(name);
 
@@ -95,8 +113,13 @@ class ToolRegistry {
 
   List<RegisteredTool> get tools => _tools.values.toList();
 
-  List<Map<String, dynamic>> getOpenAiToolDefinitions() =>
-      _tools.values.map((t) => t.toOpenAiTool()).toList();
+  List<RegisteredTool> get activeTools =>
+      _tools.values.where((t) => isToolEnabled(t.name)).toList();
+
+  List<Map<String, dynamic>> getOpenAiToolDefinitions() => _tools.values
+      .where((t) => isToolEnabled(t.name))
+      .map((t) => t.toOpenAiTool())
+      .toList();
 
   Future<Either<Failure, String>> executeTool(
     String name, [
@@ -106,6 +129,9 @@ class ToolRegistry {
       final tool = _tools[name];
       if (tool == null) {
         return Left(ServerFailure('Tool not found: $name'));
+      }
+      if (!isToolEnabled(name)) {
+        return Left(ServerFailure('Tool $name is disabled by skill policy.'));
       }
       if (SecurityPolicy.requiresPermission(tool.securityTier) &&
           tool.checkPermission != null) {
@@ -673,6 +699,76 @@ class ToolRegistry {
               );
           }
         },
+      ),
+    );
+  }
+
+  void registerContactLauncherTools(ContactLauncherTools tools) {
+    register(
+      RegisteredTool(
+        name: 'search_contacts',
+        description: 'Search device contacts by name or phone number.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'query': {
+              'type': 'string',
+              'description': 'Contact name or phone number query',
+            },
+          },
+          'required': ['query'],
+        },
+        securityTier: SecurityTier.tier2Permission,
+        execute: (args) =>
+            tools.searchContacts(args['query']?.toString() ?? ''),
+        checkPermission: () => tools.checkContactsPermission(),
+      ),
+    );
+
+    register(
+      RegisteredTool(
+        name: 'open_whatsapp_chat',
+        description:
+            'Opens a WhatsApp chat with a specified phone number and optional message.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'phone': {
+              'type': 'string',
+              'description': 'Phone number with country code',
+            },
+            'message': {
+              'type': 'string',
+              'description': 'Optional initial message',
+            },
+          },
+          'required': ['phone'],
+        },
+        securityTier: SecurityTier.tier3Hitl,
+        execute: (args) => tools.openWhatsappChat(
+          args['phone']?.toString() ?? '',
+          message: args['message']?.toString(),
+        ),
+      ),
+    );
+
+    register(
+      RegisteredTool(
+        name: 'open_external_url',
+        description: 'Opens an external web URL in the browser.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'url': {
+              'type': 'string',
+              'description': 'Web URL to open in browser',
+            },
+          },
+          'required': ['url'],
+        },
+        securityTier: SecurityTier.tier2Permission,
+        execute: (args) =>
+            tools.openExternalUrl(args['url']?.toString() ?? ''),
       ),
     );
   }

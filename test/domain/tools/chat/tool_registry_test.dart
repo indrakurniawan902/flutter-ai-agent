@@ -2,6 +2,7 @@ import 'package:dartz/dartz.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/clipboard_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/contact_launcher_tools.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/security_policy.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
@@ -19,6 +20,8 @@ class MockVoiceInputService extends Mock implements VoiceInputServiceBase {}
 class MockVoiceOutputService extends Mock implements VoiceOutputServiceBase {}
 
 class MockBackgroundService extends Mock implements BackgroundServiceBase {}
+
+class MockContactLauncherTools extends Mock implements ContactLauncherTools {}
 
 void main() {
   late ToolRegistry registry;
@@ -494,6 +497,195 @@ void main() {
 
       expect(resMissing.isLeft(), isTrue);
       expect(resInvalid.isLeft(), isTrue);
+    });
+  });
+
+  group('registerContactLauncherTools', () {
+    late MockContactLauncherTools mockContactLauncher;
+
+    setUp(() {
+      mockContactLauncher = MockContactLauncherTools();
+    });
+
+    test(
+        'registers search_contacts, open_whatsapp_chat, and open_external_url',
+        () {
+      registry.registerContactLauncherTools(mockContactLauncher);
+
+      expect(registry.hasTool('search_contacts'), isTrue);
+      expect(registry.hasTool('open_whatsapp_chat'), isTrue);
+      expect(registry.hasTool('open_external_url'), isTrue);
+
+      expect(
+        registry.getTool('search_contacts')?.securityTier,
+        SecurityTier.tier2Permission,
+      );
+      expect(
+        registry.getTool('open_whatsapp_chat')?.securityTier,
+        SecurityTier.tier3Hitl,
+      );
+      expect(
+        registry.getTool('open_external_url')?.securityTier,
+        SecurityTier.tier2Permission,
+      );
+
+      final searchParams = registry.getTool('search_contacts')?.parameters;
+      expect(searchParams?['type'], 'object');
+      expect(searchParams?['required'], contains('query'));
+
+      final waParams = registry.getTool('open_whatsapp_chat')?.parameters;
+      expect(waParams?['type'], 'object');
+      expect(waParams?['required'], contains('phone'));
+
+      final urlParams = registry.getTool('open_external_url')?.parameters;
+      expect(urlParams?['type'], 'object');
+      expect(urlParams?['required'], contains('url'));
+    });
+
+    test('search_contacts delegates execution when permission granted',
+        () async {
+      when(() => mockContactLauncher.checkContactsPermission())
+          .thenAnswer((_) async => true);
+      when(() => mockContactLauncher.searchContacts('Alice'))
+          .thenAnswer((_) async => const Right('[{"displayName":"Alice"}]'));
+
+      registry.registerContactLauncherTools(mockContactLauncher);
+
+      final result =
+          await registry.executeTool('search_contacts', {'query': 'Alice'});
+
+      expect(result, const Right<Failure, String>('[{"displayName":"Alice"}]'));
+      verify(() => mockContactLauncher.checkContactsPermission()).called(1);
+      verify(() => mockContactLauncher.searchContacts('Alice')).called(1);
+    });
+
+    test('search_contacts returns PermissionFailure when permission denied',
+        () async {
+      when(() => mockContactLauncher.checkContactsPermission())
+          .thenAnswer((_) async => false);
+
+      registry.registerContactLauncherTools(mockContactLauncher);
+
+      final result =
+          await registry.executeTool('search_contacts', {'query': 'Alice'});
+
+      expect(
+        result,
+        const Left<Failure, String>(
+          PermissionFailure('Permission denied for tool: search_contacts'),
+        ),
+      );
+      verify(() => mockContactLauncher.checkContactsPermission()).called(1);
+      verifyNever(() => mockContactLauncher.searchContacts(any()));
+    });
+
+    test('open_whatsapp_chat delegates execution', () async {
+      when(
+        () => mockContactLauncher.openWhatsappChat(
+          '1234567890',
+          message: 'Hello!',
+        ),
+      ).thenAnswer(
+          (_) async => const Right('WhatsApp chat opened for 1234567890'));
+
+      registry.registerContactLauncherTools(mockContactLauncher);
+
+      final result = await registry.executeTool('open_whatsapp_chat', {
+        'phone': '1234567890',
+        'message': 'Hello!',
+      });
+
+      expect(
+        result,
+        const Right<Failure, String>('WhatsApp chat opened for 1234567890'),
+      );
+      verify(
+        () => mockContactLauncher.openWhatsappChat(
+          '1234567890',
+          message: 'Hello!',
+        ),
+      ).called(1);
+    });
+
+    test('open_external_url delegates execution', () async {
+      when(() => mockContactLauncher.openExternalUrl('https://example.com'))
+          .thenAnswer(
+              (_) async => const Right('Opened URL: https://example.com'));
+
+      registry.registerContactLauncherTools(mockContactLauncher);
+
+      final result = await registry.executeTool('open_external_url', {
+        'url': 'https://example.com',
+      });
+
+      expect(
+        result,
+        const Right<Failure, String>('Opened URL: https://example.com'),
+      );
+      verify(() => mockContactLauncher.openExternalUrl('https://example.com'))
+          .called(1);
+    });
+  });
+
+  group('tool enable/disable state', () {
+    test('newly registered tools are enabled by default', () {
+      registry.register(sampleTool());
+
+      expect(registry.isToolEnabled('sample'), isTrue);
+      expect(registry.activeTools.map((t) => t.name), contains('sample'));
+    });
+
+    test('unknown tools default to enabled', () {
+      expect(registry.isToolEnabled('never_registered'), isTrue);
+    });
+
+    test('disabled tools are excluded from definitions and activeTools',
+        () async {
+      registry.register(sampleTool());
+      registry.setToolEnabled('sample', false);
+
+      expect(registry.isToolEnabled('sample'), isFalse);
+      expect(registry.activeTools.map((t) => t.name),
+          isNot(contains('sample')));
+      expect(registry.getOpenAiToolDefinitions(), isEmpty);
+
+      registry.setToolEnabled('sample', true);
+
+      expect(registry.isToolEnabled('sample'), isTrue);
+      expect(registry.getOpenAiToolDefinitions(), hasLength(1));
+    });
+
+    test('executeTool rejects disabled tools with ServerFailure', () async {
+      registry.register(sampleTool());
+      registry.setToolEnabled('sample', false);
+
+      final result = await registry.executeTool('sample');
+
+      expect(
+        result,
+        const Left<Failure, String>(
+          ServerFailure('Tool sample is disabled by skill policy.'),
+        ),
+      );
+    });
+
+    test('unregister removes tool and its enabled state', () {
+      registry.register(sampleTool());
+      registry.setToolEnabled('sample', false);
+      registry.unregister('sample');
+
+      expect(registry.hasTool('sample'), isFalse);
+      expect(registry.isToolEnabled('sample'), isTrue);
+    });
+
+    test('constructor auto-registers contact launcher tools', () {
+      final contactRegistry = ToolRegistry(
+        contactLauncherTools: MockContactLauncherTools(),
+      );
+
+      expect(contactRegistry.hasTool('search_contacts'), isTrue);
+      expect(contactRegistry.hasTool('open_whatsapp_chat'), isTrue);
+      expect(contactRegistry.hasTool('open_external_url'), isTrue);
     });
   });
 }

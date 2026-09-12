@@ -1,0 +1,150 @@
+import 'dart:convert';
+
+import 'package:contacts_service/contacts_service.dart';
+import 'package:dartz/dartz.dart';
+import 'package:injectable/injectable.dart';
+import 'package:url_launcher/url_launcher.dart' as url_launcher;
+import 'package:url_launcher/url_launcher.dart' show LaunchMode;
+
+import 'package:flutter_ai_agent/common/failure.dart';
+
+abstract class ContactsProvider {
+  Future<bool> checkPermission();
+  Future<List<Map<String, dynamic>>> searchContacts(String query);
+}
+
+class DefaultContactsProvider implements ContactsProvider {
+  @override
+  Future<bool> checkPermission() async {
+    try {
+      await ContactsService.getContacts(query: '');
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> searchContacts(String query) async {
+    final contacts = await ContactsService.getContacts(query: query);
+    return contacts
+        .map((c) => {
+              'displayName': c.displayName ?? '',
+              'phones': c.phones
+                      ?.map((p) => p.value)
+                      .whereType<String>()
+                      .toList() ??
+                  <String>[],
+              'emails': c.emails
+                      ?.map((e) => e.value)
+                      .whereType<String>()
+                      .toList() ??
+                  <String>[],
+            })
+        .toList();
+  }
+}
+
+abstract class UrlLauncherProvider {
+  Future<bool> canLaunchUrl(Uri url);
+  Future<bool> launchUrl(
+    Uri url, {
+    LaunchMode mode = LaunchMode.platformDefault,
+  });
+}
+
+class DefaultUrlLauncherProvider implements UrlLauncherProvider {
+  @override
+  Future<bool> canLaunchUrl(Uri url) => url_launcher.canLaunchUrl(url);
+
+  @override
+  Future<bool> launchUrl(
+    Uri url, {
+    LaunchMode mode = LaunchMode.platformDefault,
+  }) =>
+      url_launcher.launchUrl(url, mode: mode);
+}
+
+@lazySingleton
+class ContactLauncherTools {
+  final ContactsProvider _contactsProvider;
+  final UrlLauncherProvider _urlLauncherProvider;
+
+  ContactLauncherTools({
+    ContactsProvider? contactsProvider,
+    UrlLauncherProvider? urlLauncherProvider,
+  })  : _contactsProvider = contactsProvider ?? DefaultContactsProvider(),
+        _urlLauncherProvider =
+            urlLauncherProvider ?? DefaultUrlLauncherProvider();
+
+  Future<bool> checkContactsPermission() => _contactsProvider.checkPermission();
+
+  Future<Either<Failure, String>> searchContacts(String query) async {
+    try {
+      final contacts = await _contactsProvider.searchContacts(query);
+      return Right(jsonEncode(contacts));
+    } catch (e) {
+      return Left(ServerFailure('Failed to search contacts: $e'));
+    }
+  }
+
+  Future<Either<Failure, String>> openWhatsappChat(
+    String phone, {
+    String? message,
+  }) async {
+    try {
+      final digits = phone.replaceAll(RegExp(r'[^\d]'), '');
+      if (digits.isEmpty) {
+        return const Left(ServerFailure('Invalid phone number'));
+      }
+      final String urlString;
+      if (message != null && message.isNotEmpty) {
+        urlString =
+            'https://wa.me/$digits?text=${Uri.encodeComponent(message)}';
+      } else {
+        urlString = 'https://wa.me/$digits';
+      }
+      final uri = Uri.parse(urlString);
+      final canLaunch = await _urlLauncherProvider.canLaunchUrl(uri);
+      if (!canLaunch) {
+        return Left(ServerFailure('Cannot launch WhatsApp for $phone'));
+      }
+      final launched = await _urlLauncherProvider.launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched) {
+        return Left(ServerFailure('Failed to open WhatsApp for $phone'));
+      }
+      return Right('WhatsApp chat opened for $phone');
+    } catch (e) {
+      return Left(ServerFailure('Error opening WhatsApp: $e'));
+    }
+  }
+
+  Future<Either<Failure, String>> openExternalUrl(String url) async {
+    try {
+      final trimmed = url.trim();
+      final uri = Uri.tryParse(trimmed);
+      if (uri == null ||
+          (!uri.isScheme('http') && !uri.isScheme('https')) ||
+          uri.host.isEmpty) {
+        return Left(ServerFailure('Invalid URL: $url'));
+      }
+      final canLaunch = await _urlLauncherProvider.canLaunchUrl(uri);
+      if (!canLaunch) {
+        return Left(ServerFailure('Cannot launch URL: $url'));
+      }
+      final launched = await _urlLauncherProvider.launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched) {
+        return Left(ServerFailure('Failed to launch URL: $url'));
+      }
+      return Right('Opened URL: $url');
+    } catch (e) {
+      return Left(ServerFailure('Error launching URL: $e'));
+    }
+  }
+}
