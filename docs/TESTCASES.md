@@ -18,7 +18,7 @@
 6. [Module 6: Tier 3 State-Modifying Tools & HITL Guardrails](#module-6-tier-3-state-modifying-tools--hitl-guardrails)
 7. [Module 7: Presentation, UI/UX & Edge Cases](#module-7-presentation-uiux--edge-cases)
 8. [Module 8: Hermes Nous UI, Bottom Navigation & Micro-UI (Fase 5)](#module-8-hermes-nous-ui-bottom-navigation--micro-ui-fase-5)
-9. [Module 9: Streaming Voice & Audio Interface (Fase 4)](#module-9-streaming-voice--audio-interface-fase-4)
+9. [Module 9: Mobile Skills Hub, Share Target & Intent Launcher (Fase 6)](#module-9-mobile-skills-hub-share-target--intent-launcher-fase-6)
 
 ---
 
@@ -541,138 +541,126 @@
 
 ---
 
-## Module 9: Streaming Voice & Audio Interface (Fase 4)
+## Module 9: Mobile Skills Hub, Share Target & Intent Launcher (Fase 6)
 
-### TC-VOICE-01: Voice Input & Real-Time Transcription (T9.1)
+### TC-SKILL-01: Active Skills Matching & System Prompt Injection
 - **Type**: Positive
-- **Objective**: Capture microphone audio and stream transcribed speech into text.
-- **Preconditions**: Microphone permission granted; `VoiceInputService` initialized.
+- **Objective**: Verify active skills are matched to incoming prompts and injected into the LLM system prompt via `SkillsRegistryService.buildSystemPrompt()`.
+- **Preconditions**: `whatsapp_outreach` skill enabled with tools `['open_whatsapp_chat']`; `AgentCubit` wired with `skillsRegistryService`.
 - **Steps**:
-  1. User taps mic button or holds to speak.
-  2. Waveform visualizer animates with sound level stream.
-  3. User finishes speaking; transcription is auto-dispatched to `AgentCubit.sendMessage()`.
+  1. Register `whatsapp_outreach` skill with instructions `"Always confirm recipient phone"`.
+  2. Send prompt `"Send WhatsApp to Budi"`.
+  3. Capture `messages` passed to `LlmRepository.streamCompletion`.
 - **Expected Outcome**:
-  - Spoken words transcribed accurately.
-  - Message bubble appears in ChatScreen.
+  - First message has `role: system` and contains `whatsapp_outreach` plus its instructions.
+  - Disabled skills are excluded from the system prompt.
+  - `ToolRegistry` exposes `open_whatsapp_chat` in OpenAI tool definitions.
+  - E2E coverage: `test/integration/e2e_fase6_skills_test.dart` full pipeline test.
 
-### TC-VOICE-02: Microphone Permission Denied Handling (T9.1)
+### TC-SKILL-02: Disabled Skill Disables Tools in ToolRegistry
 - **Type**: Negative
-- **Objective**: Ensure graceful error handling when microphone permission is denied.
-- **Preconditions**: Microphone permission denied in system settings.
+- **Objective**: Ensure disabling a skill in `SkillsRegistryService` disables its tools via `syncWithToolRegistry` and blocks execution with a policy error.
+- **Preconditions**: `browser_opener` skill owns `open_external_url`; tool registered in `ToolRegistry`.
 - **Steps**:
-  1. User taps mic button.
+  1. Call `setSkillEnabled('browser_opener', false)`.
+  2. Call `syncWithToolRegistry(toolRegistry)`.
+  3. Send prompt `"Open https://flutter.dev/docs"` where LLM emits `open_external_url`.
 - **Expected Outcome**:
-  - SnackBar error displayed with permission advice.
-  - Waveform visualizer does not remain stuck; recording mode cancelled.
+  - `isToolEnabled('open_external_url')` returns `false`.
+  - `getOpenAiToolDefinitions()` excludes `open_external_url`.
+  - `AgentCubit` does not enter `WaitingApproval`; tool message contains `"disabled by skill policy"`.
+  - `UrlLauncherProvider.launchUrl` is never called.
 
-### TC-VOICE-03: Streaming Voice Output & Audio Playback Queue (T9.2)
+### TC-SKILL-03: Re-Enabling Skill Restores Tool Access
 - **Type**: Positive
-- **Objective**: Stream and synthesize agent responses using TTS and queue playback sequentially.
-- **Preconditions**: Speaker unmuted; `VoiceOutputService` active.
+- **Objective**: Verify re-enabling a skill restores its tools for the ReAct loop.
+- **Preconditions**: `browser_opener` previously disabled as in TC-SKILL-02.
 - **Steps**:
-  1. Agent finishes response generation (`AgentSuccess`).
-  2. Text synthesized via `/audio/speech` TTS endpoint.
-  3. Audio chunks queued in `_audioQueue` and played smoothly through `audioplayers`.
+  1. Call `setSkillEnabled('browser_opener', true)`.
+  2. Call `syncWithToolRegistry(toolRegistry)`.
+  3. Send prompt `"Open https://flutter.dev/docs"` again.
 - **Expected Outcome**:
-  - Audio plays out loud clearly.
-  - Consecutive audio chunks transition seamlessly without clipping.
+  - `isToolEnabled('open_external_url')` returns `true`.
+  - `getOpenAiToolDefinitions()` includes `open_external_url`.
+  - `buildSystemPrompt()` contains `browser_opener`.
+  - Agent auto-executes the tool and ends in `AgentSuccess`.
 
-### TC-VOICE-04: Barge-In Interruption on User Interaction (T9.2)
+### TC-SHARE-01: External App Share Intake & Suggested Prompt Generation
 - **Type**: Positive
-- **Objective**: Immediately halt speaking audio when user taps microphone to speak.
-- **Preconditions**: Agent currently speaking audio response.
+- **Objective**: Verify OS share intents flow through `ShareTargetService` and `ShareTargetCubit` into a suggested chat prompt.
+- **Preconditions**: `ShareMediaProvider.getInitialMedia()` returns one `SharedMediaType.text` entry.
 - **Steps**:
-  1. User taps mic button in input bar.
+  1. Init `ShareTargetCubit` with real `ShareTargetService`.
+  2. Observe state transitions.
+  3. Read `ShareTargetReceived.suggestedPrompt`.
 - **Expected Outcome**:
-  - `VoiceOutputService.interrupt()` called instantly.
-  - Audio playback stops immediately; audio queue and streaming buffer cleared.
-  - Voice recording starts cleanly without audio feedback loop.
+  - State ends in `ShareTargetReceived` with one `SharedPayloadKind.text` payload.
+  - `suggestedPrompt` contains the shared text via `SharedPayload.buildSuggestedPrompt()`.
+  - URL shares map to `SharedPayloadKind.url` with prompt `"Summarize this shared link: <url>"`.
+  - Blank paths are dropped by `mapMediaFiles`.
 
-### TC-VOICE-05: Speaker Mute/Unmute Toggle in ChatScreen AppBar (T9.2)
+### TC-SHORTCUT-01: QuickActions OS App Shortcuts Registration & Dispatch
 - **Type**: Positive
-- **Objective**: Allow user to silence/enable audio output on demand.
-- **Preconditions**: ChatScreen open.
+- **Objective**: Verify `QuickActionsService` registers default OS shortcuts and dispatches `actionStream` triggers.
+- **Preconditions**: `QuickActionsProvider` mocked.
 - **Steps**:
-  1. User taps speaker toggle in AppBar (`chat_speaker_toggle`).
-  2. Icon switches from `volume_up` to `volume_off`.
-  3. Subsequent agent responses remain silent.
-  4. User taps speaker toggle again; icon switches back to `volume_up` and volume is restored.
+  1. Call `QuickActionsService.initialize()`.
+  2. Capture `setShortcutItems` argument and provider init callback.
+  3. Fire `action_voice_chat`, `action_ask_camera`, `action_scan_qr` through the callback and `handleAction`.
 - **Expected Outcome**:
-  - Immediate mute toggle without restarting conversation.
+  - `setShortcutItems` called once with 3 items: `action_voice_chat`, `action_ask_camera`, `action_scan_qr`.
+  - `actionStream` emits all three types in order.
+  - `handleAction` pushes directly into `actionStream`.
 
-### TC-VOICE-06: TTS Synthesis Failure & Error Resilience (T9.2)
+### TC-INTENT-01: Tier 3 WhatsApp Intent Launch via HITL Approval
+- **Type**: Positive
+- **Objective**: Verify `open_whatsapp_chat` pauses in `WaitingApproval` and launches a `wa.me` link only after `approveAction()`.
+- **Preconditions**: Contact tools registered; `UrlLauncherProvider.canLaunchUrl` returns `true`.
+- **Steps**:
+  1. Send prompt requiring `open_whatsapp_chat` with `phone: +6281234567890`, `message: Hello Budi`.
+  2. Verify `WaitingApproval` and that no launch occurred yet.
+  3. Call `approveAction()`.
+- **Expected Outcome**:
+  - Pending request holds `phone` and `message` parameters.
+  - After approval, `launchUrl` called once with `https://wa.me/6281234567890?text=Hello%20Budi`, `LaunchMode.externalApplication`.
+  - Final state is `AgentSuccess` with confirmation text.
+
+### TC-INTENT-02: Tier 2 External URL Intent Auto Launch
+- **Type**: Positive
+- **Objective**: Verify `open_external_url` executes without HITL and opens the browser via `UrlLauncherProvider`.
+- **Preconditions**: Shared URL `https://flutter.dev/docs`; skill `browser_opener` enabled.
+- **Steps**:
+  1. Feed `ShareTargetReceived.suggestedPrompt` into `AgentCubit.sendMessage`.
+  2. LLM emits `open_external_url` with the shared URL.
+- **Expected Outcome**:
+  - No `WaitingApproval` state; loop proceeds to `AgentSuccess`.
+  - `launchUrl` called with `Uri.parse('https://flutter.dev/docs')`, `LaunchMode.externalApplication`.
+  - Tool message has `name: open_external_url` and content `"Opened URL: ..."`.
+
+### TC-INTENT-03: Tier 3 HITL Rejection Blocks External Launch
 - **Type**: Negative
-- **Objective**: Prevent app crash when TTS endpoint times out or returns error.
-- **Preconditions**: Network disconnected or invalid API key.
+- **Objective**: Ensure `rejectAction()` on `open_whatsapp_chat` prevents any external launch and reports rejection to the LLM.
+- **Preconditions**: Agent paused in `WaitingApproval` for `open_whatsapp_chat`.
 - **Steps**:
-  1. Call `speakText()` when TTS endpoint unreachable.
+  1. Call `rejectAction()`.
+  2. Inspect tool history and launcher mocks.
 - **Expected Outcome**:
-  - Returns `Left(Failure)` (`ServerFailure` or `ConnectionFailure`).
-  - Error piped to `errorStream`; player queue safely reset to `idle`.
+  - `launchUrl` and `canLaunchUrl` are never called.
+  - Tool message contains `"rejected by user"` with `toolCallId` preserved.
+  - Loop resumes; LLM final text acknowledges cancellation; state ends in `AgentSuccess`.
 
-### TC-VOICE-07: Android Quick Settings Tile 1-Tap Activation (T9.3)
+### TC-E2E-06: Full Share to WhatsApp Pipeline (Share, Skills, ReAct, HITL, Intent)
 - **Type**: Positive
-- **Objective**: Verify 1-tap activation from notification drawer Quick Tile activates agent voice mode.
-- **Preconditions**: Quick Settings Tile configured in Android notification shade.
+- **Objective**: Validate the complete Fase 6 chain: external share to suggested prompt to skill injection to ReAct reasoning to HITL gate to WhatsApp intent.
+- **Preconditions**: All Fase 6 services wired with mocked providers; LLM stubbed for 2 turns.
 - **Steps**:
-  1. Tap Flames Agent QS Tile.
-  2. Quick tile toggles state to active and collapses shade, launching app with `voice_input` action.
-  3. `ChatScreen` receives pending action and initiates voice listening.
+  1. Receive `SharedPayload(text: 'Chat Budi about tomorrow meeting')` via `ShareTargetCubit`.
+  2. Build suggested prompt and send into `AgentCubit` with `whatsapp_outreach` active.
+  3. LLM returns `open_whatsapp_chat`; verify system prompt injection and `WaitingApproval`.
+  4. Call `approveAction()` and verify `wa.me` launch.
 - **Expected Outcome**:
-  - `FlamesQuickTile` toggles to `active`.
-  - Pending action consumed without duplicate triggers.
-
-### TC-VOICE-08: Foreground Service Persistent Notification with Action Buttons (T9.3)
-- **Type**: Positive
-- **Objective**: Foreground service maintains persistent notification with action controls (Voice Input, Quick Status, Stop).
-- **Preconditions**: Foreground service started via `BackgroundService`.
-- **Steps**:
-  1. Start foreground service with title and content.
-  2. Emit action intent (e.g. `quick_status` or `stop`).
-- **Expected Outcome**:
-  - Notification displayed with action buttons.
-  - Action dispatched to `actionStream` or terminates foreground execution cleanly on stop.
-
-### TC-VOICE-09: Safe WakeLock & Bounded Battery Protection (T9.3)
-- **Type**: Negative / Boundary
-- **Objective**: Prevent battery drain by enforcing bounded timeout on PARTIAL_WAKE_LOCK.
-- **Preconditions**: Background operation started.
-- **Steps**:
-  1. Request WakeLock with timeout exceeding maximum threshold (e.g. 120,000ms).
-  2. Request WakeLock with negative or sub-minimum timeout.
-- **Expected Outcome**:
-  - Timeout clamped within safe bounds (1s - 60s, default 30s).
-  - WakeLock automatically released upon timeout or service destruction.
-
-### TC-VOICE-10: Service Lifecycle & Quick Tile State Toggle (T9.3)
-- **Type**: Positive
-- **Objective**: Verify `manage_background_service` tool properly reports and toggles foreground service and tile states.
-- **Preconditions**: Tool registered in `ToolRegistry`.
-- **Steps**:
-  1. Execute tool with `{"action": "status"}`.
-  2. Execute tool with `{"action": "toggle_tile"}`.
-  3. Execute tool with `{"action": "start", "title": "Custom Title"}`.
-- **Expected Outcome**:
-  - Returns structured JSON containing `is_running`, `tile_state`, and `is_wakelock_held`.
-  - Tile state toggles between active and inactive.
-
-### TC-VOICE-11: End-to-End Voice & Background Automation Pipeline (Fase 4)
-- **Type**: Positive
-- **Objective**: Verify full multi-stage hands-free pipeline: Voice Input (STT) -> Real-time Transcription Streaming -> ReAct Loop (Tool Execution: device_status & manage_background_service) -> Voice Output (TTS) & Barge-In interruption handling.
-- **Preconditions**: All Fase 4 services (VoiceInputService, VoiceOutputService, BackgroundService) registered in `ToolRegistry` and DI container (`sl`).
-- **Steps**:
-  1. User taps mic button (`chat_mic_button`) in `ChatScreen` input bar.
-  2. Voice waveform visualizer renders with sound level stream and real-time partial transcription.
-  3. User completes voice command: `"Periksa status perangkat dan aktifkan layanan background"`.
-  4. User taps send button on waveform (`voice_waveform_send_button`), dispatching transcription to `AgentCubit.sendMessage()`.
-  5. LLM generates tool call to `device_status` (Tier 1 auto), receiving device battery and connectivity context.
-  6. LLM generates secondary tool call to `manage_background_service` with action `start`, activating foreground service.
-  7. LLM streams final response: `"Status baterai 85% dan layanan background Flames telah aktif."` and emits `AgentSuccess`.
-  8. `ChatScreen` automatically passes final response to `VoiceOutputService.speakText()`, playing synthesized speech aloud.
-  9. Quick Settings Tile and Notification Action events (`voice_input`, `quick_status`) trigger voice listening and prompt execution seamlessly.
-  10. Tapping mic button during active audio playback triggers barge-in interruption via `VoiceOutputService.interrupt()`.
-- **Expected Outcome**:
-  - Complete 5-stage hands-free automation pipeline executes seamlessly with 100% green verification in `e2e_fase4_voice_test.dart`.
+  - Each stage observable: `ShareTargetReceived` to system prompt containing `whatsapp_outreach` to `WaitingApproval` to `launchUrl(wa.me, externalApplication)` to `AgentSuccess`.
+  - Zero emoji in chrome and log strings; `flutter test test/integration/e2e_fase6_skills_test.dart` passes 5/5.
 
 ---
 
@@ -688,8 +676,8 @@
 | **Module 6: Tier 3 HITL Tools** | 2 | 3 | 5 |
 | **Module 7: Presentation & UI/UX** | 3 | 1 | 4 |
 | **Module 8: Hermes Nous UI & Micro-UI** | 6 | 1 | 7 |
-| **Module 9: Streaming Voice & Audio (Fase 4)** | 8 | 3 | 11 |
-| **Grand Total** | **29** | **23** | **52** |
+| **Module 9: Skills Hub, Share & Intents** | 7 | 2 | 9 |
+| **Grand Total** | **28** | **22** | **50** |
 
 ---
 _Standardized for Hermes Bot Team: PM Bot (`default`), Dev Bot (`dev`), Ops Bot (`ops`)._
