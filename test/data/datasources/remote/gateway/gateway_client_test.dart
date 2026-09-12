@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -12,6 +13,22 @@ import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.
 
 class MockGatewaySocket extends Mock implements GatewaySocket {}
 class MockGatewaySocketFactory extends Mock implements GatewaySocketFactory {}
+
+/// Captures every `debugPrint` line emitted while [body] runs, then restores
+/// the original print target even if [body] throws.
+Future<List<String>> captureDebugPrint(Future<void> Function() body) async {
+  final lines = <String>[];
+  final previous = debugPrint;
+  debugPrint = (String? message, {int? wrapWidth}) {
+    lines.add(message ?? '');
+  };
+  try {
+    await body();
+  } finally {
+    debugPrint = previous;
+  }
+  return lines;
+}
 
 void main() {
   late MockGatewaySocketFactory mockSocketFactory;
@@ -41,6 +58,7 @@ void main() {
           any(),
           headers: any(named: 'headers'),
           timeout: any(named: 'timeout'),
+          pingInterval: any(named: 'pingInterval'),
         )).thenAnswer((_) async => mockSocket);
 
     client = GatewayClient(
@@ -114,6 +132,7 @@ void main() {
             Uri.parse('ws://localhost:18789/device/ws'),
             headers: any(named: 'headers'),
             timeout: any(named: 'timeout'),
+            pingInterval: any(named: 'pingInterval'),
           )).called(1);
 
       expect(sentFrames.length, 1);
@@ -140,6 +159,7 @@ void main() {
             Uri.parse('wss://vps.example.com:18789/device/ws'),
             headers: any(named: 'headers'),
             timeout: any(named: 'timeout'),
+            pingInterval: any(named: 'pingInterval'),
           )).called(1);
 
       expect(sentFrames.length, 1);
@@ -190,7 +210,7 @@ void main() {
       // Wait a bit to verify no reconnect happens
       await Future<void>.delayed(const Duration(milliseconds: 60));
       expect(client.state, GatewayConnectionState.disconnected);
-      verify(() => mockSocketFactory.connect(any(), headers: any(named: 'headers'), timeout: any(named: 'timeout'))).called(1);
+      verify(() => mockSocketFactory.connect(any(), headers: any(named: 'headers'), timeout: any(named: 'timeout'), pingInterval: any(named: 'pingInterval'))).called(1);
 
       await sub.cancel();
     });
@@ -468,7 +488,7 @@ void main() {
         await secondStreamController.close();
       });
 
-      when(() => mockSocketFactory.connect(any(), headers: any(named: 'headers'), timeout: any(named: 'timeout')))
+      when(() => mockSocketFactory.connect(any(), headers: any(named: 'headers'), timeout: any(named: 'timeout'), pingInterval: any(named: 'pingInterval')))
           .thenAnswer((_) async => secondMockSocket);
 
       // Simulate unexpected socket drop (e.g. server closes or network drop)
@@ -479,7 +499,7 @@ void main() {
 
       // Should have transitioned to reconnecting and attempted connect again
       expect(stateHistory.contains(GatewayConnectionState.reconnecting), isTrue);
-      verify(() => mockSocketFactory.connect(any(), headers: any(named: 'headers'), timeout: any(named: 'timeout'))).called(2);
+      verify(() => mockSocketFactory.connect(any(), headers: any(named: 'headers'), timeout: any(named: 'timeout'), pingInterval: any(named: 'pingInterval'))).called(2);
 
       // Authenticate second connection
       secondStreamController.add(jsonEncode({'type': 'auth_success'}));
@@ -508,7 +528,7 @@ void main() {
       // Wait a bit to ensure no reconnect attempts
       await Future<void>.delayed(const Duration(milliseconds: 60));
       expect(client.state, GatewayConnectionState.disconnected);
-      verify(() => mockSocketFactory.connect(any(), headers: any(named: 'headers'), timeout: any(named: 'timeout'))).called(1);
+      verify(() => mockSocketFactory.connect(any(), headers: any(named: 'headers'), timeout: any(named: 'timeout'), pingInterval: any(named: 'pingInterval'))).called(1);
 
       await sub.cancel();
     });
@@ -633,14 +653,14 @@ void main() {
         }
       });
 
-      when(() => mockSocketFactory.connect(any(), headers: any(named: 'headers'), timeout: any(named: 'timeout')))
+      when(() => mockSocketFactory.connect(any(), headers: any(named: 'headers'), timeout: any(named: 'timeout'), pingInterval: any(named: 'pingInterval')))
           .thenAnswer((_) async => secondMockSocket);
 
       // Unexpected socket drop -> auto-reconnect.
       await socketStreamController.close();
       await Future<void>.delayed(const Duration(milliseconds: 60));
 
-      verify(() => mockSocketFactory.connect(any(), headers: any(named: 'headers'), timeout: any(named: 'timeout'))).called(2);
+      verify(() => mockSocketFactory.connect(any(), headers: any(named: 'headers'), timeout: any(named: 'timeout'), pingInterval: any(named: 'pingInterval'))).called(2);
 
       secondStreamController.add(jsonEncode({'type': 'auth_success'}));
       await pumpEventQueue();
@@ -696,6 +716,84 @@ void main() {
       expect(errors, isEmpty);
 
       await sub.cancel();
+    });
+  });
+
+  group('GatewayClient - Close Diagnostics', () {
+    test('logs remote_closed with socket close code when stream ends', () async {
+      when(() => mockSocket.closeCode).thenAnswer((_) => 1006);
+      when(() => mockSocket.closeReason).thenAnswer((_) => 'gone silent');
+
+      final quietClient = GatewayClient(
+        socketFactory: mockSocketFactory,
+        options: const GatewayClientOptions(autoReconnect: false),
+      );
+      addTearDown(quietClient.dispose);
+
+      await quietClient.connect('ws://localhost:18789/ws', token: 'token123');
+      socketStreamController.add(jsonEncode({'type': 'auth_success'}));
+      await pumpEventQueue();
+      expect(quietClient.state, GatewayConnectionState.connected);
+
+      final lines = await captureDebugPrint(() async {
+        await socketStreamController.close();
+        await pumpEventQueue();
+      });
+
+      expect(
+        lines.any((line) => line.contains('cause=remote_closed code=1006')),
+        isTrue,
+      );
+      expect(
+        lines.any((line) => line.contains('reason=gone silent')),
+        isTrue,
+      );
+    });
+
+    test('logs app_watchdog when heartbeat pong never arrives', () async {
+      final fastClient = GatewayClient(
+        socketFactory: mockSocketFactory,
+        options: const GatewayClientOptions(
+          heartbeatInterval: Duration(milliseconds: 30),
+          heartbeatTimeout: Duration(milliseconds: 40),
+          autoReconnect: false,
+        ),
+      );
+      addTearDown(fastClient.dispose);
+
+      await fastClient.connect('ws://localhost:18789/ws', token: 'token123');
+      socketStreamController.add(jsonEncode({'type': 'auth_success'}));
+      await pumpEventQueue();
+      expect(fastClient.state, GatewayConnectionState.connected);
+
+      final lines = await captureDebugPrint(
+        () => Future<void>.delayed(const Duration(milliseconds: 160)),
+      );
+
+      expect(lines.any((line) => line.contains('cause=app_watchdog')), isTrue);
+    });
+
+    test('logs manual_disconnect when disconnect() is called', () async {
+      await client.connect('ws://localhost:18789/ws', token: 'token123');
+      socketStreamController.add(jsonEncode({'type': 'auth_success'}));
+      await pumpEventQueue();
+      expect(client.state, GatewayConnectionState.connected);
+
+      final lines = await captureDebugPrint(() => client.disconnect());
+
+      expect(
+        lines.any((line) => line.contains('cause=manual_disconnect')),
+        isTrue,
+      );
+    });
+
+    test('logs auth_timeout when auth_success never arrives', () async {
+      final lines = await captureDebugPrint(() async {
+        await client.connect('ws://localhost:18789/ws', token: 'token123');
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+
+      expect(lines.any((line) => line.contains('cause=auth_timeout')), isTrue);
     });
   });
 }

@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:flutter_ai_agent/data/datasources/remote/gateway/gateway_socket.dart';
 import 'package:flutter_ai_agent/domain/entities/gateway/gateway_connection_state.dart';
 import 'package:flutter_ai_agent/domain/entities/gateway/gateway_message.dart';
@@ -10,6 +12,23 @@ import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dar
 
 /// Supplies the tool manifest frames advertised to the bridge.
 typedef ToolManifestProvider = List<Map<String, dynamic>> Function();
+
+/// Why a WebSocket teardown happened. Recorded before every socket close so
+/// each flap is self-explanatory in the app logs.
+enum _CloseCause {
+  appWatchdog('app_watchdog'),
+  authTimeout('auth_timeout'),
+  manualDisconnect('manual_disconnect'),
+  authRejected('auth_rejected'),
+  remoteClosed('remote_closed'),
+  socketError('socket_error'),
+  disposed('disposed'),
+  connectSuperseded('connect_superseded');
+
+  const _CloseCause(this.label);
+
+  final String label;
+}
 
 /// Configuration options for [GatewayClient].
 class GatewayClientOptions {
@@ -22,6 +41,7 @@ class GatewayClientOptions {
   final Duration maxReconnectDelay;
   final double reconnectBackoffFactor;
   final int maxReconnectAttempts;
+  final Duration keepalivePingInterval;
 
   const GatewayClientOptions({
     this.heartbeatInterval = const Duration(seconds: 30),
@@ -33,6 +53,7 @@ class GatewayClientOptions {
     this.maxReconnectDelay = const Duration(seconds: 30),
     this.reconnectBackoffFactor = 1.5,
     this.maxReconnectAttempts = 10,
+    this.keepalivePingInterval = const Duration(seconds: 20),
   });
 }
 
@@ -140,7 +161,7 @@ class GatewayClient implements GatewayClientBase {
     _currentToken = token;
 
     _cancelTimers();
-    await _cleanUpSocket();
+    await _cleanUpSocket(_CloseCause.connectSuperseded);
 
     _setState(GatewayConnectionState.connecting);
 
@@ -149,10 +170,14 @@ class GatewayClient implements GatewayClientBase {
       final socket = await socketFactory.connect(
         uri,
         timeout: options.connectTimeout,
+        pingInterval: options.keepalivePingInterval,
       );
 
       if (_manuallyDisconnected || _disposed) {
-        await socket.close();
+        await _closeAndLog(
+          socket,
+          _disposed ? _CloseCause.disposed : _CloseCause.manualDisconnect,
+        );
         return;
       }
 
@@ -207,7 +232,7 @@ class GatewayClient implements GatewayClientBase {
           _authTimer?.cancel();
           _authTimer = null;
           _manuallyDisconnected = true; // Never auto-reconnect on auth rejection
-          _cleanUpSocket();
+          _cleanUpSocket(_CloseCause.authRejected);
           _setState(GatewayConnectionState.disconnected);
           _messageController.add(message);
           return;
@@ -267,7 +292,7 @@ class GatewayClient implements GatewayClientBase {
       // Only start watchdog if one is not already pending for an unanswered ping
       _watchdogTimer ??= Timer(options.heartbeatTimeout, () {
         // Watchdog expired: server failed to respond to heartbeat
-        _cleanUpSocket();
+        _cleanUpSocket(_CloseCause.appWatchdog);
         _triggerReconnect();
       });
     });
@@ -276,13 +301,13 @@ class GatewayClient implements GatewayClientBase {
   /// Handles authentication timeout if the gateway never responded to auth frame.
   void _handleAuthTimeout() {
     if (_state != GatewayConnectionState.connecting) return;
-    _cleanUpSocket();
+    _cleanUpSocket(_CloseCause.authTimeout);
     _triggerReconnect();
   }
 
   /// Handles unexpected socket closure.
   void _handleSocketDone() {
-    _cleanUpSocket();
+    _cleanUpSocket(_CloseCause.remoteClosed);
     if (!_manuallyDisconnected && options.autoReconnect) {
       _triggerReconnect();
     } else {
@@ -292,7 +317,7 @@ class GatewayClient implements GatewayClientBase {
 
   /// Handles socket stream error.
   void _handleSocketError(dynamic error) {
-    _cleanUpSocket();
+    _cleanUpSocket(_CloseCause.socketError, detail: error.toString());
     if (!_manuallyDisconnected && options.autoReconnect) {
       _triggerReconnect();
     } else {
@@ -374,10 +399,12 @@ class GatewayClient implements GatewayClientBase {
 
   /// Disconnects the socket and disables auto-reconnection.
   @override
-  Future<void> disconnect({String? reason}) async {
+  Future<void> disconnect({String? reason}) => _teardown(_CloseCause.manualDisconnect);
+
+  Future<void> _teardown(_CloseCause cause) async {
     _manuallyDisconnected = true;
     _cancelTimers();
-    await _cleanUpSocket();
+    await _cleanUpSocket(cause);
     _setState(GatewayConnectionState.disconnected);
   }
 
@@ -402,15 +429,33 @@ class GatewayClient implements GatewayClientBase {
     _reconnectTimer = null;
   }
 
-  /// Cleans up current socket and subscription.
-  Future<void> _cleanUpSocket() async {
+  /// Cleans up current socket and subscription, logging the [cause] exactly
+  /// once per teardown before the socket is closed.
+  Future<void> _cleanUpSocket(_CloseCause cause, {String? detail}) async {
     _cancelTimers();
     unawaited(_socketSubscription?.cancel());
     _socketSubscription = null;
-    try {
-      unawaited(_socket?.close());
-    } catch (_) {}
+    final socket = _socket;
     _socket = null;
+    await _closeAndLog(socket, cause, detail: detail);
+  }
+
+  /// Emits the single diagnostic close line and closes [socket] if non-null.
+  Future<void> _closeAndLog(
+    GatewaySocket? socket,
+    _CloseCause cause, {
+    String? detail,
+  }) async {
+    if (socket == null) return;
+    final code = socket.closeCode;
+    final reason = detail ?? socket.closeReason;
+    debugPrint(
+      'gw_ws_close cause=${cause.label} code=${code?.toString() ?? '-'} '
+      'reason=${reason ?? '-'} state=${_state.name} attempts=$_reconnectAttempts',
+    );
+    try {
+      unawaited(socket.close());
+    } catch (_) {}
   }
 
   /// Disposes resources, closes streams, and disconnects.
@@ -418,7 +463,7 @@ class GatewayClient implements GatewayClientBase {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
-    await disconnect(reason: 'Client disposed');
+    await _teardown(_CloseCause.disposed);
     await _stateController.close();
     await _messageController.close();
     await _textDeltaController.close();

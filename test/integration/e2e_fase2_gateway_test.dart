@@ -62,6 +62,12 @@ class FakeGatewaySocket implements GatewaySocket {
 
   @override
   Future<void> close([int? code, String? reason]) => Future.value();
+
+  @override
+  int? get closeCode => null;
+
+  @override
+  String? get closeReason => null;
 }
 
 class FakeGatewaySocketFactory implements GatewaySocketFactory {
@@ -74,6 +80,7 @@ class FakeGatewaySocketFactory implements GatewaySocketFactory {
     Uri uri, {
     Map<String, dynamic>? headers,
     Duration? timeout,
+    Duration? pingInterval,
   }) =>
       Future.value(socket);
 }

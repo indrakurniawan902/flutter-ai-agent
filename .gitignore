@@ -49,3 +49,4 @@ app.*.map.json
 
 # Worktrees
 .worktrees/
+.hermes/
