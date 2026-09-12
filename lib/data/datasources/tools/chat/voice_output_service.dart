@@ -98,8 +98,18 @@ abstract class TtsClient {
   });
 }
 
+class UnsupportedEndpointException implements Exception {
+  final String message;
+  const UnsupportedEndpointException([
+    this.message = 'TTS endpoint not supported by the active server or router',
+  ]);
+}
+
 @LazySingleton(as: TtsClient)
 class DioTtsClient implements TtsClient {
+  static const String unsupportedEndpointMessage =
+      'TTS endpoint not supported by the active server/router';
+
   DioTtsClient({
     required Dio dio,
     String? baseUrl,
@@ -170,15 +180,30 @@ class DioTtsClient implements TtsClient {
       'speed': ?speed,
       'response_format': 'mp3',
     };
-    final response = await _dio.post<List<int>>(
-      endpoint,
-      data: payload,
-      options: Options(
-        responseType: ResponseType.bytes,
-        headers: headers,
-      ),
-    );
+    final Response<List<int>> response;
+    try {
+      response = await _dio.post<List<int>>(
+        endpoint,
+        data: payload,
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: headers,
+        ),
+      );
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        throw const UnsupportedEndpointException(
+          DioTtsClient.unsupportedEndpointMessage,
+        );
+      }
+      rethrow;
+    }
     final bytes = response.data;
+    if (response.statusCode == 404) {
+      throw const UnsupportedEndpointException(
+        DioTtsClient.unsupportedEndpointMessage,
+      );
+    }
     if (response.statusCode != 200 || bytes == null) {
       throw ServerException(
         response.statusMessage ?? 'TTS request failed',
@@ -271,6 +296,11 @@ class VoiceOutputService implements VoiceOutputServiceBase {
         speed: speed,
       );
       return await queueAudio(bytes);
+    } on UnsupportedEndpointException {
+      _fail(DioTtsClient.unsupportedEndpointMessage);
+      return const Left(
+        UnsupportedEndpointFailure(DioTtsClient.unsupportedEndpointMessage),
+      );
     } catch (e) {
       _fail('Speech synthesis failed: $e');
       return Left(ServerFailure('Speech synthesis failed: $e'));
@@ -307,6 +337,11 @@ class VoiceOutputService implements VoiceOutputServiceBase {
         speed: speed,
       );
       return await queueAudio(bytes);
+    } on UnsupportedEndpointException {
+      _fail(DioTtsClient.unsupportedEndpointMessage);
+      return const Left(
+        UnsupportedEndpointFailure(DioTtsClient.unsupportedEndpointMessage),
+      );
     } catch (e) {
       _fail('Text queue failed: $e');
       return Left(ServerFailure('Text queue failed: $e'));
