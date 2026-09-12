@@ -4,6 +4,8 @@
 <dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Flames requires access to your location for location-based tools and context.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Flames requires background location to trigger ambient arrival briefings and geofence events.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>Flames requires access to your calendar to view and schedule events.</string>
 	<key>NSCameraUsageDescription</key>
