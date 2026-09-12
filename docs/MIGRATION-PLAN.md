@@ -111,31 +111,31 @@ lib/
 | `lib/features/chat/presentation/widgets/live_action_stepper_card.dart` | `lib/presentation/screen/chat/live_action_stepper_card.dart` | [DONE] screen-local |
 | `lib/features/chat/presentation/widgets/permission_rationale_modal.dart` | `lib/presentation/screen/chat/permission_rationale_modal.dart` | [DONE] screen-local |
 | `lib/features/chat/presentation/widgets/summary_card.dart` | `lib/presentation/screen/chat/summary_card.dart` | [DONE] screen-local |
-| `lib/features/memory_vault/presentation/screens/memory_vault_screen.dart` | `lib/presentation/screen/memory_vault/memory_vault_screen.dart` |  |
-| `lib/features/navigation/presentation/cubits/navigation_cubit.dart` | `lib/presentation/screen/navigation/cubit/navigation_cubit.dart` |  |
-| `lib/features/navigation/presentation/cubits/navigation_state.dart` | `lib/presentation/screen/navigation/cubit/navigation_state.dart` |  |
-| `lib/features/navigation/presentation/screens/main_navigation_shell.dart` | `lib/presentation/screen/navigation/main_navigation_shell.dart` |  |
-| `lib/features/navigation/presentation/widgets/floating_bottom_nav_bar.dart` | `lib/presentation/widget/floating_bottom_nav_bar.dart` | shared nav widget -> presentation/widget/ |
-| `lib/features/pairing/data/models/pairing_payload.dart` | `lib/data/models/pairing/pairing_payload.dart` |  |
-| `lib/features/pairing/data/scanner_controller_wrapper.dart` | `lib/data/tools/pairing/scanner_controller_wrapper.dart` | implements QrScannerControllerBase; device-tool implementation -> data/tools/<feature>/ |
-| `lib/features/pairing/domain/pairing_parser.dart` | `lib/domain/tools/pairing/pairing_parser.dart` | domain business logic; migrate PairingPayload dependency to a domain entity if domain must consume it |
-| `lib/features/pairing/domain/qr_scanner_controller.dart` | `lib/domain/repositories/pairing/qr_scanner_controller.dart` | abstract contract QrScannerControllerBase -> domain/repositories/<feature>/ |
-| `lib/features/pairing/presentation/screens/qr_scanner_screen.dart` | `lib/presentation/screen/pairing/qr_scanner_screen.dart` |  |
-| `lib/features/pocket_node/presentation/screens/pocket_node_screen.dart` | `lib/presentation/screen/pocket_node/pocket_node_screen.dart` |  |
-| `lib/features/server_profiles/data/models/server_profile_model.dart` | `lib/data/models/server_profiles/server_profile_model.dart` |  |
-| `lib/features/server_profiles/domain/entities/server_profile.dart` | `lib/domain/entities/server_profiles/server_profile.dart` |  |
-| `lib/features/server_profiles/domain/server_profile_cubit.dart` | `—` | re-export shim -> DELETE (update imports, no replacement path) |
-| `lib/features/server_profiles/domain/server_profile_state.dart` | `—` | re-export shim -> DELETE (update imports, no replacement path) |
-| `lib/features/server_profiles/presentation/cubits/server_profile_cubit.dart` | `lib/presentation/screen/server_profiles/cubit/server_profile_cubit.dart` |  |
-| `lib/features/server_profiles/presentation/cubits/server_profile_state.dart` | `lib/presentation/screen/server_profiles/cubit/server_profile_state.dart` |  |
-| `lib/features/settings/data/secure_storage_service.dart` | `lib/data/tools/settings/secure_storage_service.dart` | cross-cutting storage service; promote to a shared data service if reused beyond settings |
-| `lib/features/settings/domain/settings_cubit.dart` | `—` | re-export shim -> DELETE (update imports, no replacement path) |
-| `lib/features/settings/domain/settings_state.dart` | `—` | re-export shim -> DELETE (update imports, no replacement path) |
-| `lib/features/settings/presentation/cubits/settings_cubit.dart` | `lib/presentation/screen/settings/cubit/settings_cubit.dart` |  |
-| `lib/features/settings/presentation/cubits/settings_state.dart` | `lib/presentation/screen/settings/cubit/settings_state.dart` |  |
-| `lib/features/settings/presentation/screens/settings_screen.dart` | `lib/presentation/screen/settings/settings_screen.dart` |  |
-| `lib/features/skills/presentation/screens/skills_hub_screen.dart` | `lib/presentation/screen/skills/skills_hub_screen.dart` |  |
-| `lib/features/splash/presentation/screens/splash_screen.dart` | `lib/presentation/screen/splash/splash_screen.dart` |  |
+| `lib/features/memory_vault/presentation/screens/memory_vault_screen.dart` | `lib/presentation/screen/memory_vault/memory_vault_screen.dart` | [DONE] |
+| `lib/features/navigation/presentation/cubits/navigation_cubit.dart` | `lib/presentation/screen/navigation/cubit/navigation_cubit.dart` | [DONE] |
+| `lib/features/navigation/presentation/cubits/navigation_state.dart` | `lib/presentation/screen/navigation/cubit/navigation_state.dart` | [DONE] |
+| `lib/features/navigation/presentation/screens/main_navigation_shell.dart` | `lib/presentation/screen/navigation/main_navigation_shell.dart` | [DONE] |
+| `lib/features/navigation/presentation/widgets/floating_bottom_nav_bar.dart` | `lib/presentation/widget/floating_bottom_nav_bar.dart` | [DONE] shared nav widget -> presentation/widget/ |
+| `lib/features/pairing/data/models/pairing_payload.dart` | `lib/data/models/pairing/pairing_payload.dart` | [DONE] |
+| `lib/features/pairing/data/scanner_controller_wrapper.dart` | `lib/data/tools/pairing/scanner_controller_wrapper.dart` | [DONE] implements QrScannerControllerBase; device-tool implementation -> data/tools/<feature>/ |
+| `lib/features/pairing/domain/pairing_parser.dart` | `lib/domain/tools/pairing/pairing_parser.dart` | [DONE] domain business logic; migrate PairingPayload dependency to a domain entity if domain must consume it |
+| `lib/features/pairing/domain/qr_scanner_controller.dart` | `lib/domain/repositories/pairing/qr_scanner_controller.dart` | [DONE] abstract contract QrScannerControllerBase -> domain/repositories/<feature>/ |
+| `lib/features/pairing/presentation/screens/qr_scanner_screen.dart` | `lib/presentation/screen/pairing/qr_scanner_screen.dart` | [DONE] |
+| `lib/features/pocket_node/presentation/screens/pocket_node_screen.dart` | `lib/presentation/screen/pocket_node/pocket_node_screen.dart` | [DONE] |
+| `lib/features/server_profiles/data/models/server_profile_model.dart` | `lib/data/models/server_profiles/server_profile_model.dart` | [DONE] |
+| `lib/features/server_profiles/domain/entities/server_profile.dart` | `lib/domain/entities/server_profiles/server_profile.dart` | [DONE] |
+| `lib/features/server_profiles/domain/server_profile_cubit.dart` | `—` | [DONE] re-export shim -> DELETE (update imports, no replacement path) |
+| `lib/features/server_profiles/domain/server_profile_state.dart` | `—` | [DONE] re-export shim -> DELETE (update imports, no replacement path) |
+| `lib/features/server_profiles/presentation/cubits/server_profile_cubit.dart` | `lib/presentation/screen/server_profiles/cubit/server_profile_cubit.dart` | [DONE] |
+| `lib/features/server_profiles/presentation/cubits/server_profile_state.dart` | `lib/presentation/screen/server_profiles/cubit/server_profile_state.dart` | [DONE] |
+| `lib/features/settings/data/secure_storage_service.dart` | `lib/data/tools/settings/secure_storage_service.dart` | [DONE] cross-cutting storage service; promote to a shared data service if reused beyond settings |
+| `lib/features/settings/domain/settings_cubit.dart` | `—` | [DONE] re-export shim -> DELETE (update imports, no replacement path) |
+| `lib/features/settings/domain/settings_state.dart` | `—` | [DONE] re-export shim -> DELETE (update imports, no replacement path) |
+| `lib/features/settings/presentation/cubits/settings_cubit.dart` | `lib/presentation/screen/settings/cubit/settings_cubit.dart` | [DONE] |
+| `lib/features/settings/presentation/cubits/settings_state.dart` | `lib/presentation/screen/settings/cubit/settings_state.dart` | [DONE] |
+| `lib/features/settings/presentation/screens/settings_screen.dart` | `lib/presentation/screen/settings/settings_screen.dart` | [DONE] |
+| `lib/features/skills/presentation/screens/skills_hub_screen.dart` | `lib/presentation/screen/skills/skills_hub_screen.dart` | [DONE] |
+| `lib/features/splash/presentation/screens/splash_screen.dart` | `lib/presentation/screen/splash/splash_screen.dart` | [DONE] |
 | `lib/main.dart` | `lib/main.dart` | stays at repo root |
 | `lib/main_development.dart` | `lib/main_development.dart` | stays at repo root |
 | `lib/main_production.dart` | `lib/main_production.dart` | stays at repo root |
@@ -162,22 +162,22 @@ lib/
 | `test/features/chat/presentation/widgets/live_action_stepper_card_test.dart` | `test/presentation/screen/chat/live_action_stepper_card_test.dart` | [DONE] mirrors screen-local widget |
 | `test/features/chat/presentation/widgets/permission_rationale_modal_test.dart` | `test/presentation/screen/chat/permission_rationale_modal_test.dart` | [DONE] mirrors screen-local widget |
 | `test/features/chat/presentation/widgets/summary_card_test.dart` | `test/presentation/screen/chat/summary_card_test.dart` | [DONE] mirrors screen-local widget |
-| `test/features/memory_vault/presentation/screens/memory_vault_screen_test.dart` | `test/presentation/screen/memory_vault/memory_vault_screen_test.dart` |  |
-| `test/features/navigation/presentation/cubits/navigation_cubit_test.dart` | `test/presentation/screen/navigation/cubit/navigation_cubit_test.dart` |  |
-| `test/features/navigation/presentation/screens/main_navigation_shell_test.dart` | `test/presentation/screen/navigation/main_navigation_shell_test.dart` |  |
-| `test/features/navigation/presentation/widgets/floating_bottom_nav_bar_test.dart` | `test/presentation/screen/navigation/floating_bottom_nav_bar_test.dart` | mirrors screen-local widget |
-| `test/features/pairing/data/models/pairing_payload_test.dart` | `test/data/models/pairing/pairing_payload_test.dart` |  |
-| `test/features/pairing/data/scanner_controller_wrapper_test.dart` | `test/data/tools/pairing/scanner_controller_wrapper_test.dart` |  |
-| `test/features/pairing/domain/pairing_parser_test.dart` | `test/domain/tools/pairing/pairing_parser_test.dart` |  |
-| `test/features/pairing/presentation/screens/qr_scanner_screen_test.dart` | `test/presentation/screen/pairing/qr_scanner_screen_test.dart` |  |
-| `test/features/pocket_node/presentation/screens/pocket_node_screen_test.dart` | `test/presentation/screen/pocket_node/pocket_node_screen_test.dart` |  |
-| `test/features/server_profiles/data/models/server_profile_model_test.dart` | `test/data/models/server_profiles/server_profile_model_test.dart` |  |
-| `test/features/server_profiles/presentation/cubits/server_profile_cubit_test.dart` | `test/presentation/screen/server_profiles/cubit/server_profile_cubit_test.dart` |  |
-| `test/features/settings/data/secure_storage_service_test.dart` | `test/data/tools/settings/secure_storage_service_test.dart` |  |
-| `test/features/settings/presentation/cubits/settings_cubit_test.dart` | `test/presentation/screen/settings/cubit/settings_cubit_test.dart` |  |
-| `test/features/settings/presentation/screens/settings_screen_test.dart` | `test/presentation/screen/settings/settings_screen_test.dart` |  |
-| `test/features/skills/presentation/screens/skills_hub_screen_test.dart` | `test/presentation/screen/skills/skills_hub_screen_test.dart` |  |
-| `test/features/splash/presentation/screens/splash_screen_test.dart` | `test/presentation/screen/splash/splash_screen_test.dart` |  |
+| `test/features/memory_vault/presentation/screens/memory_vault_screen_test.dart` | `test/presentation/screen/memory_vault/memory_vault_screen_test.dart` | [DONE] |
+| `test/features/navigation/presentation/cubits/navigation_cubit_test.dart` | `test/presentation/screen/navigation/cubit/navigation_cubit_test.dart` | [DONE] |
+| `test/features/navigation/presentation/screens/main_navigation_shell_test.dart` | `test/presentation/screen/navigation/main_navigation_shell_test.dart` | [DONE] |
+| `test/features/navigation/presentation/widgets/floating_bottom_nav_bar_test.dart` | `test/presentation/screen/navigation/floating_bottom_nav_bar_test.dart` | [DONE] mirrors screen-local widget |
+| `test/features/pairing/data/models/pairing_payload_test.dart` | `test/data/models/pairing/pairing_payload_test.dart` | [DONE] |
+| `test/features/pairing/data/scanner_controller_wrapper_test.dart` | `test/data/tools/pairing/scanner_controller_wrapper_test.dart` | [DONE] |
+| `test/features/pairing/domain/pairing_parser_test.dart` | `test/domain/tools/pairing/pairing_parser_test.dart` | [DONE] |
+| `test/features/pairing/presentation/screens/qr_scanner_screen_test.dart` | `test/presentation/screen/pairing/qr_scanner_screen_test.dart` | [DONE] |
+| `test/features/pocket_node/presentation/screens/pocket_node_screen_test.dart` | `test/presentation/screen/pocket_node/pocket_node_screen_test.dart` | [DONE] |
+| `test/features/server_profiles/data/models/server_profile_model_test.dart` | `test/data/models/server_profiles/server_profile_model_test.dart` | [DONE] |
+| `test/features/server_profiles/presentation/cubits/server_profile_cubit_test.dart` | `test/presentation/screen/server_profiles/cubit/server_profile_cubit_test.dart` | [DONE] |
+| `test/features/settings/data/secure_storage_service_test.dart` | `test/data/tools/settings/secure_storage_service_test.dart` | [DONE] |
+| `test/features/settings/presentation/cubits/settings_cubit_test.dart` | `test/presentation/screen/settings/cubit/settings_cubit_test.dart` | [DONE] |
+| `test/features/settings/presentation/screens/settings_screen_test.dart` | `test/presentation/screen/settings/settings_screen_test.dart` | [DONE] |
+| `test/features/skills/presentation/screens/skills_hub_screen_test.dart` | `test/presentation/screen/skills/skills_hub_screen_test.dart` | [DONE] |
+| `test/features/splash/presentation/screens/splash_screen_test.dart` | `test/presentation/screen/splash/splash_screen_test.dart` | [DONE] |
 | `test/helpers/mocks.dart` | `test/helpers/mocks.dart` | stays (mirrors repo-root file / shared helpers / e2e) |
 | `test/integration/e2e_agent_integration_test.dart` | `test/integration/e2e_agent_integration_test.dart` | stays (mirrors repo-root file / shared helpers / e2e) |
 | `test/integration/e2e_nous_ui_navigation_integration_test.dart` | `test/integration/e2e_nous_ui_navigation_integration_test.dart` | stays (mirrors repo-root file / shared helpers / e2e) |
@@ -197,4 +197,11 @@ lib/
 - **T13.5 — Dependency Injection & Core Cleanup (DONE)**
   - Hand-wired `lib/core/di/injection_container.dart` deleted and replaced with `lib/common/injection/` (Injectable codegen).
   - All unit/widget/integration tests (394 tests) green.
+
+- **T13.6 — Remaining Features Migration Out of lib/features/ (DONE)**
+  - All remaining features (splash, skills, memory_vault, pocket_node, navigation, pairing, server_profiles, settings) migrated out of `lib/features/` into layer-first Clean Architecture.
+  - `lib/features/` and `test/features/` completely deleted.
+  - Presentation is clean of data layer imports.
+  - `PairingPayload` domain entity and `QrScannerController` established.
+  - All 400 tests green and 0 analyze issues.
 

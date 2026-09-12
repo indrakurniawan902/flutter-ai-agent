@@ -16,9 +16,9 @@ import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_confirm
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/live_action_stepper_card.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/reasoning_card.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/summary_card.dart';
-import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_cubit.dart';
-import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_state.dart';
-import 'package:flutter_ai_agent/features/settings/presentation/screens/settings_screen.dart';
+import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_cubit.dart';
+import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_state.dart';
+import 'package:flutter_ai_agent/presentation/screen/settings/settings_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 

@@ -12,10 +12,14 @@
 
 import 'package:dio/dio.dart' as _i361;
 import 'package:flutter_ai_agent/common/injection/modules.dart' as _i225;
+import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart'
+    as _i348;
 import 'package:flutter_ai_agent/data/datasources/remote/chat/chat_datasource.dart'
     as _i522;
 import 'package:flutter_ai_agent/data/datasources/remote/chat/sse_parser.dart'
     as _i598;
+import 'package:flutter_ai_agent/data/datasources/remote/pairing/scanner_controller_wrapper.dart'
+    as _i319;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/calendar_service.dart'
     as _i1056;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/camera_vision_service.dart'
@@ -45,22 +49,23 @@ import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart'
 import 'package:flutter_ai_agent/domain/tools/chat/notification_service.dart'
     as _i919;
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart' as _i732;
-import 'package:flutter_ai_agent/features/navigation/presentation/cubits/navigation_cubit.dart'
-    as _i982;
-import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart'
-    as _i288;
-import 'package:flutter_ai_agent/features/server_profiles/presentation/cubits/server_profile_cubit.dart'
-    as _i22;
-import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart'
-    as _i574;
-import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_cubit.dart'
-    as _i755;
+import 'package:flutter_ai_agent/domain/tools/pairing/pairing_parser.dart'
+    as _i301;
+import 'package:flutter_ai_agent/domain/tools/pairing/qr_scanner_controller.dart'
+    as _i821;
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart'
     as _i15;
+import 'package:flutter_ai_agent/presentation/screen/navigation/cubit/navigation_cubit.dart'
+    as _i693;
+import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_cubit.dart'
+    as _i819;
+import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_cubit.dart'
+    as _i452;
 import 'package:flutter_ai_agent/utils/dio_err_handler.dart' as _i498;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart' as _i558;
 import 'package:get_it/get_it.dart' as _i174;
 import 'package:injectable/injectable.dart' as _i526;
+import 'package:mobile_scanner/mobile_scanner.dart' as _i625;
 
 extension GetItInjectableX on _i174.GetIt {
   // initializes the registration of main-scope dependencies inside of GetIt
@@ -71,14 +76,14 @@ extension GetItInjectableX on _i174.GetIt {
     final gh = _i526.GetItHelper(this, environment, environmentFilter);
     final networkModule = _$NetworkModule();
     final storageModule = _$StorageModule();
-    gh.factory<_i982.NavigationCubit>(() => _i982.NavigationCubit.create());
+    gh.factory<_i693.NavigationCubit>(() => _i693.NavigationCubit.create());
     gh.singleton<_i498.DioErrHandler>(() => const _i498.DioErrHandler());
     gh.lazySingleton<_i361.Dio>(() => networkModule.provideDio());
     gh.lazySingleton<_i558.FlutterSecureStorage>(
       () => storageModule.provideSecureStorage(),
     );
     gh.lazySingleton<_i598.SseParser>(() => _i598.SseParser());
-    gh.lazySingleton<_i288.PairingParser>(() => const _i288.PairingParser());
+    gh.lazySingleton<_i301.PairingParser>(() => const _i301.PairingParser());
     gh.lazySingleton<_i919.NotificationServiceBase>(
       () => _i89.NotificationService.create(),
     );
@@ -106,21 +111,16 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i3.DeviceContextServiceBase>(
       () => _i205.DeviceContextService.create(),
     );
-    gh.lazySingleton<_i574.SecureStorageService>(
+    gh.lazySingleton<_i348.SecureStorageService>(
       () =>
-          _i574.SecureStorageService(storage: gh<_i558.FlutterSecureStorage>()),
+          _i348.SecureStorageService(storage: gh<_i558.FlutterSecureStorage>()),
     );
     gh.lazySingleton<_i292.LocationServiceBase>(
       () => _i320.LocationService.create(),
     );
-    gh.factory<_i22.ServerProfileCubit>(
-      () => _i22.ServerProfileCubit.create(
-        secureStorageService: gh<_i574.SecureStorageService>(),
-      ),
-    );
-    gh.factory<_i755.SettingsCubit>(
-      () => _i755.SettingsCubit.create(
-        secureStorageService: gh<_i574.SecureStorageService>(),
+    gh.lazySingleton<_i821.QrScannerControllerBase>(
+      () => _i319.MobileScannerControllerWrapper(
+        controller: gh<_i625.MobileScannerController>(),
       ),
     );
     gh.lazySingleton<_i732.ToolRegistry>(
@@ -135,6 +135,16 @@ extension GetItInjectableX on _i174.GetIt {
     );
     gh.factory<_i15.AgentCubit>(
       () => _i15.AgentCubit.create(llmRepository: gh<_i192.LlmRepository>()),
+    );
+    gh.factory<_i819.ServerProfileCubit>(
+      () => _i819.ServerProfileCubit.create(
+        secureStorageService: gh<_i348.SecureStorageService>(),
+      ),
+    );
+    gh.factory<_i452.SettingsCubit>(
+      () => _i452.SettingsCubit.create(
+        secureStorageService: gh<_i348.SecureStorageService>(),
+      ),
     );
     return this;
   }
