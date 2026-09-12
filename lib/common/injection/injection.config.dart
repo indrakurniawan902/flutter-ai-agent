@@ -40,6 +40,8 @@ import 'package:flutter_ai_agent/data/datasources/tools/chat/device_context_serv
     as _i205;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/file_workspace_service.dart'
     as _i70;
+import 'package:flutter_ai_agent/data/datasources/tools/chat/intent_launcher_service_impl.dart'
+    as _i313;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/local_memory_service.dart'
     as _i734;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/location_service.dart'
@@ -88,6 +90,8 @@ import 'package:flutter_ai_agent/domain/tools/chat/device_context_service.dart'
     as _i3;
 import 'package:flutter_ai_agent/domain/tools/chat/file_workspace_service.dart'
     as _i745;
+import 'package:flutter_ai_agent/domain/tools/chat/intent_launcher_service.dart'
+    as _i173;
 import 'package:flutter_ai_agent/domain/tools/chat/local_memory_service.dart'
     as _i987;
 import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart'
@@ -124,6 +128,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart' as _i558;
 import 'package:get_it/get_it.dart' as _i174;
 import 'package:injectable/injectable.dart' as _i526;
 import 'package:mobile_scanner/mobile_scanner.dart' as _i625;
+import 'package:quick_actions/quick_actions.dart' as _i578;
 
 extension GetItInjectableX on _i174.GetIt {
   // initializes the registration of main-scope dependencies inside of GetIt
@@ -141,9 +146,6 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i558.FlutterSecureStorage>(
       () => storageModule.provideSecureStorage(),
     );
-    gh.lazySingleton<_i122.GatewayClient>(
-      () => gatewayModule.provideGatewayClient(gh<_i732.ToolRegistry>()),
-    );
     gh.lazySingleton<_i598.SseParser>(() => _i598.SseParser());
     gh.lazySingleton<_i301.PairingParser>(() => const _i301.PairingParser());
     gh.lazySingleton<_i919.NotificationServiceBase>(
@@ -160,9 +162,30 @@ extension GetItInjectableX on _i174.GetIt {
         storage: gh<_i558.FlutterSecureStorage>(),
       ),
     );
-
+    gh.lazySingleton<_i732.ToolRegistry>(
+      () => _i732.ToolRegistry(
+        clipboardService: gh<_i547.ClipboardServiceBase>(),
+        locationService: gh<_i292.LocationServiceBase>(),
+        deviceContextService: gh<_i3.DeviceContextServiceBase>(),
+        cameraVisionService: gh<_i815.CameraVisionServiceBase>(),
+        calendarService: gh<_i1020.CalendarServiceBase>(),
+        notificationService: gh<_i919.NotificationServiceBase>(),
+        fileWorkspaceService: gh<_i745.FileWorkspaceServiceBase>(),
+        notificationTriageService: gh<_i396.NotificationTriageServiceBase>(),
+        localMemoryService: gh<_i987.LocalMemoryServiceBase>(),
+        ambientTriggerService: gh<_i290.AmbientTriggerServiceBase>(),
+        voiceInputService: gh<_i652.VoiceInputServiceBase>(),
+        voiceOutputService: gh<_i45.VoiceOutputServiceBase>(),
+        backgroundService: gh<_i791.BackgroundServiceBase>(),
+        contactLauncherTools: gh<_i777.ContactLauncherTools>(),
+        intentLauncherService: gh<_i173.IntentLauncherServiceBase>(),
+      ),
+    );
     gh.lazySingleton<_i547.ClipboardServiceBase>(
       () => _i105.ClipboardService.create(),
+    );
+    gh.lazySingleton<_i122.GatewayClient>(
+      () => gatewayModule.provideGatewayClient(gh<_i732.ToolRegistry>()),
     );
     gh.lazySingleton<_i192.LlmRepository>(
       () => _i236.LlmRepositoryImpl(
@@ -189,36 +212,35 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i205.ShareMediaProvider>(
       () => _i205.ReceiveSharingIntentProvider(),
     );
+    gh.lazySingleton<_i173.IntentLauncherServiceBase>(
+      () => _i313.IntentLauncherServiceImpl.create(),
+    );
+    gh.lazySingleton<_i745.FileWorkspaceServiceBase>(
+      () => _i70.FileWorkspaceService.create(),
+    );
     gh.lazySingleton<_i205.ShareTargetService>(
       () => _i205.ShareTargetService(provider: gh<_i205.ShareMediaProvider>()),
     );
     gh.factory<_i69.ShareTargetCubit>(
       () => _i69.ShareTargetCubit(service: gh<_i205.ShareTargetService>()),
     );
-    gh.lazySingleton<_i745.FileWorkspaceServiceBase>(
-      () => _i70.FileWorkspaceService.create(),
-    );
     gh.lazySingleton<_i791.BackgroundServiceBase>(
       () => _i1033.BackgroundService.create(),
     );
     gh.lazySingleton<_i777.ContactLauncherTools>(
-      () => _i777.ContactLauncherTools(),
+      () => _i777.ContactLauncherTools(
+        contactsProvider: gh<_i777.ContactsProvider>(),
+        urlLauncherProvider: gh<_i777.UrlLauncherProvider>(),
+      ),
     );
     gh.lazySingleton<_i290.AmbientTriggerServiceBase>(
       () => _i315.AmbientTriggerService.create(),
     );
-    gh.lazySingleton<_i753.TtsClient>(
-      () => _i753.DioTtsClient.create(
-        gh<_i361.Dio>(),
-        gh<_i348.SecureStorageService>(),
-      ),
-    );
     gh.lazySingleton<_i652.VoiceInputServiceBase>(
       () => _i845.VoiceInputService.create(),
     );
-
     gh.lazySingleton<_i791.SkillsRegistryService>(
-      () => _i791.SkillsRegistryService(),
+      () => _i791.SkillsRegistryService(loadDefaults: gh<bool>()),
     );
     gh.lazySingleton<_i879.BatteryOptimizationServiceBase>(
       () => _i82.BatteryOptimizationService.create(),
@@ -230,29 +252,27 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i292.LocationServiceBase>(
       () => _i320.LocationService.create(),
     );
-    gh.lazySingleton<_i355.QuickActionsProvider>(
-      () => _i355.DefaultQuickActionsProvider(),
-    );
-    gh.lazySingleton<_i732.ToolRegistry>(
-      () => _i732.ToolRegistry(
-        clipboardService: gh<_i547.ClipboardServiceBase>(),
-        locationService: gh<_i292.LocationServiceBase>(),
-        deviceContextService: gh<_i3.DeviceContextServiceBase>(),
-        cameraVisionService: gh<_i815.CameraVisionServiceBase>(),
-        calendarService: gh<_i1020.CalendarServiceBase>(),
-        notificationService: gh<_i919.NotificationServiceBase>(),
-        fileWorkspaceService: gh<_i745.FileWorkspaceServiceBase>(),
-        notificationTriageService: gh<_i396.NotificationTriageServiceBase>(),
-        localMemoryService: gh<_i987.LocalMemoryServiceBase>(),
-        ambientTriggerService: gh<_i290.AmbientTriggerServiceBase>(),
-        voiceInputService: gh<_i652.VoiceInputServiceBase>(),
-        voiceOutputService: gh<_i45.VoiceOutputServiceBase>(),
-        backgroundService: gh<_i791.BackgroundServiceBase>(),
-        contactLauncherTools: gh<_i777.ContactLauncherTools>(),
-      ),
-    );
     gh.lazySingleton<_i396.NotificationTriageServiceBase>(
       () => _i447.NotificationTriageService.create(),
+    );
+    gh.lazySingleton<_i753.TtsClient>(
+      () => _i753.DioTtsClient.create(
+        gh<_i361.Dio>(),
+        gh<_i348.SecureStorageService>(),
+      ),
+    );
+    gh.lazySingleton<_i355.QuickActionsProvider>(
+      () => _i355.DefaultQuickActionsProvider(
+        quickActions: gh<_i578.QuickActions>(),
+      ),
+    );
+    gh.factory<_i15.AgentCubit>(
+      () => _i15.AgentCubit.create(
+        llmRepository: gh<_i192.LlmRepository>(),
+        chatLocalRepository: gh<_i445.ChatLocalRepository>(),
+        localMemoryService: gh<_i987.LocalMemoryServiceBase>(),
+        temperature: gh<double>(),
+      ),
     );
     gh.lazySingleton<_i27.GatewayClientBase>(
       () => gatewayModule.provideGatewayClientBase(gh<_i122.GatewayClient>()),
@@ -260,6 +280,7 @@ extension GetItInjectableX on _i174.GetIt {
     gh.factory<_i96.SkillsCubit>(
       () => _i96.SkillsCubit(
         skillsRegistryService: gh<_i791.SkillsRegistryService>(),
+        autoLoad: gh<bool>(),
       ),
     );
     gh.lazySingleton<_i445.ChatLocalRepository>(
@@ -270,13 +291,6 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i821.QrScannerControllerBase>(
       () => _i319.MobileScannerControllerWrapper(
         controller: gh<_i625.MobileScannerController>(),
-      ),
-    );
-    gh.factory<_i15.AgentCubit>(
-      () => _i15.AgentCubit.create(
-        llmRepository: gh<_i192.LlmRepository>(),
-        chatLocalRepository: gh<_i445.ChatLocalRepository>(),
-        localMemoryService: gh<_i987.LocalMemoryServiceBase>(),
       ),
     );
     gh.factory<_i118.GatewayRpcCubit>(
