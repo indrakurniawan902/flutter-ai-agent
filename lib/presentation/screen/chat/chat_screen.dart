@@ -5,7 +5,8 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
-import 'package:flutter_ai_agent/presentation/screen/settings/settings_screen.dart';
+import 'package:go_router/go_router.dart';
+import 'package:flutter_ai_agent/presentation/navigation/app_routes.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_approval_sheet.dart';
@@ -142,11 +143,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   icon: const Icon(Icons.settings),
                   tooltip: 'Settings',
                   onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const SettingsScreen(),
-                      ),
-                    );
+                    context.pushNamed(AppRoutes.nrSettings);
                   },
                 ),
               ],

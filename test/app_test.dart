@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_ai_agent/app.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
+import 'package:flutter_ai_agent/myapp.dart';
+import 'package:flutter_ai_agent/presentation/navigation/app_router.dart';
 import 'package:flutter_ai_agent/presentation/screen/splash/splash_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -29,6 +30,8 @@ void main() {
       await sl.unregister<SecureStorageService>();
     }
     sl.registerLazySingleton<SecureStorageService>(() => mockStorageService);
+
+    appRouter.go('/splash');
   });
 
   tearDown(() async {
@@ -36,7 +39,7 @@ void main() {
   });
 
   testWidgets('App renders with dark theme and splash screen transitioning to Chat', (tester) async {
-    await tester.pumpWidget(const App());
+    await tester.pumpWidget(const MyApp());
 
     final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
     expect(materialApp.theme?.brightness, Brightness.dark);
@@ -51,7 +54,7 @@ void main() {
   });
 
   testWidgets('App navigates from Chat to SettingsScreen on settings button tap', (tester) async {
-    await tester.pumpWidget(const App());
+    await tester.pumpWidget(const MyApp());
     await tester.pump(const Duration(milliseconds: 2500));
     await tester.pumpAndSettle();
 
@@ -65,7 +68,8 @@ void main() {
   });
 
   testWidgets('App switches tabs via FloatingBottomNavBar', (tester) async {
-    await tester.pumpWidget(const App());
+    await tester.pumpWidget(const MyApp());
+    await tester.pump(const Duration(milliseconds: 2500));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('floating_bottom_nav_bar')), findsOneWidget);
