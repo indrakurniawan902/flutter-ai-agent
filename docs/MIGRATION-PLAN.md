@@ -81,36 +81,36 @@ lib/
 | `lib/common/either_extensions.dart` | `—` | re-export shim -> DELETE (update imports, no replacement path) |
 | `lib/common/failures.dart` | `—` | re-export shim -> DELETE (update imports, no replacement path) |
 | `lib/core/constants/constants.dart` | `lib/common/constant.dart` |  |
-| `lib/core/di/injection_container.dart` | `lib/common/injection/injection.dart` | superseded by injectable codegen; delete once migrated |
+| `lib/core/di/injection_container.dart` | `lib/common/injection/injection.dart` | [DONE] superseded by injectable codegen; deleted |
 | `lib/core/errors/failures.dart` | `lib/common/failure.dart` |  |
 | `lib/core/extensions/either_extensions.dart` | `lib/utils/either_extensions.dart` | move only used symbols; drop dead EitherX.getOrThrow() |
 | `lib/core/theme/app_theme.dart` | `lib/utils/app_theme.dart` |  |
 | `lib/core/theme/hermes_theme.dart` | `lib/utils/hermes_theme.dart` |  |
-| `lib/features/chat/data/llm_repository.dart` | `lib/domain/repositories/chat/llm_repository.dart (abstract) + lib/data/repositories/chat/llm_repository_impl.dart (impl)` | split concrete class into contract + impl |
-| `lib/features/chat/data/models/chat_models.dart` | `lib/data/models/chat/chat_models.dart` |  |
-| `lib/features/chat/data/sse_parser.dart` | `lib/data/datasources/remote/chat/sse_parser.dart` | SSE parsing belongs to the chat datasource |
-| `lib/features/chat/data/tools/calendar_service.dart` | `lib/data/tools/chat/calendar_service.dart` |  |
-| `lib/features/chat/data/tools/camera_vision_service.dart` | `lib/data/tools/chat/camera_vision_service.dart` |  |
-| `lib/features/chat/data/tools/clipboard_service.dart` | `lib/data/tools/chat/clipboard_service.dart` |  |
-| `lib/features/chat/data/tools/device_context_service.dart` | `lib/data/tools/chat/device_context_service.dart` |  |
-| `lib/features/chat/data/tools/location_service.dart` | `lib/data/tools/chat/location_service.dart` |  |
-| `lib/features/chat/data/tools/notification_service.dart` | `lib/data/tools/chat/notification_service.dart` |  |
-| `lib/features/chat/domain/agent_cubit.dart` | `—` | re-export shim -> DELETE (update imports, no replacement path) |
-| `lib/features/chat/domain/agent_state.dart` | `—` | re-export shim -> DELETE (update imports, no replacement path) |
-| `lib/features/chat/domain/models/action_step.dart` | `lib/domain/models/chat/action_step.dart` |  |
-| `lib/features/chat/domain/models/generative_card_data.dart` | `lib/domain/models/chat/generative_card_data.dart` |  |
-| `lib/features/chat/domain/models/tool_call_request.dart` | `lib/domain/models/chat/tool_call_request.dart` |  |
-| `lib/features/chat/domain/tools/security_policy.dart` | `lib/domain/tools/chat/security_policy.dart` |  |
-| `lib/features/chat/domain/tools/tool_registry.dart` | `lib/domain/tools/chat/tool_registry.dart` |  |
-| `lib/features/chat/presentation/cubits/agent_cubit.dart` | `lib/presentation/screen/chat/cubit/agent_cubit.dart` |  |
-| `lib/features/chat/presentation/cubits/agent_state.dart` | `lib/presentation/screen/chat/cubit/agent_state.dart` |  |
-| `lib/features/chat/presentation/screens/chat_screen.dart` | `lib/presentation/screen/chat/chat_screen.dart` |  |
-| `lib/features/chat/presentation/widgets/action_approval_sheet.dart` | `lib/presentation/screen/chat/action_approval_sheet.dart` | screen-local (promote to widget/ if 2nd feature needs it) |
-| `lib/features/chat/presentation/widgets/action_confirmation_card.dart` | `lib/presentation/screen/chat/action_confirmation_card.dart` | screen-local (promote to widget/ if 2nd feature needs it) |
-| `lib/features/chat/presentation/widgets/header_console_bar.dart` | `lib/presentation/screen/chat/header_console_bar.dart` | screen-local (promote to widget/ if 2nd feature needs it) |
-| `lib/features/chat/presentation/widgets/live_action_stepper_card.dart` | `lib/presentation/screen/chat/live_action_stepper_card.dart` | screen-local (promote to widget/ if 2nd feature needs it) |
-| `lib/features/chat/presentation/widgets/permission_rationale_modal.dart` | `lib/presentation/screen/chat/permission_rationale_modal.dart` | screen-local (promote to widget/ if 2nd feature needs it) |
-| `lib/features/chat/presentation/widgets/summary_card.dart` | `lib/presentation/screen/chat/summary_card.dart` | screen-local (promote to widget/ if 2nd feature needs it) |
+| `lib/features/chat/data/llm_repository.dart` | `lib/domain/repositories/chat/llm_repository.dart (abstract) + lib/data/repositories/chat/llm_repository_impl.dart (impl)` | [DONE] split concrete class into contract + impl |
+| `lib/features/chat/data/models/chat_models.dart` | `lib/data/models/chat/chat_models.dart` | [DONE] |
+| `lib/features/chat/data/sse_parser.dart` | `lib/data/datasources/remote/chat/sse_parser.dart` | [DONE] SSE parsing belongs to the chat datasource |
+| `lib/features/chat/data/tools/calendar_service.dart` | `lib/data/tools/chat/calendar_service.dart` | [DONE] |
+| `lib/features/chat/data/tools/camera_vision_service.dart` | `lib/data/tools/chat/camera_vision_service.dart` | [DONE] |
+| `lib/features/chat/data/tools/clipboard_service.dart` | `lib/data/tools/chat/clipboard_service.dart` | [DONE] |
+| `lib/features/chat/data/tools/device_context_service.dart` | `lib/data/tools/chat/device_context_service.dart` | [DONE] |
+| `lib/features/chat/data/tools/location_service.dart` | `lib/data/tools/chat/location_service.dart` | [DONE] |
+| `lib/features/chat/data/tools/notification_service.dart` | `lib/data/tools/chat/notification_service.dart` | [DONE] |
+| `lib/features/chat/domain/agent_cubit.dart` | `—` | [DONE] re-export shim -> DELETE (update imports, no replacement path) |
+| `lib/features/chat/domain/agent_state.dart` | `—` | [DONE] re-export shim -> DELETE (update imports, no replacement path) |
+| `lib/features/chat/domain/models/action_step.dart` | `lib/domain/models/chat/action_step.dart` | [DONE] |
+| `lib/features/chat/domain/models/generative_card_data.dart` | `lib/domain/models/chat/generative_card_data.dart` | [DONE] |
+| `lib/features/chat/domain/models/tool_call_request.dart` | `lib/domain/models/chat/tool_call_request.dart` | [DONE] |
+| `lib/features/chat/domain/tools/security_policy.dart` | `lib/domain/tools/chat/security_policy.dart` | [DONE] |
+| `lib/features/chat/domain/tools/tool_registry.dart` | `lib/domain/tools/chat/tool_registry.dart` | [DONE] |
+| `lib/features/chat/presentation/cubits/agent_cubit.dart` | `lib/presentation/screen/chat/cubit/agent_cubit.dart` | [DONE] |
+| `lib/features/chat/presentation/cubits/agent_state.dart` | `lib/presentation/screen/chat/cubit/agent_state.dart` | [DONE] |
+| `lib/features/chat/presentation/screens/chat_screen.dart` | `lib/presentation/screen/chat/chat_screen.dart` | [DONE] |
+| `lib/features/chat/presentation/widgets/action_approval_sheet.dart` | `lib/presentation/screen/chat/action_approval_sheet.dart` | [DONE] screen-local |
+| `lib/features/chat/presentation/widgets/action_confirmation_card.dart` | `lib/presentation/screen/chat/action_confirmation_card.dart` | [DONE] screen-local |
+| `lib/features/chat/presentation/widgets/header_console_bar.dart` | `lib/presentation/screen/chat/header_console_bar.dart` | [DONE] screen-local |
+| `lib/features/chat/presentation/widgets/live_action_stepper_card.dart` | `lib/presentation/screen/chat/live_action_stepper_card.dart` | [DONE] screen-local |
+| `lib/features/chat/presentation/widgets/permission_rationale_modal.dart` | `lib/presentation/screen/chat/permission_rationale_modal.dart` | [DONE] screen-local |
+| `lib/features/chat/presentation/widgets/summary_card.dart` | `lib/presentation/screen/chat/summary_card.dart` | [DONE] screen-local |
 | `lib/features/memory_vault/presentation/screens/memory_vault_screen.dart` | `lib/presentation/screen/memory_vault/memory_vault_screen.dart` |  |
 | `lib/features/navigation/presentation/cubits/navigation_cubit.dart` | `lib/presentation/screen/navigation/cubit/navigation_cubit.dart` |  |
 | `lib/features/navigation/presentation/cubits/navigation_state.dart` | `lib/presentation/screen/navigation/cubit/navigation_state.dart` |  |
@@ -140,28 +140,28 @@ lib/
 | `lib/main_development.dart` | `lib/main_development.dart` | stays at repo root |
 | `lib/main_production.dart` | `lib/main_production.dart` | stays at repo root |
 | `test/app_test.dart` | `test/app_test.dart` | stays (mirrors repo-root file / shared helpers / e2e) |
-| `test/core/di/injection_container_test.dart` | `test/common/injection/injection_container_test.dart` | mirrors new injection home |
+| `test/core/di/injection_container_test.dart` | `test/common/injection/injection_container_test.dart` | [DONE] mirrors new injection home |
 | `test/core/theme/hermes_theme_test.dart` | `test/utils/hermes_theme_test.dart` | mirrors token move to utils/ |
-| `test/features/chat/data/llm_repository_test.dart` | `test/data/repositories/chat/llm_repository_test.dart` | tests the impl |
-| `test/features/chat/data/models/chat_models_test.dart` | `test/data/models/chat/chat_models_test.dart` |  |
-| `test/features/chat/data/sse_parser_test.dart` | `test/data/datasources/remote/chat/sse_parser_test.dart` |  |
-| `test/features/chat/data/tools/calendar_service_test.dart` | `test/data/tools/chat/calendar_service_test.dart` |  |
-| `test/features/chat/data/tools/camera_vision_service_test.dart` | `test/data/tools/chat/camera_vision_service_test.dart` |  |
-| `test/features/chat/data/tools/clipboard_service_test.dart` | `test/data/tools/chat/clipboard_service_test.dart` |  |
-| `test/features/chat/data/tools/device_context_service_test.dart` | `test/data/tools/chat/device_context_service_test.dart` |  |
-| `test/features/chat/data/tools/location_service_test.dart` | `test/data/tools/chat/location_service_test.dart` |  |
-| `test/features/chat/data/tools/notification_service_test.dart` | `test/data/tools/chat/notification_service_test.dart` |  |
-| `test/features/chat/domain/models/action_step_test.dart` | `test/domain/models/chat/action_step_test.dart` |  |
-| `test/features/chat/domain/models/generative_card_data_test.dart` | `test/domain/models/chat/generative_card_data_test.dart` |  |
-| `test/features/chat/domain/tools/tool_registry_test.dart` | `test/domain/tools/chat/tool_registry_test.dart` |  |
-| `test/features/chat/presentation/cubits/agent_cubit_test.dart` | `test/presentation/screen/chat/cubit/agent_cubit_test.dart` |  |
-| `test/features/chat/presentation/screens/chat_screen_test.dart` | `test/presentation/screen/chat/chat_screen_test.dart` |  |
-| `test/features/chat/presentation/widgets/action_approval_sheet_test.dart` | `test/presentation/screen/chat/action_approval_sheet_test.dart` | mirrors screen-local widget |
-| `test/features/chat/presentation/widgets/action_confirmation_card_test.dart` | `test/presentation/screen/chat/action_confirmation_card_test.dart` | mirrors screen-local widget |
-| `test/features/chat/presentation/widgets/header_console_bar_test.dart` | `test/presentation/screen/chat/header_console_bar_test.dart` | mirrors screen-local widget |
-| `test/features/chat/presentation/widgets/live_action_stepper_card_test.dart` | `test/presentation/screen/chat/live_action_stepper_card_test.dart` | mirrors screen-local widget |
-| `test/features/chat/presentation/widgets/permission_rationale_modal_test.dart` | `test/presentation/screen/chat/permission_rationale_modal_test.dart` | mirrors screen-local widget |
-| `test/features/chat/presentation/widgets/summary_card_test.dart` | `test/presentation/screen/chat/summary_card_test.dart` | mirrors screen-local widget |
+| `test/features/chat/data/llm_repository_test.dart` | `test/data/repositories/chat/llm_repository_test.dart` | [DONE] tests the impl |
+| `test/features/chat/data/models/chat_models_test.dart` | `test/data/models/chat/chat_models_test.dart` | [DONE] |
+| `test/features/chat/data/sse_parser_test.dart` | `test/data/datasources/remote/chat/sse_parser_test.dart` | [DONE] |
+| `test/features/chat/data/tools/calendar_service_test.dart` | `test/data/tools/chat/calendar_service_test.dart` | [DONE] |
+| `test/features/chat/data/tools/camera_vision_service_test.dart` | `test/data/tools/chat/camera_vision_service_test.dart` | [DONE] |
+| `test/features/chat/data/tools/clipboard_service_test.dart` | `test/data/tools/chat/clipboard_service_test.dart` | [DONE] |
+| `test/features/chat/data/tools/device_context_service_test.dart` | `test/data/tools/chat/device_context_service_test.dart` | [DONE] |
+| `test/features/chat/data/tools/location_service_test.dart` | `test/data/tools/chat/location_service_test.dart` | [DONE] |
+| `test/features/chat/data/tools/notification_service_test.dart` | `test/data/tools/chat/notification_service_test.dart` | [DONE] |
+| `test/features/chat/domain/models/action_step_test.dart` | `test/domain/models/chat/action_step_test.dart` | [DONE] |
+| `test/features/chat/domain/models/generative_card_data_test.dart` | `test/domain/models/chat/generative_card_data_test.dart` | [DONE] |
+| `test/features/chat/domain/tools/tool_registry_test.dart` | `test/domain/tools/chat/tool_registry_test.dart` | [DONE] |
+| `test/features/chat/presentation/cubits/agent_cubit_test.dart` | `test/presentation/screen/chat/cubit/agent_cubit_test.dart` | [DONE] |
+| `test/features/chat/presentation/screens/chat_screen_test.dart` | `test/presentation/screen/chat/chat_screen_test.dart` | [DONE] |
+| `test/features/chat/presentation/widgets/action_approval_sheet_test.dart` | `test/presentation/screen/chat/action_approval_sheet_test.dart` | [DONE] mirrors screen-local widget |
+| `test/features/chat/presentation/widgets/action_confirmation_card_test.dart` | `test/presentation/screen/chat/action_confirmation_card_test.dart` | [DONE] mirrors screen-local widget |
+| `test/features/chat/presentation/widgets/header_console_bar_test.dart` | `test/presentation/screen/chat/header_console_bar_test.dart` | [DONE] mirrors screen-local widget |
+| `test/features/chat/presentation/widgets/live_action_stepper_card_test.dart` | `test/presentation/screen/chat/live_action_stepper_card_test.dart` | [DONE] mirrors screen-local widget |
+| `test/features/chat/presentation/widgets/permission_rationale_modal_test.dart` | `test/presentation/screen/chat/permission_rationale_modal_test.dart` | [DONE] mirrors screen-local widget |
+| `test/features/chat/presentation/widgets/summary_card_test.dart` | `test/presentation/screen/chat/summary_card_test.dart` | [DONE] mirrors screen-local widget |
 | `test/features/memory_vault/presentation/screens/memory_vault_screen_test.dart` | `test/presentation/screen/memory_vault/memory_vault_screen_test.dart` |  |
 | `test/features/navigation/presentation/cubits/navigation_cubit_test.dart` | `test/presentation/screen/navigation/cubit/navigation_cubit_test.dart` |  |
 | `test/features/navigation/presentation/screens/main_navigation_shell_test.dart` | `test/presentation/screen/navigation/main_navigation_shell_test.dart` |  |
@@ -181,3 +181,20 @@ lib/
 | `test/helpers/mocks.dart` | `test/helpers/mocks.dart` | stays (mirrors repo-root file / shared helpers / e2e) |
 | `test/integration/e2e_agent_integration_test.dart` | `test/integration/e2e_agent_integration_test.dart` | stays (mirrors repo-root file / shared helpers / e2e) |
 | `test/integration/e2e_nous_ui_navigation_integration_test.dart` | `test/integration/e2e_nous_ui_navigation_integration_test.dart` | stays (mirrors repo-root file / shared helpers / e2e) |
+
+---
+
+## 5. Migration Execution Status
+
+- **T13.4 — Chat Feature Migration (DONE)**
+  - Chat data models, datasources, repositories migrated to layer-first (`lib/data/models/chat/`, `lib/data/datasources/remote/chat/`, `lib/data/repositories/chat/`).
+  - Chat domain tools (contracts and ToolRegistry) migrated to `lib/domain/tools/chat/`.
+  - Chat data tools migrated to `lib/data/datasources/tools/chat/`.
+  - Chat presentation (cubit, screen, widgets) migrated to `lib/presentation/screen/chat/`.
+  - Chat utils migrated to `lib/utils/thought_extractor.dart`.
+  - `lib/features/chat/` and `test/features/chat/` fully deleted.
+
+- **T13.5 — Dependency Injection & Core Cleanup (DONE)**
+  - Hand-wired `lib/core/di/injection_container.dart` deleted and replaced with `lib/common/injection/` (Injectable codegen).
+  - All unit/widget/integration tests (394 tests) green.
+
