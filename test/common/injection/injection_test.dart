@@ -16,6 +16,12 @@ import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/serve
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_cubit.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/contact_launcher_tools.dart';
+import 'package:flutter_ai_agent/domain/services/skills/skills_registry_service.dart';
+import 'package:flutter_ai_agent/presentation/screen/skills/cubit/skills_cubit.dart';
+import 'package:flutter_ai_agent/domain/services/share/share_target_service.dart';
+import 'package:flutter_ai_agent/presentation/screen/share/cubit/share_target_cubit.dart';
+import 'package:flutter_ai_agent/domain/services/shortcuts/quick_actions_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -82,6 +88,12 @@ void main() {
     expect(sl.isRegistered<ToolRegistry>(), isTrue);
     expect(sl.isRegistered<AgentCubit>(), isTrue);
     expect(sl.isRegistered<NavigationCubit>(), isTrue);
+    expect(sl.isRegistered<ContactLauncherTools>(), isTrue);
+    expect(sl.isRegistered<SkillsRegistryService>(), isTrue);
+    expect(sl.isRegistered<SkillsCubit>(), isTrue);
+    expect(sl.isRegistered<ShareTargetService>(), isTrue);
+    expect(sl.isRegistered<ShareTargetCubit>(), isTrue);
+    expect(sl.isRegistered<QuickActionsService>(), isTrue);
 
     final registry = sl<ToolRegistry>();
     expect(registry.hasTool('clipboard_read'), isTrue);
@@ -97,5 +109,8 @@ void main() {
     expect(registry.hasTool('listen_voice_input'), isTrue);
     expect(registry.hasTool('speak_text'), isTrue);
     expect(registry.hasTool('manage_background_service'), isTrue);
+    expect(registry.hasTool('search_contacts'), isTrue);
+    expect(registry.hasTool('open_whatsapp_chat'), isTrue);
+    expect(registry.hasTool('open_external_url'), isTrue);
   });
 }
