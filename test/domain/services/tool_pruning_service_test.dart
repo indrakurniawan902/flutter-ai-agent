@@ -136,6 +136,35 @@ void main() {
       expect(names, contains('device_status'));
     });
 
+    test('meta entries already in full list produce no duplicate names', () {
+      // Arrange
+      const prompt = 'what is my battery level';
+      final fullToolsWithDupMeta = <Map<String, dynamic>>[
+        ...fullTools,
+        def(ToolPruningServiceImpl.toolSearchName),
+        def(ToolPruningServiceImpl.toolDescribeName),
+      ];
+
+      // Act
+      final result = service.prune(
+        prompt: prompt,
+        fullToolDefinitions: fullToolsWithDupMeta,
+        enabled: true,
+      );
+      final names = namesOf(result);
+
+      // Assert
+      expect(names.toSet(), hasLength(names.length));
+      expect(
+        names.where((n) => n == ToolPruningServiceImpl.toolSearchName),
+        hasLength(1),
+      );
+      expect(
+        names.where((n) => n == ToolPruningServiceImpl.toolDescribeName),
+        hasLength(1),
+      );
+    });
+
     test('meta-tool definitions keep the OpenAI function-map shape', () {
       // Act
       final search = ToolPruningServiceImpl.toolSearchDefinition;

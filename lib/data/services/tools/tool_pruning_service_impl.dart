@@ -1,3 +1,5 @@
+import 'package:injectable/injectable.dart';
+
 import 'package:flutter_ai_agent/domain/services/tools/tool_pruning_service.dart';
 
 class _ToolCategory {
@@ -99,6 +101,7 @@ const List<_ToolCategory> _categories = [
   ),
 ];
 
+@LazySingleton(as: ToolPruningService)
 class ToolPruningServiceImpl implements ToolPruningService {
   const ToolPruningServiceImpl();
 
@@ -164,11 +167,14 @@ class ToolPruningServiceImpl implements ToolPruningService {
       toolSearchDefinition,
       toolDescribeDefinition,
     ];
+    final seenNames = <String>{..._metaToolNames};
     for (final entry in fullToolDefinitions) {
       final name = _functionName(entry);
       if (name == null) continue;
       if (_metaToolNames.contains(name)) continue;
-      if (matchedNames.contains(name)) result.add(entry);
+      if (!matchedNames.contains(name)) continue;
+      if (!seenNames.add(name)) continue;
+      result.add(entry);
     }
     return result;
   }

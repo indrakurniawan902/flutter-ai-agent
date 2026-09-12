@@ -78,9 +78,8 @@ void main() {
 
       final defs = registry.getOpenAiToolDefinitions();
 
-      expect(defs, hasLength(1));
+      expect(defs.map((d) => d['function']['name']), contains('sample'));
       expect(defs.first['type'], 'function');
-      expect(defs.first['function']['name'], 'sample');
     });
 
     test('toOpenAiTool shape', () {
@@ -942,12 +941,18 @@ void main() {
       expect(registry.isToolEnabled('sample'), isFalse);
       expect(registry.activeTools.map((t) => t.name),
           isNot(contains('sample')));
-      expect(registry.getOpenAiToolDefinitions(), isEmpty);
+      expect(
+        registry.getOpenAiToolDefinitions().map((d) => d['function']['name']),
+        isNot(contains('sample')),
+      );
 
       registry.setToolEnabled('sample', true);
 
       expect(registry.isToolEnabled('sample'), isTrue);
-      expect(registry.getOpenAiToolDefinitions(), hasLength(1));
+      expect(
+        registry.getOpenAiToolDefinitions().map((d) => d['function']['name']),
+        contains('sample'),
+      );
     });
 
     test('executeTool rejects disabled tools with ServerFailure', () async {

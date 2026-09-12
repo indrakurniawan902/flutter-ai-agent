@@ -108,6 +108,68 @@ class ToolRegistry {
     if (contactLauncherTools != null) {
       registerContactLauncherTools(contactLauncherTools);
     }
+    registerMetaTools();
+  }
+
+  void registerMetaTools() {
+    register(
+      RegisteredTool(
+        name: 'tool_search',
+        description:
+            'Searches the available tools by keyword and returns matching tool names.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'query': {
+              'type': 'string',
+              'description': 'Keyword to match against tool names and descriptions',
+            },
+          },
+          'required': ['query'],
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) async {
+          final query = (args['query']?.toString() ?? '').toLowerCase();
+          final matches = <String>[];
+          for (final tool in _tools.values) {
+            if (matches.length >= 10) break;
+            final haystack =
+                '${tool.name} ${tool.description}'.toLowerCase();
+            if (query.isEmpty || haystack.contains(query)) {
+              matches.add(tool.name);
+            }
+          }
+          return Right(matches.join('\n'));
+        },
+      ),
+    );
+
+    register(
+      RegisteredTool(
+        name: 'tool_describe',
+        description:
+            'Returns the full OpenAI tool definition for a named tool.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'tool_name': {
+              'type': 'string',
+              'description': 'Name of the tool to describe',
+            },
+          },
+          'required': ['tool_name'],
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) async {
+          final name = args['tool_name']?.toString() ?? '';
+          final tool = _tools[name];
+          if (tool == null) {
+            return Right('Tool not found: $name');
+          }
+          return Right(jsonEncode(tool.toOpenAiTool()));
+        },
+      ),
+    );
   }
 
   void register(RegisteredTool tool) {
