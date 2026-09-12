@@ -79,6 +79,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isSpeakerMuted = false;
   StreamSubscription<VoiceInputStatus>? _voiceStatusSub;
   StreamSubscription<String>? _voiceErrorSub;
+  StreamSubscription<String>? _voiceOutputErrorSub;
   StreamSubscription<String>? _backgroundActionSub;
   bool _isVoiceRecording = false;
   bool _isHoldToSpeak = false;
@@ -177,6 +178,21 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     });
 
+    _voiceOutputErrorSub =
+        _voiceOutputService?.errorStream.listen((error) {
+      if (!mounted) return;
+      setState(() {
+        _isVoiceRecording = false;
+        _isHoldToSpeak = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    });
+
     _gatewayTextDeltaSub = client?.textDeltaStream.listen((delta) {
       if (mounted && _mode == ChatMode.gateway) {
         setState(() {
@@ -247,6 +263,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _backgroundActionSub?.cancel();
     _voiceStatusSub?.cancel();
     _voiceErrorSub?.cancel();
+    _voiceOutputErrorSub?.cancel();
     if (_isVoiceRecording) {
       _voiceService?.cancelListening();
     }
@@ -480,8 +497,16 @@ class _ChatScreenState extends State<ChatScreen> {
     final type = _resolvePermissionRationaleType(response);
     if (type == null) return;
 
-    final allowed = await PermissionRationaleModal.show(context, type);
-    if (allowed == true) {
+    final lowered = response.toLowerCase();
+    final bool isPermanent =
+        lowered.contains('permanently denied') ||
+            lowered.contains('denied permanently');
+    final allowed = await PermissionRationaleModal.show(
+      context,
+      type,
+      isPermanentlyDenied: isPermanent,
+    );
+    if (allowed == true && !isPermanent) {
       await _handlePermissionRationaleAction(type);
     }
   }
