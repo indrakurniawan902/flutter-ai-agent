@@ -57,6 +57,12 @@ dependencies:
   contacts_service: ^0.6.3
   url_launcher: ^6.3.2
 
+  # Fase 3 Local Intelligence
+  file_picker: ^11.0.3
+  syncfusion_flutter_pdf: ^34.2.7
+  sqflite: ^2.4.4
+  workmanager: ^0.10.10
+
   # Voice & audio
   speech_to_text: ^7.4.0
   audioplayers: ^6.8.1
@@ -69,6 +75,7 @@ dev_dependencies:
   bloc_test: ^10.0.0
   injectable_generator: ^2.4.1
   build_runner: ^2.4.13
+  sqflite_common_ffi: ^2.4.3
 
 flutter:
   uses-material-design: true

@@ -16,11 +16,14 @@ import 'package:flutter_ai_agent/domain/tools/chat/voice_input_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
 import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/calendar_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/file_workspace_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/local_memory_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/clipboard_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/device_context_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/notification_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
@@ -32,6 +35,7 @@ import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/serve
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_state.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart';
 import 'package:flutter_ai_agent/data/datasources/remote/gateway/gateway_socket.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_rpc_receiver.dart';
@@ -111,6 +115,22 @@ class MockCalendarService extends Mock implements CalendarServiceBase {}
 
 class MockNotificationService extends Mock implements NotificationServiceBase {}
 
+class MockNotificationTriageService extends Mock
+    implements NotificationTriageServiceBase {}
+
+class MockNotificationListenerPlatformWrapper extends Mock
+    implements NotificationListenerPlatformWrapper {}
+
+// File Workspace
+class MockFileWorkspaceService extends Mock implements FileWorkspaceServiceBase {}
+
+class MockFileSystemWrapper extends Mock implements FileSystemWrapper {}
+
+class MockFilePickerWrapper extends Mock implements FilePickerWrapper {}
+
+// Local Memory
+class MockLocalMemoryService extends Mock implements LocalMemoryServiceBase {}
+
 // QR Scanner
 class MockQrScannerController extends Mock implements QrScannerControllerBase {}
 
@@ -152,5 +172,15 @@ class MockGatewayDeviceRpcReceiver extends Mock
 class MockGatewaySocket extends Mock implements GatewaySocket {}
 
 class MockGatewaySocketFactory extends Mock implements GatewaySocketFactory {}
+
+// Ambient Triggers
+class MockBatteryPlatformWrapper extends Mock
+    implements BatteryPlatformWrapper {}
+
+class MockWorkmanagerPlatformWrapper extends Mock
+    implements WorkmanagerPlatformWrapper {}
+
+class MockAmbientTriggerService extends Mock
+    implements AmbientTriggerServiceBase {}
 
 
