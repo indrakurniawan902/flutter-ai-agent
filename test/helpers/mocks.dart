@@ -11,6 +11,7 @@ import 'package:flutter_ai_agent/data/datasources/tools/chat/clipboard_service.d
 import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/calendar_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/file_workspace_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/local_memory_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/clipboard_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/device_context_service.dart';
@@ -119,6 +120,9 @@ class MockFileWorkspaceService extends Mock implements FileWorkspaceServiceBase 
 class MockFileSystemWrapper extends Mock implements FileSystemWrapper {}
 
 class MockFilePickerWrapper extends Mock implements FilePickerWrapper {}
+
+// Local Memory
+class MockLocalMemoryService extends Mock implements LocalMemoryServiceBase {}
 
 // QR Scanner
 class MockQrScannerController extends Mock implements QrScannerControllerBase {}
