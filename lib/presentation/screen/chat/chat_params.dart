@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_mode.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
+import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_link_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_rpc_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_cubit.dart';
 
@@ -12,6 +13,7 @@ class ChatParams {
   final ChatMode? initialMode;
   final GatewayClientBase? gatewayClient;
   final GatewayRpcCubit? gatewayRpcCubit;
+  final GatewayLinkCubit? gatewayLinkCubit;
   final ServerProfileCubit? serverProfileCubit;
   final Widget Function(BuildContext context)? qrScannerBuilder;
 
@@ -21,6 +23,7 @@ class ChatParams {
     this.initialMode,
     this.gatewayClient,
     this.gatewayRpcCubit,
+    this.gatewayLinkCubit,
     this.serverProfileCubit,
     this.qrScannerBuilder,
   });

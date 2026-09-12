@@ -19,7 +19,7 @@ part 'gateway_link_state.dart';
 /// connection state, and forces an immediate re-fire on app resume instead
 /// of waiting for the transport's backoff. The cubit never touches the
 /// socket directly; it only reacts to state changes and requests reconnects.
-@injectable
+@lazySingleton
 class GatewayLinkCubit extends Cubit<GatewayLinkState> with WidgetsBindingObserver {
   final GatewayClientBase _gatewayClient;
   final BackgroundServiceBase _backgroundService;
