@@ -362,6 +362,32 @@ void main() {
       // here would race the still-visible first SnackBar.
       expect(find.text('Standalone'), findsOneWidget);
     });
+
+    testWidgets(
+        'Direct mode connection state transitions do not start RPC listening',
+        (tester) async {
+      when(() => mockGatewayClient.state)
+          .thenReturn(GatewayConnectionState.disconnected);
+
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.direct));
+      await tester.pumpAndSettle();
+
+      gatewayStateController.add(GatewayConnectionState.connecting);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      gatewayStateController.add(GatewayConnectionState.connected);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      gatewayStateController.add(GatewayConnectionState.reconnecting);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      verifyNever(() => mockGatewayRpcCubit.startListening());
+      verifyNever(() => mockGatewayRpcCubit.syncWithConnectionState(any()));
+    });
   });
 
   group('ChatScreen Gateway - Quick QR Code Scanner', () {

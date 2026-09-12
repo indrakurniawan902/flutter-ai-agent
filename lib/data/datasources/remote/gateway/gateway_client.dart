@@ -223,7 +223,14 @@ class GatewayClient implements GatewayClientBase {
       } else if (message is GatewayTextDeltaMessage) {
         _textDeltaController.add(message);
       } else if (message is GatewayToolCallRequestMessage) {
-        _toolCallRequestController.add(message);
+        if (!_toolCallRequestController.hasListener) {
+          sendToolCallResponse(
+            callId: message.id,
+            error: 'Device RPC receiver is not listening',
+          );
+        } else {
+          _toolCallRequestController.add(message);
+        }
       }
 
       _messageController.add(message);

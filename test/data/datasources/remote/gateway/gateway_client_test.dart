@@ -355,6 +355,40 @@ void main() {
       await sub1.cancel();
       await sub2.cancel();
     });
+
+    test(
+        'auto-responds with error when tool_call_request arrives with no toolCallRequestStream listener',
+        () async {
+      await client.connect('ws://localhost:18789/ws', token: 'token123');
+      socketStreamController.add(jsonEncode({'type': 'auth_success'}));
+      await pumpEventQueue();
+
+      // Observe the raw message stream only; leave toolCallRequestStream unlistened.
+      final messages = <GatewayMessage>[];
+      final sub = client.messageStream.listen(messages.add);
+
+      sentFrames.clear();
+
+      socketStreamController.add(jsonEncode({
+        'type': 'tool_call_request',
+        'id': 'call_orphan',
+        'tool': 'device_status',
+        'arguments': {},
+      }));
+
+      await pumpEventQueue();
+
+      expect(messages.length, 1);
+      expect(messages.first, isA<GatewayToolCallRequestMessage>());
+
+      expect(sentFrames.length, 1);
+      final frame = jsonDecode(sentFrames.first) as Map<String, dynamic>;
+      expect(frame['type'], 'tool_call_response');
+      expect(frame['id'], 'call_orphan');
+      expect(frame['error'], 'Device RPC receiver is not listening');
+
+      await sub.cancel();
+    });
   });
 
   group('GatewayClient - Outgoing Frames', () {

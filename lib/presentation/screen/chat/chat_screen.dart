@@ -144,10 +144,14 @@ class _ChatScreenState extends State<ChatScreen> {
     _gatewayConnectionState =
         client?.state ?? GatewayConnectionState.disconnected;
 
-    _rpcCubit?.syncWithConnectionState(_gatewayConnectionState);
+    if (_mode == ChatMode.gateway) {
+      _rpcCubit?.syncWithConnectionState(_gatewayConnectionState);
+    }
 
     _gatewayStateSub = client?.stateStream.listen((state) {
-      _rpcCubit?.syncWithConnectionState(state);
+      if (_mode == ChatMode.gateway) {
+        _rpcCubit?.syncWithConnectionState(state);
+      }
       if (mounted) {
         setState(() {
           _gatewayConnectionState = state;
