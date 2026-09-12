@@ -8,7 +8,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:injectable/injectable.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-import 'package:flutter_ai_agent/core/errors/failures.dart';
+import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/device_context_service.dart';
 
 @LazySingleton(as: DeviceContextServiceBase)

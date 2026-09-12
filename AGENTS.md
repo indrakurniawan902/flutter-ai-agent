@@ -72,6 +72,7 @@ Follow the standard engineering workflow:
 4. Run verification before claiming done:
    - `flock /tmp/flutter.lock flutter analyze` (must be 0 issues)
    - `flock /tmp/flutter.lock flutter test` (must be 100% green)
+   - `sh tool/check_layout.sh` (must print `LAYOUT OK`, exit 0)
 
 ---
 
@@ -88,6 +89,9 @@ flutter test
 flock /tmp/flutter.lock flutter analyze
 flock /tmp/flutter.lock flutter test
 flock /tmp/flutter.lock dart run build_runner build --delete-conflicting-outputs
+
+# Layout integrity check
+sh tool/check_layout.sh
 
 # Run flavors
 flutter run --flavor development -t lib/main_development.dart
@@ -117,5 +121,5 @@ Every sub-task delegated to OpenCode MUST satisfy:
 1. **Single Concern**: Focuses on one layer or component (Data Service, Cubit, UI Screen, or Tests). Never dump an entire full-stack feature in one prompt.
 2. **Explicit Target Files**: Lists exact target files to create/modify and files off-limits.
 3. **Specification Adherence**: Strict negative constraints (e.g. "Do NOT use Bloc", "Do NOT use build_runner for mocks").
-4. **Verifiable Definition of Done (DoD)**: Clear CLI test/lint command that must exit 0.
+4. **Verifiable Definition of Done (DoD)**: Clear CLI test/lint command that must exit 0 (`flock /tmp/flutter.lock flutter analyze`, `flock /tmp/flutter.lock flutter test`, `sh tool/check_layout.sh`).
 

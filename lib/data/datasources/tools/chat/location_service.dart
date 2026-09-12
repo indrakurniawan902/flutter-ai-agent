@@ -4,7 +4,7 @@ import 'package:dartz/dartz.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:injectable/injectable.dart';
 
-import 'package:flutter_ai_agent/core/errors/failures.dart';
+import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart';
 
 @LazySingleton(as: LocationServiceBase)

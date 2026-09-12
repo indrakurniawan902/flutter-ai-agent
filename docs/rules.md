@@ -147,6 +147,7 @@ Before committing or declaring a task complete:
 - [ ] `flutter analyze` runs with **zero issues**.
 - [ ] `flutter test` runs with **100% passing tests**.
 - [ ] All new dependencies registered via `@injectable` / `configureInjection()`.
+- [ ] `tool/check_layout.sh` exits 0 (enforces layer-first layout and catches layout traps per §8 / §15).
 
 ---
 
@@ -181,6 +182,7 @@ make the tree harder to read, none of them are improvements:
 - **Do not hand-roll DI registration** where an `@injectable` annotation would
   do — hand-written `sl.register*` lines drift out of sync with the generated
   `injection.config.dart`.
+- **Automated Layout Guard**: Run `tool/check_layout.sh` to verify zero layout traps exist.
 
 ---
 
@@ -258,3 +260,10 @@ fix warnings introduced by your change.
 - PR description: what changed, why, what was verified (analyze/build/manual).
 - Intermediate/routine commits on feature branches use `[skip ci]` to save
   CI quota.
+
+---
+
+## 15. Layout Traps (Automated Layout Guard)
+
+All layout constraints and layer-first architecture rules are mechanically enforced by `tool/check_layout.sh`.
+Run `sh tool/check_layout.sh` (must exit 0 and output `LAYOUT OK`).

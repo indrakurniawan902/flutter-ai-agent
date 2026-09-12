@@ -5,7 +5,7 @@ import 'package:dartz/dartz.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:injectable/injectable.dart';
 
-import 'package:flutter_ai_agent/core/errors/failures.dart';
+import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart';
 
 @LazySingleton(as: CameraVisionServiceBase)

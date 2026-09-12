@@ -3,8 +3,8 @@ import 'package:go_router/go_router.dart';
 
 import 'package:flutter_ai_agent/common/flavor_config.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
-import 'package:flutter_ai_agent/core/constants/constants.dart';
-import 'package:flutter_ai_agent/core/theme/app_theme.dart';
+import 'package:flutter_ai_agent/common/constant.dart';
+import 'package:flutter_ai_agent/utils/app_theme.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_router.dart';
 
 Future<void> bootstrap(FlavorConfig flavor) async {

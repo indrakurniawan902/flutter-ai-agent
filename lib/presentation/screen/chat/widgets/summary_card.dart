@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_ai_agent/core/theme/hermes_theme.dart';
+import 'package:flutter_ai_agent/utils/hermes_theme.dart';
 import 'package:flutter_ai_agent/domain/models/chat/generative_card_data.dart';
 
 /// Generative Micro-UI card providing structured task/action summaries
