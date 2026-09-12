@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/app.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
-import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
+import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/splash/splash_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';

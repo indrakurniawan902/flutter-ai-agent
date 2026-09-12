@@ -13,7 +13,7 @@ import 'package:flutter_ai_agent/domain/models/chat/tool_call_request.dart';
 import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/security_policy.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
-import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
+import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
 import 'package:flutter_ai_agent/utils/thought_extractor.dart';
 

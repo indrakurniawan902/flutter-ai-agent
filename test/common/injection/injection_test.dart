@@ -11,9 +11,9 @@ import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/navigation/cubit/navigation_cubit.dart';
 import 'package:flutter_ai_agent/domain/tools/pairing/pairing_parser.dart';
-import 'package:flutter_ai_agent/features/server_profiles/presentation/cubits/server_profile_cubit.dart';
-import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
-import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_cubit.dart';
+import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
+import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_cubit.dart';
+import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_cubit.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -9,7 +9,7 @@ import 'package:flutter_ai_agent/presentation/screen/navigation/cubit/navigation
 import 'package:flutter_ai_agent/presentation/screen/navigation/cubit/navigation_state.dart';
 import 'package:flutter_ai_agent/presentation/widget/floating_bottom_nav_bar.dart';
 import 'package:flutter_ai_agent/presentation/screen/pocket_node/pocket_node_screen.dart';
-import 'package:flutter_ai_agent/features/settings/presentation/screens/settings_screen.dart';
+import 'package:flutter_ai_agent/presentation/screen/settings/settings_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/skills/skills_hub_screen.dart';
 
 /// Main persistent tab shell for Flames.

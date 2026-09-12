@@ -10,11 +10,11 @@ import 'package:flutter_ai_agent/presentation/screen/memory_vault/memory_vault_s
 import 'package:flutter_ai_agent/presentation/screen/navigation/cubit/navigation_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/navigation/main_navigation_shell.dart';
 import 'package:flutter_ai_agent/presentation/screen/pocket_node/pocket_node_screen.dart';
-import 'package:flutter_ai_agent/features/server_profiles/presentation/cubits/server_profile_cubit.dart';
-import 'package:flutter_ai_agent/features/server_profiles/presentation/cubits/server_profile_state.dart';
-import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_cubit.dart';
-import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_state.dart';
-import 'package:flutter_ai_agent/features/settings/presentation/screens/settings_screen.dart';
+import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_cubit.dart';
+import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_state.dart';
+import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_cubit.dart';
+import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_state.dart';
+import 'package:flutter_ai_agent/presentation/screen/settings/settings_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/skills/skills_hub_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
