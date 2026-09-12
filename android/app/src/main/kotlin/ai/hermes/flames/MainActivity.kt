@@ -1,10 +1,16 @@
 package ai.hermes.flames
 
+import android.Manifest
+import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import androidx.annotation.NonNull
+import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -12,6 +18,10 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private val NOTIFICATION_CHANNEL = "ai.hermes.flames/notification_listener"
     private val BACKGROUND_CHANNEL = "ai.hermes.flames/background_service"
+    private val CONTACTS_CHANNEL = "ai.hermes.flames/contacts"
+
+    private val CONTACTS_PERMISSION_REQUEST_CODE = 1001
+    private var pendingContactsResult: MethodChannel.Result? = null
 
     private var backgroundMethodChannel: MethodChannel? = null
     private var pendingAction: String? = null
@@ -57,9 +67,25 @@ class MainActivity : FlutterActivity() {
                     }
                     "requestPermission" -> {
                         try {
-                            val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            startActivity(intent)
+                            val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).apply {
+                                    val component = ComponentName(this@MainActivity, FlamesNotificationListenerService::class.java)
+                                    putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, component.flattenToString())
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                            } else {
+                                Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                            }
+                            try {
+                                startActivity(intent)
+                            } catch (_: Exception) {
+                                val fallback = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                startActivity(fallback)
+                            }
                             result.success(true)
                         } catch (e: Exception) {
                             result.error("PERMISSION_ERROR", e.message, null)
@@ -138,12 +164,69 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+
+        // Contacts Permission Channel
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CONTACTS_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "isPermissionGranted" -> {
+                        val isGranted = ContextCompat.checkSelfPermission(
+                            this,
+                            Manifest.permission.READ_CONTACTS
+                        ) == PackageManager.PERMISSION_GRANTED
+                        result.success(isGranted)
+                    }
+                    "requestPermission" -> {
+                        val isGranted = ContextCompat.checkSelfPermission(
+                            this,
+                            Manifest.permission.READ_CONTACTS
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (isGranted) {
+                            result.success(true)
+                        } else {
+                            pendingContactsResult = result
+                            ActivityCompat.requestPermissions(
+                                this,
+                                arrayOf(Manifest.permission.READ_CONTACTS),
+                                CONTACTS_PERMISSION_REQUEST_CODE
+                            )
+                        }
+                    }
+                    else -> {
+                        result.notImplemented()
+                    }
+                }
+            }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == CONTACTS_PERMISSION_REQUEST_CODE) {
+            val isGranted = grantResults.isNotEmpty() &&
+                    grantResults[0] == PackageManager.PERMISSION_GRANTED
+            pendingContactsResult?.success(isGranted)
+            pendingContactsResult = null
+        }
     }
 
     private fun isNotificationListenerPermissionGranted(): Boolean {
+        if (FlamesNotificationListenerService.isConnected()) {
+            return true
+        }
         return try {
             val enabledListeners = NotificationManagerCompat.getEnabledListenerPackages(this)
-            enabledListeners.contains(packageName)
+            if (enabledListeners.contains(packageName)) {
+                return true
+            }
+            val flat = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
+            if (flat != null && (flat.contains(packageName) || flat.contains("FlamesNotificationListenerService"))) {
+                return true
+            }
+            false
         } catch (_: Exception) {
             false
         }

@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "ai.hermes.flames"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -45,13 +45,9 @@ android {
         create("development") {
             dimension = "env"
             applicationIdSuffix = ".dev"
-            resValue("string", "app_name", "Flames (Dev)")
-            resValue("string", "app_flavor", "development")
         }
         create("production") {
             dimension = "env"
-            resValue("string", "app_name", "Flames")
-            resValue("string", "app_flavor", "production")
         }
     }
 }

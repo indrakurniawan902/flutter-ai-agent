@@ -8,40 +8,63 @@ import 'package:url_launcher/url_launcher.dart' show LaunchMode;
 
 import 'package:flutter_ai_agent/common/failure.dart';
 
+abstract class ContactsPlatformWrapper {
+  Future<bool> isPermissionGranted();
+  Future<bool> requestPermission();
+}
+
+class ContactsPlatformWrapperRegistry {
+  static ContactsPlatformWrapper? instance;
+}
+
 abstract class ContactsProvider {
   Future<bool> checkPermission();
   Future<List<Map<String, dynamic>>> searchContacts(String query);
 }
 
 class DefaultContactsProvider implements ContactsProvider {
+  final ContactsPlatformWrapper? _platformWrapper;
+
+  DefaultContactsProvider({ContactsPlatformWrapper? platformWrapper})
+      : _platformWrapper = platformWrapper;
+
   @override
   Future<bool> checkPermission() async {
-    try {
-      await ContactsService.getContacts(query: '');
-      return true;
-    } catch (_) {
-      return false;
+    final wrapper = _platformWrapper ?? ContactsPlatformWrapperRegistry.instance;
+    if (wrapper != null) {
+      try {
+        final isGranted = await wrapper.isPermissionGranted();
+        if (isGranted) return true;
+        return await wrapper.requestPermission();
+      } catch (_) {
+        return false;
+      }
     }
+    return false;
   }
 
   @override
   Future<List<Map<String, dynamic>>> searchContacts(String query) async {
-    final contacts = await ContactsService.getContacts(query: query);
-    return contacts
-        .map((c) => {
-              'displayName': c.displayName ?? '',
-              'phones': c.phones
-                      ?.map((p) => p.value)
-                      .whereType<String>()
-                      .toList() ??
-                  <String>[],
-              'emails': c.emails
-                      ?.map((e) => e.value)
-                      .whereType<String>()
-                      .toList() ??
-                  <String>[],
-            })
-        .toList();
+    try {
+      final contacts = await ContactsService.getContacts(query: query);
+      return contacts
+          .map((c) => {
+                'displayName': c.displayName ?? '',
+                'phones': c.phones
+                        ?.map((p) => p.value)
+                        .whereType<String>()
+                        .toList() ??
+                    <String>[],
+                'emails': c.emails
+                        ?.map((e) => e.value)
+                        .whereType<String>()
+                        .toList() ??
+                    <String>[],
+              })
+          .toList();
+    } catch (_) {
+      return [];
+    }
   }
 }
 

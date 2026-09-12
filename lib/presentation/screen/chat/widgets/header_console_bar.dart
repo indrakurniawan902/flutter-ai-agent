@@ -35,17 +35,20 @@ class _PulsingDotState extends State<PulsingDot>
       duration: const Duration(milliseconds: 1200),
     );
 
-    _opacityAnimation = Tween<double>(begin: 0.35, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _opacityAnimation = Tween<double>(
+      begin: 0.35,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
-    _scaleAnimation = Tween<double>(begin: 0.85, end: 1.15).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 0.85,
+      end: 1.15,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
     if (widget.animate) {
-      final isTest =
-          WidgetsBinding.instance.runtimeType.toString().contains('Test');
+      final isTest = WidgetsBinding.instance.runtimeType.toString().contains(
+        'Test',
+      );
       if (isTest && !PulsingDot.debugForceRepeatInTests) {
         _controller.forward();
       } else {
@@ -67,10 +70,7 @@ class _PulsingDotState extends State<PulsingDot>
       builder: (context, child) {
         return Opacity(
           opacity: _opacityAnimation.value,
-          child: Transform.scale(
-            scale: _scaleAnimation.value,
-            child: child,
-          ),
+          child: Transform.scale(scale: _scaleAnimation.value, child: child),
         );
       },
       child: Container(
@@ -109,7 +109,9 @@ class GatewayStatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final statusColor = isRunning ? HermesColors.emerald : HermesColors.inkMuted;
+    final statusColor = isRunning
+        ? HermesColors.emerald
+        : HermesColors.inkMuted;
     final labelText = customLabel ?? (isRunning ? 'Running $port' : 'Offline');
 
     final content = Material(
@@ -133,16 +135,17 @@ class GatewayStatusChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              PulsingDot(
-                size: 7.0,
-                color: statusColor,
-              ),
+              PulsingDot(size: 7.0, color: statusColor),
               const SizedBox(width: 6),
-              Text(
-                labelText,
-                style: HermesTypography.statusPill(
-                  color: statusColor,
-                  fontSize: 11,
+              Flexible(
+                child: Text(
+                  labelText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: HermesTypography.statusPill(
+                    color: statusColor,
+                    fontSize: 11,
+                  ),
                 ),
               ),
             ],
@@ -151,10 +154,7 @@ class GatewayStatusChip extends StatelessWidget {
       ),
     );
 
-    return Tooltip(
-      message: 'Gateway RPC Node: $labelText',
-      child: content,
-    );
+    return Tooltip(message: 'Gateway RPC Node: $labelText', child: content);
   }
 }
 
@@ -196,17 +196,17 @@ class AchievementTierBadge extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.bolt,
-                size: 13,
-                color: HermesColors.amber,
-              ),
+              const Icon(Icons.bolt, size: 13, color: HermesColors.amber),
               const SizedBox(width: 4),
-              Text(
-                labelText,
-                style: HermesTypography.tierBadge(
-                  color: HermesColors.amber,
-                  fontSize: 11,
+              Flexible(
+                child: Text(
+                  labelText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: HermesTypography.tierBadge(
+                    color: HermesColors.amber,
+                    fontSize: 11,
+                  ),
                 ),
               ),
             ],
@@ -215,10 +215,7 @@ class AchievementTierBadge extends StatelessWidget {
       ),
     );
 
-    return Tooltip(
-      message: 'Agent Achievement: $labelText',
-      child: content,
-    );
+    return Tooltip(message: 'Agent Achievement: $labelText', child: content);
   }
 }
 
@@ -254,10 +251,7 @@ class HeaderConsoleBar extends StatelessWidget {
       decoration: const BoxDecoration(
         color: HermesColors.deepObsidian,
         border: Border(
-          bottom: BorderSide(
-            color: HermesColors.border,
-            width: 0.8,
-          ),
+          bottom: BorderSide(color: HermesColors.border, width: 0.8),
         ),
       ),
       child: LayoutBuilder(

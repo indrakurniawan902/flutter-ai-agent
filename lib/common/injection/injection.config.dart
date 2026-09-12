@@ -204,7 +204,10 @@ extension GetItInjectableX on _i174.GetIt {
       () => _i315.AmbientTriggerService.create(),
     );
     gh.lazySingleton<_i753.TtsClient>(
-      () => _i753.DioTtsClient.create(gh<_i361.Dio>()),
+      () => _i753.DioTtsClient.create(
+        gh<_i361.Dio>(),
+        gh<_i348.SecureStorageService>(),
+      ),
     );
     gh.lazySingleton<_i652.VoiceInputServiceBase>(
       () => _i845.VoiceInputService.create(),

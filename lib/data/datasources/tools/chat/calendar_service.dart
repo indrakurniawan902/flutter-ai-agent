@@ -1,6 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:device_calendar/device_calendar.dart';
 import 'package:injectable/injectable.dart';
+import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
 import 'package:flutter_ai_agent/common/failure.dart';
@@ -9,12 +10,64 @@ import 'package:flutter_ai_agent/domain/tools/chat/calendar_service.dart';
 @LazySingleton(as: CalendarServiceBase)
 class CalendarService implements CalendarServiceBase {
   CalendarService({DeviceCalendarPlugin? plugin})
-      : _plugin = plugin ?? DeviceCalendarPlugin();
+      : _plugin = plugin ?? DeviceCalendarPlugin() {
+    initTimeZone();
+  }
 
   @factoryMethod
   factory CalendarService.create() => CalendarService();
 
   final DeviceCalendarPlugin _plugin;
+  static bool _timeZoneInitialized = false;
+
+  static void initTimeZone({String? timeZoneName, Duration? timeZoneOffset}) {
+    if (_timeZoneInitialized &&
+        timeZoneName == null &&
+        timeZoneOffset == null) {
+      return;
+    }
+    try {
+      tz_data.initializeTimeZones();
+      final name = timeZoneName ?? DateTime.now().timeZoneName;
+      final offset = timeZoneOffset ?? DateTime.now().timeZoneOffset;
+
+      if (tz.timeZoneDatabase.locations.containsKey(name)) {
+        tz.setLocalLocation(tz.getLocation(name));
+        _timeZoneInitialized = true;
+        return;
+      }
+
+      for (final loc in tz.timeZoneDatabase.locations.values) {
+        if (loc.currentTimeZone.offset == offset.inMilliseconds) {
+          tz.setLocalLocation(loc);
+          _timeZoneInitialized = true;
+          return;
+        }
+      }
+      _timeZoneInitialized = true;
+    } catch (_) {
+      // Keep default
+    }
+  }
+
+  static tz.TZDateTime toLocalTz(DateTime dt) {
+    initTimeZone();
+    if (dt is tz.TZDateTime) return dt;
+    if (dt.isUtc) {
+      return tz.TZDateTime.from(dt, tz.local);
+    }
+    return tz.TZDateTime(
+      tz.local,
+      dt.year,
+      dt.month,
+      dt.day,
+      dt.hour,
+      dt.minute,
+      dt.second,
+      dt.millisecond,
+      dt.microsecond,
+    );
+  }
 
   @override
   Future<Either<Failure, List<Event>>> listEvents({
@@ -91,8 +144,8 @@ class CalendarService implements CalendarServiceBase {
         calendar.id,
         title: title,
         description: description,
-        start: tz.TZDateTime.from(startTime, tz.local),
-        end: tz.TZDateTime.from(endTime, tz.local),
+        start: toLocalTz(startTime),
+        end: toLocalTz(endTime),
       );
 
       final result = await _plugin.createOrUpdateEvent(event);

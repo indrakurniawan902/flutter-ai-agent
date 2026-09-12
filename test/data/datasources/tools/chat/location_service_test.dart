@@ -49,11 +49,14 @@ void main() {
   void stubEnabledPermission({
     bool enabled = true,
     LocationPermission permission = LocationPermission.whileInUse,
+    LocationPermission requestedPermission = LocationPermission.denied,
   }) {
     when(() => mockGeolocator.isLocationServiceEnabled())
         .thenAnswer((_) async => enabled);
     when(() => mockGeolocator.checkPermission())
         .thenAnswer((_) async => permission);
+    when(() => mockGeolocator.requestPermission())
+        .thenAnswer((_) async => requestedPermission);
   }
 
   group('checkPermission', () {
@@ -81,13 +84,26 @@ void main() {
       expect(await service.checkPermission(), isFalse);
     });
 
-    test('returns false when denied', () async {
+    test('returns false when denied and requested also denied', () async {
       stubEnabledPermission(
         enabled: true,
         permission: LocationPermission.denied,
+        requestedPermission: LocationPermission.denied,
       );
 
       expect(await service.checkPermission(), isFalse);
+      verify(() => mockGeolocator.requestPermission()).called(1);
+    });
+
+    test('requests permission and returns true when user grants whileInUse', () async {
+      stubEnabledPermission(
+        enabled: true,
+        permission: LocationPermission.denied,
+        requestedPermission: LocationPermission.whileInUse,
+      );
+
+      expect(await service.checkPermission(), isTrue);
+      verify(() => mockGeolocator.requestPermission()).called(1);
     });
   });
 

@@ -25,7 +25,10 @@ class LocationService implements LocationServiceBase {
   Future<bool> checkPermission() async {
     final serviceEnabled = await _geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) return false;
-    final permission = await _geolocator.checkPermission();
+    var permission = await _geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await _geolocator.requestPermission();
+    }
     return permission == LocationPermission.whileInUse ||
         permission == LocationPermission.always;
   }

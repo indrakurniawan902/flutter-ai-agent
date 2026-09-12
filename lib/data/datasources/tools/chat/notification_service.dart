@@ -36,6 +36,21 @@ class NotificationService implements NotificationServiceBase {
     );
 
     await _plugin.initialize(initSettings);
+
+    try {
+      final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      await androidPlugin?.requestNotificationsPermission();
+
+      final iosPlugin = _plugin.resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin>();
+      await iosPlugin?.requestPermissions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+    } catch (_) {}
+
     _initialized = true;
   }
 

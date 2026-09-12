@@ -126,6 +126,15 @@ class VoiceInputService implements VoiceInputServiceBase {
   @override
   Future<Either<Failure, bool>> checkPermission() async {
     try {
+      if (!_speech.isAvailable) {
+        final ready = await _speech.initialize(
+          onError: _onError,
+          onStatus: _onStatus,
+        );
+        if (!ready) {
+          return const Right(false);
+        }
+      }
       return Right(await _speech.hasPermission());
     } catch (e) {
       return Left(PermissionFailure('Microphone permission check failed: $e'));
@@ -152,6 +161,18 @@ class VoiceInputService implements VoiceInputServiceBase {
     String? localeId,
   }) async {
     try {
+      if (!_speech.isAvailable) {
+        final ready = await _speech.initialize(
+          onError: _onError,
+          onStatus: _onStatus,
+        );
+        if (!ready) {
+          _listening = false;
+          return const Left(PermissionFailure(
+            'Microphone permission denied or speech recognition unavailable',
+          ));
+        }
+      }
       await _speech.listen(
         onResult: _onResult,
         onSoundLevelChange: _onSoundLevel,

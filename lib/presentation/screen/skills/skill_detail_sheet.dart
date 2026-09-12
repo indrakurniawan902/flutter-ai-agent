@@ -135,7 +135,9 @@ class SkillDetailSheet extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Row(
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
                         children: [
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -155,7 +157,6 @@ class SkillDetailSheet extends StatelessWidget {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 6,
@@ -173,8 +174,7 @@ class SkillDetailSheet extends StatelessWidget {
                               ),
                             ),
                           ),
-                          if (skill.isCommunity) ...[
-                            const SizedBox(width: 6),
+                          if (skill.isCommunity)
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 6,
@@ -194,7 +194,6 @@ class SkillDetailSheet extends StatelessWidget {
                                 ),
                               ),
                             ),
-                          ],
                         ],
                       ),
                     ],

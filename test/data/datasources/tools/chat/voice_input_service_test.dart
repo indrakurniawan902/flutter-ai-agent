@@ -16,6 +16,7 @@ void main() {
   setUp(() {
     mockWrapper = MockSpeechToTextWrapper();
     when(() => mockWrapper.cancel()).thenAnswer((_) async {});
+    when(() => mockWrapper.isAvailable).thenReturn(true);
     service = VoiceInputService(speech: mockWrapper);
   });
 
@@ -79,23 +80,125 @@ void main() {
       expect(result, const Right<Failure, bool>(true));
     });
 
-    test('checkPermission returns Left(PermissionFailure) on exception',
-        () async {
-      when(
-        () => mockWrapper.hasPermission(),
-      ).thenThrow(Exception('permission query failed'));
+    test(
+      'checkPermission returns Left(PermissionFailure) on exception',
+      () async {
+        when(
+          () => mockWrapper.hasPermission(),
+        ).thenThrow(Exception('permission query failed'));
 
-      final result = await service.checkPermission();
+        final result = await service.checkPermission();
 
-      expect(result.isLeft(), true);
-      result.fold(
-        (failure) => expect(failure, isA<PermissionFailure>()),
-        (_) => fail('Expected PermissionFailure'),
-      );
-    });
+        expect(result.isLeft(), true);
+        result.fold(
+          (failure) => expect(failure, isA<PermissionFailure>()),
+          (_) => fail('Expected PermissionFailure'),
+        );
+      },
+    );
+
+    test(
+      'checkPermission auto-initializes when isAvailable is false',
+      () async {
+        when(() => mockWrapper.isAvailable).thenReturn(false);
+        when(
+          () => mockWrapper.initialize(
+            onError: any(named: 'onError'),
+            onStatus: any(named: 'onStatus'),
+          ),
+        ).thenAnswer((_) async => true);
+        when(() => mockWrapper.hasPermission()).thenAnswer((_) async => true);
+
+        final result = await service.checkPermission();
+
+        expect(result, const Right<Failure, bool>(true));
+        verify(
+          () => mockWrapper.initialize(
+            onError: any(named: 'onError'),
+            onStatus: any(named: 'onStatus'),
+          ),
+        ).called(1);
+      },
+    );
+
+    test(
+      'checkPermission returns false when auto-initialization fails',
+      () async {
+        when(() => mockWrapper.isAvailable).thenReturn(false);
+        when(
+          () => mockWrapper.initialize(
+            onError: any(named: 'onError'),
+            onStatus: any(named: 'onStatus'),
+          ),
+        ).thenAnswer((_) async => false);
+
+        final result = await service.checkPermission();
+
+        expect(result, const Right<Failure, bool>(false));
+      },
+    );
   });
 
   group('VoiceInputService - Listening & Streaming', () {
+    test('startListening auto-initializes when isAvailable is false', () async {
+      when(() => mockWrapper.isAvailable).thenReturn(false);
+      when(
+        () => mockWrapper.initialize(
+          onError: any(named: 'onError'),
+          onStatus: any(named: 'onStatus'),
+        ),
+      ).thenAnswer((_) async {
+        when(() => mockWrapper.isAvailable).thenReturn(true);
+        return true;
+      });
+      when(
+        () => mockWrapper.listen(
+          onResult: any(named: 'onResult'),
+          onSoundLevelChange: any(named: 'onSoundLevelChange'),
+          listenFor: any(named: 'listenFor'),
+          pauseFor: any(named: 'pauseFor'),
+          localeId: any(named: 'localeId'),
+        ),
+      ).thenAnswer((_) async {});
+
+      final result = await service.startListening();
+
+      expect(result, const Right<Failure, Unit>(unit));
+      verify(
+        () => mockWrapper.initialize(
+          onError: any(named: 'onError'),
+          onStatus: any(named: 'onStatus'),
+        ),
+      ).called(1);
+      verify(
+        () => mockWrapper.listen(
+          onResult: any(named: 'onResult'),
+          onSoundLevelChange: any(named: 'onSoundLevelChange'),
+        ),
+      ).called(1);
+    });
+
+    test(
+      'startListening returns PermissionFailure when auto-initialization returns false',
+      () async {
+        when(() => mockWrapper.isAvailable).thenReturn(false);
+        when(
+          () => mockWrapper.initialize(
+            onError: any(named: 'onError'),
+            onStatus: any(named: 'onStatus'),
+          ),
+        ).thenAnswer((_) async => false);
+
+        final result = await service.startListening();
+
+        expect(result.isLeft(), true);
+        result.fold(
+          (failure) => expect(failure, isA<PermissionFailure>()),
+          (_) => fail('Expected PermissionFailure'),
+        );
+        expect(service.isListening, false);
+      },
+    );
     test('startListening transitions status to listening', () async {
       when(
         () => mockWrapper.listen(
@@ -125,96 +228,100 @@ void main() {
       ).called(1);
     });
 
-    test('startListening returns Left(ServerFailure) when listen throws',
-        () async {
-      when(
-        () => mockWrapper.listen(
-          onResult: any(named: 'onResult'),
-          onSoundLevelChange: any(named: 'onSoundLevelChange'),
-          listenFor: any(named: 'listenFor'),
-          pauseFor: any(named: 'pauseFor'),
-          localeId: any(named: 'localeId'),
-        ),
-      ).thenThrow(Exception('listen failed'));
+    test(
+      'startListening returns Left(ServerFailure) when listen throws',
+      () async {
+        when(
+          () => mockWrapper.listen(
+            onResult: any(named: 'onResult'),
+            onSoundLevelChange: any(named: 'onSoundLevelChange'),
+            listenFor: any(named: 'listenFor'),
+            pauseFor: any(named: 'pauseFor'),
+            localeId: any(named: 'localeId'),
+          ),
+        ).thenThrow(Exception('listen failed'));
 
-      final result = await service.startListening();
+        final result = await service.startListening();
 
-      expect(result.isLeft(), true);
-      expect(service.isListening, false);
-    });
+        expect(result.isLeft(), true);
+        expect(service.isListening, false);
+      },
+    );
 
-    test('startListening streams transcribed text when result arrives',
-        () async {
-      void Function(SpeechRecognitionResult result)? onResultCallback;
+    test(
+      'startListening streams transcribed text when result arrives',
+      () async {
+        void Function(SpeechRecognitionResult result)? onResultCallback;
 
-      when(
-        () => mockWrapper.listen(
-          onResult: any(named: 'onResult'),
-          onSoundLevelChange: any(named: 'onSoundLevelChange'),
-          listenFor: any(named: 'listenFor'),
-          pauseFor: any(named: 'pauseFor'),
-          localeId: any(named: 'localeId'),
-        ),
-      ).thenAnswer((invocation) async {
-        onResultCallback =
-            invocation.namedArguments[#onResult]
-                as void Function(SpeechRecognitionResult)?;
-      });
+        when(
+          () => mockWrapper.listen(
+            onResult: any(named: 'onResult'),
+            onSoundLevelChange: any(named: 'onSoundLevelChange'),
+            listenFor: any(named: 'listenFor'),
+            pauseFor: any(named: 'pauseFor'),
+            localeId: any(named: 'localeId'),
+          ),
+        ).thenAnswer((invocation) async {
+          onResultCallback =
+              invocation.namedArguments[#onResult]
+                  as void Function(SpeechRecognitionResult)?;
+        });
 
-      await service.startListening();
+        await service.startListening();
 
-      expectLater(
-        service.transcriptionStream,
-        emitsInOrder(['Halo', 'Halo agen Hermes']),
-      );
+        expectLater(
+          service.transcriptionStream,
+          emitsInOrder(['Halo', 'Halo agen Hermes']),
+        );
 
-      final result1 = SpeechRecognitionResult(
-        [SpeechRecognitionWords('Halo', null, 0.9)],
-        0,
-      );
-      final result2 = SpeechRecognitionResult(
-        [SpeechRecognitionWords('Halo agen Hermes', null, 0.95)],
-        1,
-      );
+        final result1 = SpeechRecognitionResult([
+          SpeechRecognitionWords('Halo', null, 0.9),
+        ], 0);
+        final result2 = SpeechRecognitionResult([
+          SpeechRecognitionWords('Halo agen Hermes', null, 0.95),
+        ], 1);
 
-      onResultCallback?.call(result1);
-      onResultCallback?.call(result2);
+        onResultCallback?.call(result1);
+        onResultCallback?.call(result2);
 
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-      expect(service.lastRecognizedWords, 'Halo agen Hermes');
-    });
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        expect(service.lastRecognizedWords, 'Halo agen Hermes');
+      },
+    );
 
-    test('startListening streams normalized sound levels clamped 0..1',
-        () async {
-      void Function(double level)? onSoundLevelCallback;
+    test(
+      'startListening streams normalized sound levels clamped 0..1',
+      () async {
+        void Function(double level)? onSoundLevelCallback;
 
-      when(
-        () => mockWrapper.listen(
-          onResult: any(named: 'onResult'),
-          onSoundLevelChange: any(named: 'onSoundLevelChange'),
-          listenFor: any(named: 'listenFor'),
-          pauseFor: any(named: 'pauseFor'),
-          localeId: any(named: 'localeId'),
-        ),
-      ).thenAnswer((invocation) async {
-        onSoundLevelCallback =
-            invocation.namedArguments[#onSoundLevelChange]
-                as void Function(double)?;
-      });
+        when(
+          () => mockWrapper.listen(
+            onResult: any(named: 'onResult'),
+            onSoundLevelChange: any(named: 'onSoundLevelChange'),
+            listenFor: any(named: 'listenFor'),
+            pauseFor: any(named: 'pauseFor'),
+            localeId: any(named: 'localeId'),
+          ),
+        ).thenAnswer((invocation) async {
+          onSoundLevelCallback =
+              invocation.namedArguments[#onSoundLevelChange]
+                  as void Function(double)?;
+        });
 
-      await service.startListening();
+        await service.startListening();
 
-      expectLater(
-        service.soundLevelStream,
-        emitsInOrder([
-          predicate<double>((v) => v >= 0.0 && v <= 1.0),
-          predicate<double>((v) => v >= 0.0 && v <= 1.0),
-        ]),
-      );
+        expectLater(
+          service.soundLevelStream,
+          emitsInOrder([
+            predicate<double>((v) => v >= 0.0 && v <= 1.0),
+            predicate<double>((v) => v >= 0.0 && v <= 1.0),
+          ]),
+        );
 
-      onSoundLevelCallback?.call(0.85);
-      onSoundLevelCallback?.call(5.0);
-    });
+        onSoundLevelCallback?.call(0.85);
+        onSoundLevelCallback?.call(5.0);
+      },
+    );
 
     test('normalizeSoundLevel clamps NaN and out-of-range values', () {
       expect(VoiceInputService.normalizeSoundLevel(double.nan), 0.0);
@@ -254,34 +361,36 @@ void main() {
       await statusFuture;
     });
 
-    test('error callback emits error message and updates status to error',
-        () async {
-      void Function(SpeechRecognitionError error)? onErrorCallback;
+    test(
+      'error callback emits error message and updates status to error',
+      () async {
+        void Function(SpeechRecognitionError error)? onErrorCallback;
 
-      when(
-        () => mockWrapper.initialize(
-          onError: any(named: 'onError'),
-          onStatus: any(named: 'onStatus'),
-        ),
-      ).thenAnswer((invocation) async {
-        onErrorCallback =
-            invocation.namedArguments[#onError]
-                as void Function(SpeechRecognitionError)?;
-        return true;
-      });
+        when(
+          () => mockWrapper.initialize(
+            onError: any(named: 'onError'),
+            onStatus: any(named: 'onStatus'),
+          ),
+        ).thenAnswer((invocation) async {
+          onErrorCallback =
+              invocation.namedArguments[#onError]
+                  as void Function(SpeechRecognitionError)?;
+          return true;
+        });
 
-      await service.initialize();
+        await service.initialize();
 
-      expectLater(
-        service.errorStream,
-        emits('Audio recording hardware error'),
-      );
-      expectLater(service.statusStream, emits(VoiceInputStatus.error));
+        expectLater(
+          service.errorStream,
+          emits('Audio recording hardware error'),
+        );
+        expectLater(service.statusStream, emits(VoiceInputStatus.error));
 
-      onErrorCallback?.call(
-        SpeechRecognitionError('Audio recording hardware error', true),
-      );
-    });
+        onErrorCallback?.call(
+          SpeechRecognitionError('Audio recording hardware error', true),
+        );
+      },
+    );
   });
 
   group('VoiceInputService - Stop and Cancel', () {
@@ -306,10 +415,9 @@ void main() {
 
       await service.startListening();
       onResultCallback?.call(
-        SpeechRecognitionResult(
-          [SpeechRecognitionWords('Kirim pesan suara', null, 0.9)],
-          0,
-        ),
+        SpeechRecognitionResult([
+          SpeechRecognitionWords('Kirim pesan suara', null, 0.9),
+        ], 0),
       );
 
       final stopResult = await service.stopListening();
@@ -319,27 +427,27 @@ void main() {
       verify(() => mockWrapper.stop()).called(1);
     });
 
-    test('stopListening prefers plugin lastRecognizedWords when non-empty',
-        () async {
-      when(
-        () => mockWrapper.listen(
-          onResult: any(named: 'onResult'),
-          onSoundLevelChange: any(named: 'onSoundLevelChange'),
-          listenFor: any(named: 'listenFor'),
-          pauseFor: any(named: 'pauseFor'),
-          localeId: any(named: 'localeId'),
-        ),
-      ).thenAnswer((_) async {});
-      when(() => mockWrapper.stop()).thenAnswer((_) async {});
-      when(
-        () => mockWrapper.lastRecognizedWords,
-      ).thenReturn('Plugin words');
+    test(
+      'stopListening prefers plugin lastRecognizedWords when non-empty',
+      () async {
+        when(
+          () => mockWrapper.listen(
+            onResult: any(named: 'onResult'),
+            onSoundLevelChange: any(named: 'onSoundLevelChange'),
+            listenFor: any(named: 'listenFor'),
+            pauseFor: any(named: 'pauseFor'),
+            localeId: any(named: 'localeId'),
+          ),
+        ).thenAnswer((_) async {});
+        when(() => mockWrapper.stop()).thenAnswer((_) async {});
+        when(() => mockWrapper.lastRecognizedWords).thenReturn('Plugin words');
 
-      await service.startListening();
-      final stopResult = await service.stopListening();
+        await service.startListening();
+        final stopResult = await service.stopListening();
 
-      expect(stopResult, const Right<Failure, String>('Plugin words'));
-    });
+        expect(stopResult, const Right<Failure, String>('Plugin words'));
+      },
+    );
 
     test('cancelListening cancels speech and resets status to idle', () async {
       when(

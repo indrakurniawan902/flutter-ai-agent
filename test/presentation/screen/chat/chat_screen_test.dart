@@ -21,6 +21,7 @@ import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_sta
 import 'package:flutter_ai_agent/presentation/screen/settings/settings_screen.dart';
 import 'package:flutter_ai_agent/utils/app_theme.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_routes.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/permission_rationale_modal.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
@@ -105,6 +106,22 @@ void main() {
       expect(find.byKey(const Key('achievement_tier_badge')), findsOneWidget);
       expect(find.text('Running 8644'), findsOneWidget);
       expect(find.text('Olympian • 47/60 Badges'), findsOneWidget);
+    });
+
+    testWidgets('does not overflow on narrow mobile screens (320x568)', (tester) async {
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('chat_app_bar_logo')), findsOneWidget);
+      expect(find.text('Flames'), findsOneWidget);
+      expect(find.byKey(const Key('chat_connection_indicator')), findsOneWidget);
+      expect(find.byKey(const Key('header_console_bar')), findsOneWidget);
     });
 
     testWidgets('send button is disabled when text field is empty', (tester) async {
@@ -546,6 +563,92 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       verify(() => mockAgentCubit.stop()).called(1);
+    });
+
+    group('Permission Rationale in ChatScreen', () {
+      testWidgets(
+          'renders Buka Akses button on assistant message when permission denied and opens modal on tap',
+          (tester) async {
+        when(() => mockAgentCubit.state).thenReturn(
+          const AgentSuccess(
+            'I cannot complete this action because permission was denied (read_recent_notifications: Permission not granted). Please grant the required permission in device settings to continue.',
+            messages: [
+              ChatMessage(
+                role: 'assistant',
+                content:
+                    'I cannot complete this action because permission was denied (read_recent_notifications: Permission not granted). Please grant the required permission in device settings to continue.',
+              ),
+            ],
+          ),
+        );
+        when(() => mockAgentCubit.messages).thenReturn([
+          const ChatMessage(
+            role: 'assistant',
+            content:
+                'I cannot complete this action because permission was denied (read_recent_notifications: Permission not granted). Please grant the required permission in device settings to continue.',
+          ),
+        ]);
+
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pump();
+
+        final buttonFinder =
+            find.byKey(const Key('open_permission_rationale_button'));
+        expect(buttonFinder, findsWidgets);
+        expect(find.text('Buka Akses Notifikasi'), findsWidgets);
+
+        await tester.tap(buttonFinder.first);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(find.byType(PermissionRationaleModal), findsOneWidget);
+        expect(find.text('Akses Notifikasi'), findsWidgets);
+      });
+
+      testWidgets(
+          'renders security icon and Buka Akses button in tool result card when permission denied',
+          (tester) async {
+        when(() => mockAgentCubit.state).thenReturn(
+          const AgentSuccess(
+            'Tool executed',
+            messages: [
+              ChatMessage(
+                role: 'tool',
+                name: 'get_location',
+                content: 'Error: Permission not granted for get_location',
+              ),
+            ],
+          ),
+        );
+        when(() => mockAgentCubit.messages).thenReturn([
+          const ChatMessage(
+            role: 'tool',
+            name: 'get_location',
+            content: 'Error: Permission not granted for get_location',
+          ),
+        ]);
+
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pump();
+
+        expect(find.text('Permission Required: get_location'), findsOneWidget);
+
+        // Tap expansion tile to expand
+        await tester.tap(find.text('Permission Required: get_location'));
+        await tester.pumpAndSettle();
+
+        final toolBtnFinder =
+            find.byKey(const Key('tool_result_permission_button'));
+        expect(toolBtnFinder, findsOneWidget);
+        expect(find.text('Buka Akses Lokasi'), findsOneWidget);
+
+        await tester.tap(toolBtnFinder);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(find.byType(PermissionRationaleModal), findsOneWidget);
+        expect(find.text('Akses Lokasi'), findsWidgets);
+      });
     });
   });
 }

@@ -6,8 +6,10 @@ import 'package:dartz/dartz.dart';
 import 'package:dio/dio.dart';
 import 'package:injectable/injectable.dart';
 
+import 'package:flutter_ai_agent/common/constant.dart';
 import 'package:flutter_ai_agent/common/exception.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
 
 abstract class AudioPlayerWrapper {
@@ -98,17 +100,27 @@ abstract class TtsClient {
 
 @LazySingleton(as: TtsClient)
 class DioTtsClient implements TtsClient {
-  DioTtsClient({required Dio dio, String? baseUrl, String? apiKey})
-      : _dio = dio,
+  DioTtsClient({
+    required Dio dio,
+    String? baseUrl,
+    String? apiKey,
+    SecureStorageService? secureStorageService,
+  })  : _dio = dio,
         _baseUrl = baseUrl ?? '',
-        _apiKey = apiKey;
+        _apiKey = apiKey,
+        _secureStorageService = secureStorageService;
 
   @factoryMethod
-  factory DioTtsClient.create(Dio dio) => DioTtsClient(dio: dio);
+  factory DioTtsClient.create(
+    Dio dio, [
+    SecureStorageService? secureStorageService,
+  ]) =>
+      DioTtsClient(dio: dio, secureStorageService: secureStorageService);
 
   final Dio _dio;
   final String _baseUrl;
   final String? _apiKey;
+  final SecureStorageService? _secureStorageService;
 
   @override
   Future<Uint8List> synthesize({
@@ -117,11 +129,40 @@ class DioTtsClient implements TtsClient {
     String? model,
     double? speed,
   }) async {
-    final endpoint =
-        _baseUrl.isEmpty ? '/audio/speech' : '$_baseUrl/audio/speech';
+    var effectiveBaseUrl = _baseUrl.trim();
+    if (effectiveBaseUrl.isEmpty && _secureStorageService != null) {
+      final stored = await _secureStorageService.getBaseUrl();
+      if (stored != null && stored.trim().isNotEmpty) {
+        effectiveBaseUrl = stored.trim();
+      }
+    }
+    if (effectiveBaseUrl.isEmpty) {
+      effectiveBaseUrl = AppConstants.defaultBaseUrl;
+    }
+
+    while (effectiveBaseUrl.endsWith('/')) {
+      effectiveBaseUrl =
+          effectiveBaseUrl.substring(0, effectiveBaseUrl.length - 1);
+    }
+
+    final String endpoint;
+    if (effectiveBaseUrl.endsWith('/audio/speech')) {
+      endpoint = effectiveBaseUrl;
+    } else if (effectiveBaseUrl.endsWith('/v1')) {
+      endpoint = '$effectiveBaseUrl/audio/speech';
+    } else {
+      endpoint = '$effectiveBaseUrl/v1/audio/speech';
+    }
+
     final headers = <String, String>{'Content-Type': 'application/json'};
-    final apiKey = _apiKey;
-    if (apiKey != null) headers['Authorization'] = 'Bearer $apiKey';
+    var apiKey = _apiKey;
+    if ((apiKey == null || apiKey.isEmpty) && _secureStorageService != null) {
+      apiKey = await _secureStorageService.getApiKey();
+    }
+    if (apiKey != null && apiKey.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $apiKey';
+    }
+
     final payload = <String, dynamic>{
       'model': model ?? 'tts-1',
       'input': text,

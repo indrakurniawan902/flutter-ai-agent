@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_ai_agent/domain/entities/skills/skill.dart';
 import 'package:flutter_ai_agent/domain/services/skills/skills_registry_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/skills/cubit/skills_cubit.dart';
+import 'package:flutter_ai_agent/presentation/screen/skills/skill_detail_sheet.dart';
 import 'package:flutter_ai_agent/presentation/screen/skills/skills_hub_screen.dart';
 import 'package:flutter_ai_agent/utils/hermes_theme.dart';
 
@@ -204,6 +205,42 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('skill_detail_sheet')), findsNothing);
+    });
+
+    testWidgets(
+        'skill detail modal does not overflow on narrow mobile screens (320x568)',
+        (tester) async {
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      const testSkill = Skill(
+        id: 'camera_vision',
+        name: 'camera_vision',
+        description: 'Camera perception and visual reasoning',
+        category: 'Device Control',
+        tier: 'Tier 2 Perm',
+        version: 'v1.2.0',
+        tools: ['take_photo', 'analyze_image'],
+        prompts: ['Take a photo of this document'],
+        isEnabled: true,
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        theme: HermesTheme.darkTheme,
+        home: const Scaffold(
+          body: SkillDetailSheet(
+            skill: testSkill,
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('skill_detail_sheet')), findsOneWidget);
+      expect(find.text('Tier 2 Perm'), findsOneWidget);
+      expect(find.text('DEVICE CONTROL'), findsOneWidget);
     });
   });
 }

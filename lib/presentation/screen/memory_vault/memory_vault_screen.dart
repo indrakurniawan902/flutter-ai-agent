@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_ai_agent/common/injection/injection.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/memory_item.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/local_memory_service.dart';
 import 'package:flutter_ai_agent/utils/hermes_theme.dart';
 
 /// Memory record model for SQLite FTS5 Memory Vault.
 class MemoryRecord {
+  final int? id;
   final String key;
   final String content;
   final String category;
@@ -10,6 +14,7 @@ class MemoryRecord {
   final double score;
 
   const MemoryRecord({
+    this.id,
     required this.key,
     required this.content,
     required this.category,
@@ -36,8 +41,9 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   String _selectedCategory = 'all';
+  bool _isLoading = false;
 
-  final List<MemoryRecord> _records = const [
+  static const List<MemoryRecord> _defaultRecords = [
     MemoryRecord(
       key: 'user.identity.name',
       content: 'User preferred name: Indra (Eryushin)',
@@ -75,6 +81,8 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
     ),
   ];
 
+  late List<MemoryRecord> _records = List.of(_defaultRecords);
+
   static const List<Map<String, String>> _categories = [
     {'id': 'all', 'label': 'All'},
     {'id': 'profile', 'label': 'Profile'},
@@ -87,6 +95,106 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
   void initState() {
     super.initState();
     _searchController.addListener(_onSearchChanged);
+    _initMemoryStore();
+  }
+
+  Future<void> _initMemoryStore() async {
+    if (!sl.isRegistered<LocalMemoryServiceBase>()) return;
+    final service = sl<LocalMemoryServiceBase>();
+    setState(() => _isLoading = true);
+    try {
+      final res = await service.getAllMemories();
+      await res.fold(
+        (_) async {},
+        (items) async {
+          if (items.isEmpty) {
+            for (final r in _defaultRecords) {
+              await service.saveMemory(r.key, r.content, [r.category]);
+            }
+            final seededRes = await service.getAllMemories();
+            seededRes.fold((_) {}, (seededItems) {
+              if (mounted) {
+                setState(() {
+                  _records = seededItems.map(_fromMemoryItem).toList();
+                });
+              }
+            });
+          } else {
+            if (mounted) {
+              setState(() {
+                _records = items.map(_fromMemoryItem).toList();
+              });
+            }
+          }
+        },
+      );
+    } catch (_) {}
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  MemoryRecord _fromMemoryItem(MemoryItem item) {
+    final cat =
+        item.tags.isNotEmpty ? item.tags.first : _detectCategory(item.key);
+    final dt = item.updatedAt;
+    final timeStr =
+        '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    return MemoryRecord(
+      id: item.id,
+      key: item.key,
+      content: item.content,
+      category: cat,
+      timestamp: timeStr,
+      score: item.score ?? 1.0,
+    );
+  }
+
+  String _detectCategory(String key) {
+    final lower = key.toLowerCase();
+    if (lower.contains('profile') ||
+        lower.contains('user') ||
+        lower.contains('name')) {
+      return 'profile';
+    }
+    if (lower.contains('router') ||
+        lower.contains('llm') ||
+        lower.contains('gateway')) {
+      return 'router';
+    }
+    if (lower.contains('hardware') ||
+        lower.contains('device') ||
+        lower.contains('model')) {
+      return 'hardware';
+    }
+    if (lower.contains('rule') || lower.contains('budget')) {
+      return 'rules';
+    }
+    return 'profile';
+  }
+
+  Future<void> _deleteMemoryRecord(MemoryRecord record) async {
+    if (record.id != null && sl.isRegistered<LocalMemoryServiceBase>()) {
+      await sl<LocalMemoryServiceBase>().deleteMemory(record.id!);
+    } else if (sl.isRegistered<LocalMemoryServiceBase>()) {
+      await sl<LocalMemoryServiceBase>().deleteMemoryByKey(record.key);
+    }
+    setState(() {
+      _records.removeWhere((r) =>
+          r.key == record.key || (record.id != null && r.id == record.id));
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Memory record "${record.key}" deleted.',
+            style: HermesTypography.monospace(fontSize: 12, color: Colors.white),
+          ),
+          backgroundColor: HermesColors.cardSurface,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   void _onSearchChanged() {
@@ -125,6 +233,11 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh, size: 18, color: HermesColors.inkSecondary),
+            tooltip: 'Refresh Memories',
+            onPressed: _initMemoryStore,
+          ),
           Container(
             key: const Key('memory_fts5_badge'),
             margin: const EdgeInsets.only(right: 16),
@@ -150,6 +263,16 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
             ),
           ),
         ],
+        bottom: _isLoading
+            ? const PreferredSize(
+                preferredSize: Size.fromHeight(2),
+                child: LinearProgressIndicator(
+                  minHeight: 2,
+                  color: HermesColors.electricTeal,
+                  backgroundColor: Colors.transparent,
+                ),
+              )
+            : null,
       ),
       body: Column(
         children: [
@@ -300,6 +423,19 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
                                       color: HermesColors.inkSecondary,
                                     ),
                                   ),
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    size: 15,
+                                    color: HermesColors.inkMuted,
+                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  tooltip: 'Delete Memory',
+                                  onPressed: () => _deleteMemoryRecord(item),
                                 ),
                               ],
                             ),

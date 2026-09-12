@@ -321,5 +321,18 @@ void main() {
         (_) => fail('Expected Left'),
       );
     });
+
+    test('toLocalTz initializes and preserves local timezone time components', () {
+      CalendarService.initTimeZone(
+        timeZoneName: 'Asia/Jakarta',
+        timeZoneOffset: const Duration(hours: 7),
+      );
+      final localDt = DateTime(2026, 9, 12, 17, 30);
+      final tzDt = CalendarService.toLocalTz(localDt);
+
+      expect(tzDt.hour, 17);
+      expect(tzDt.minute, 30);
+      expect(tzDt.timeZoneOffset, const Duration(hours: 7));
+    });
   });
 }

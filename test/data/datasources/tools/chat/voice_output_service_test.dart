@@ -446,5 +446,26 @@ void main() {
         throwsA(isA<DioException>()),
       );
     });
+
+    test('synthesize uses AppConstants.defaultBaseUrl when baseUrl is empty',
+        () async {
+      final client = DioTtsClient(dio: mockDio);
+      when(
+        () => mockDio.post<List<int>>(
+          'https://indra-9router.my.id/v1/audio/speech',
+          data: any(named: 'data'),
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer(
+        (_) async => Response<List<int>>(
+          data: [1, 2, 3],
+          statusCode: 200,
+          requestOptions: RequestOptions(path: '/audio/speech'),
+        ),
+      );
+
+      final result = await client.synthesize(text: 'Hello');
+      expect(result, equals(Uint8List.fromList([1, 2, 3])));
+    });
   });
 }

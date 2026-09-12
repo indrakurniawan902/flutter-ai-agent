@@ -200,6 +200,16 @@ class SkillsRegistryService {
     }
 
     buffer.writeln('# Active Skills & Domain Capabilities');
+    final now = DateTime.now();
+    final offsetHours = now.timeZoneOffset.inHours;
+    final offsetMins = (now.timeZoneOffset.inMinutes.remainder(60).abs());
+    final offsetStr =
+        '${offsetHours >= 0 ? '+' : ''}${offsetHours.toString().padLeft(2, '0')}:${offsetMins.toString().padLeft(2, '0')}';
+    buffer.writeln(
+      'Current Device Time: ${now.toIso8601String()} (Timezone: ${now.timeZoneName}, UTC$offsetStr). '
+      'Always consider this local device date, time, and timezone for calendar scheduling and date operations.',
+    );
+    buffer.writeln();
     buffer.writeln(
       'You are Flames, an autonomous mobile agent workstation. '
       'The following specialized skills are active in your execution context. '
@@ -396,7 +406,7 @@ class SkillsRegistryService {
       category: 'Automation',
       tier: 'Tier 2 Perm',
       version: 'v1.3.0',
-      tools: ['send_local_notification'],
+      tools: ['send_local_notification', 'schedule_reminder'],
       prompts: [
         'Remind me to drink water in 30 minutes',
         'Send an instant notification alert',
@@ -411,7 +421,7 @@ class SkillsRegistryService {
       category: 'Automation',
       tier: 'Tier 1 Auto',
       version: 'v1.0.0',
-      tools: ['get_current_location', 'get_device_battery'],
+      tools: ['get_location', 'device_status'],
       prompts: [
         'Monitor battery level and alert when below 20%',
         'Trigger arrival action when entering home geofence',
@@ -419,6 +429,97 @@ class SkillsRegistryService {
       instructions:
           'Poll background device context periodically and trigger pre-configured autonomous actions.',
       isCommunity: true,
+    ));
+
+    registerSkill(const Skill(
+      id: 'voice_assistant',
+      name: 'voice_assistant',
+      description:
+          'Speech recognition audio transcription and voice text-to-speech synthesis.',
+      category: 'Audio',
+      tier: 'Tier 2 Perm',
+      version: 'v1.0.0',
+      tools: ['listen_voice_input', 'speak_text'],
+      prompts: [
+        'Listen to voice input for 5 seconds and transcribe',
+        'Speak this text out loud',
+      ],
+      instructions:
+          'Listen for audio input with appropriate duration, and speak back responses when requested by user.',
+    ));
+
+    registerSkill(const Skill(
+      id: 'notification_triage',
+      name: 'notification_triage',
+      description:
+          'Reads recent device notifications and extracts security OTP verification codes.',
+      category: 'Automation',
+      tier: 'Tier 2 Perm',
+      version: 'v1.0.0',
+      tools: ['read_recent_notifications', 'extract_latest_otp'],
+      prompts: [
+        'Check recent notifications for any new messages',
+        'Extract the latest OTP code received in notifications',
+      ],
+      instructions:
+          'Verify notification access permission first, filter out sensitive noise, and return relevant notifications or OTPs cleanly.',
+    ));
+
+    registerSkill(const Skill(
+      id: 'device_files',
+      name: 'device_files',
+      description:
+          'Device file system explorer, document reading, and directory inspection.',
+      category: 'Storage',
+      tier: 'Tier 2 Perm',
+      version: 'v1.0.0',
+      tools: ['read_device_file', 'list_device_files'],
+      prompts: [
+        'List files in documents folder',
+        'Read text content of document file',
+      ],
+      instructions:
+          'Inspect file paths safely and read file contents within allowed directories.',
+    ));
+
+    registerSkill(const Skill(
+      id: 'device_memory',
+      name: 'device_memory',
+      description:
+          'Long-term persistent user facts, context notes, and memory storage.',
+      category: 'System',
+      tier: 'Tier 1 Auto',
+      version: 'v1.0.0',
+      tools: [
+        'save_memory',
+        'search_memories',
+        'delete_memory',
+        'list_memories'
+      ],
+      prompts: [
+        'Save my preferred coffee order to memory',
+        'What memories do you have stored about my preferences?',
+      ],
+      instructions:
+          'Store persistent facts with relevant keywords and search memory context before answering personal queries.',
+    ));
+
+    registerSkill(const Skill(
+      id: 'device_actions',
+      name: 'device_actions',
+      description:
+          'Contact address book searching, WhatsApp chat launcher, and browser URL opening.',
+      category: 'System',
+      tier: 'Tier 2 Perm',
+      version: 'v1.0.0',
+      tools: ['search_contacts', 'open_whatsapp_chat', 'open_external_url'],
+      prompts: [
+        'Find contact number for Alex',
+        'Open WhatsApp chat with contact',
+        'Open website URL in browser',
+      ],
+      instructions:
+          'Search contacts by name, format phone numbers with country code before launching chats, and validate URLs before opening.',
     ));
   }
 }

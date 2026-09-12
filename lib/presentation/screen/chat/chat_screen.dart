@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +12,8 @@ import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_mode.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_input_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
 import 'package:flutter_ai_agent/domain/entities/gateway/gateway_connection_state.dart';
@@ -24,6 +27,7 @@ import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_approva
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_confirmation_card.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/header_console_bar.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/live_action_stepper_card.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/permission_rationale_modal.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/reasoning_card.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/summary_card.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/voice_waveform_widget.dart';
@@ -383,6 +387,103 @@ class _ChatScreenState extends State<ChatScreen> {
         state is AgentStreaming ||
         state is ExecutingTool ||
         state is WaitingApproval;
+  }
+
+  PermissionRationaleType? _resolvePermissionRationaleType(String text) {
+    final lower = text.toLowerCase();
+    if (lower.contains('location') ||
+        lower.contains('lokasi') ||
+        lower.contains('get_location')) {
+      return PermissionRationaleType.location;
+    }
+    if (lower.contains('notification') ||
+        lower.contains('notifikasi') ||
+        lower.contains('read_recent_notifications') ||
+        lower.contains('extract_latest_otp') ||
+        lower.contains('send_notification') ||
+        lower.contains('schedule_reminder')) {
+      return PermissionRationaleType.notifications;
+    }
+    if (lower.contains('microphone') ||
+        lower.contains('mikrofon') ||
+        lower.contains('voice') ||
+        lower.contains('suara') ||
+        lower.contains('audio')) {
+      return PermissionRationaleType.microphone;
+    }
+    if (lower.contains('camera') ||
+        lower.contains('kamera') ||
+        lower.contains('photo') ||
+        lower.contains('scan')) {
+      return PermissionRationaleType.camera;
+    }
+    if (lower.contains('calendar') ||
+        lower.contains('kalender') ||
+        lower.contains('event')) {
+      return PermissionRationaleType.calendar;
+    }
+    if (lower.contains('contact') ||
+        lower.contains('kontak') ||
+        lower.contains('search_contacts')) {
+      return PermissionRationaleType.contacts;
+    }
+    return null;
+  }
+
+  Future<void> _handlePermissionRationaleAction(
+    PermissionRationaleType type,
+  ) async {
+    switch (type) {
+      case PermissionRationaleType.notifications:
+        try {
+          if (sl.isRegistered<NotificationTriageServiceBase>()) {
+            await sl<NotificationTriageServiceBase>().requestPermission();
+          } else {
+            const channel =
+                MethodChannel('ai.hermes.flames/notification_listener');
+            await channel.invokeMethod('requestPermission');
+          }
+        } catch (_) {}
+        break;
+      case PermissionRationaleType.location:
+        try {
+          if (sl.isRegistered<LocationServiceBase>()) {
+            await sl<LocationServiceBase>().checkPermission();
+          }
+        } catch (_) {}
+        break;
+      case PermissionRationaleType.microphone:
+        try {
+          await _voiceService?.checkPermission();
+        } catch (_) {}
+        break;
+      case PermissionRationaleType.contacts:
+        try {
+          const channel = MethodChannel('ai.hermes.flames/contacts');
+          await channel.invokeMethod('requestPermission');
+        } catch (_) {}
+        break;
+      case PermissionRationaleType.camera:
+      case PermissionRationaleType.calendar:
+        break;
+    }
+  }
+
+  Future<void> _showPermissionRationaleForResponse(
+    BuildContext context,
+    String response,
+  ) async {
+    final isPermissionDenied = response.contains('permission was denied') ||
+        response.contains('Permission not granted');
+    if (!isPermissionDenied) return;
+
+    final type = _resolvePermissionRationaleType(response);
+    if (type == null) return;
+
+    final allowed = await PermissionRationaleModal.show(context, type);
+    if (allowed == true) {
+      await _handlePermissionRationaleAction(type);
+    }
   }
 
   void _scrollToBottom() {
@@ -783,12 +884,16 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
               const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],
@@ -830,6 +935,7 @@ class _ChatScreenState extends State<ChatScreen> {
               state.response.isNotEmpty) {
             outputService.speakText(state.response);
           }
+          _showPermissionRationaleForResponse(context, state.response);
         } else if (state is AgentError) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -914,35 +1020,50 @@ class _ChatScreenState extends State<ChatScreen> {
       builder: (context) {
         return Scaffold(
           appBar: AppBar(
-            title: Row(
+            toolbarHeight: 60,
+            titleSpacing: 8.0,
+            title: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Image.asset(
-                    'assets/images/flames_logo.png',
-                    key: const Key('chat_app_bar_logo'),
-                    width: 26,
-                    height: 26,
-                    cacheWidth: 52,
-                    cacheHeight: 52,
-                    fit: BoxFit.contain,
-                    excludeFromSemantics: true,
-                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: Image.asset(
+                        'assets/images/flames_logo.png',
+                        key: const Key('chat_app_bar_logo'),
+                        width: 22,
+                        height: 22,
+                        cacheWidth: 44,
+                        cacheHeight: 44,
+                        fit: BoxFit.contain,
+                        excludeFromSemantics: true,
+                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Flexible(
+                      child: Text(
+                        'Flames',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 17),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                const Text(
-                  'Flames',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(width: 8),
+                const SizedBox(height: 3),
                 _buildConnectionIndicator(context),
               ],
             ),
             actions: [
               IconButton(
                 key: const Key('chat_speaker_toggle'),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                visualDensity: VisualDensity.compact,
+                iconSize: 20,
                 icon: Icon(
                   _isSpeakerMuted ? Icons.volume_off : Icons.volume_up,
                 ),
@@ -952,6 +1073,10 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               IconButton(
                 key: const Key('chat_mode_toggle'),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                visualDensity: VisualDensity.compact,
+                iconSize: 20,
                 icon: Icon(
                   _mode == ChatMode.gateway
                       ? Icons.hub_rounded
@@ -967,12 +1092,20 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               IconButton(
                 key: const Key('chat_qr_scan_button'),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                visualDensity: VisualDensity.compact,
+                iconSize: 20,
                 icon: const Icon(Icons.qr_code_scanner),
                 tooltip: 'Scan Pairing QR',
                 onPressed: _openQrScanner,
               ),
               IconButton(
                 key: const Key('chat_reset_button'),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                visualDensity: VisualDensity.compact,
+                iconSize: 20,
                 icon: const Icon(Icons.refresh),
                 tooltip: 'Reset Conversation',
                 onPressed: () => _confirmReset(context),
@@ -985,6 +1118,10 @@ class _ChatScreenState extends State<ChatScreen> {
                   if (!isBusy) return const SizedBox.shrink();
                   return IconButton(
                     key: const Key('chat_stop_button'),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                    visualDensity: VisualDensity.compact,
+                    iconSize: 20,
                     icon: const Icon(
                       Icons.stop_circle_outlined,
                       color: Colors.redAccent,
@@ -996,12 +1133,17 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               IconButton(
                 key: const Key('chat_settings_button'),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                visualDensity: VisualDensity.compact,
+                iconSize: 20,
                 icon: const Icon(Icons.settings),
                 tooltip: 'Settings',
                 onPressed: () {
                   context.pushNamed(AppRoutes.nrSettings);
                 },
               ),
+              const SizedBox(width: 4),
             ],
           ),
           body: bodyContent,
@@ -1199,6 +1341,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildAssistantBubble(BuildContext context, String content) {
     final theme = Theme.of(context);
+    final isPermissionDenied = content.contains('permission was denied') ||
+        content.contains('Permission not granted');
+    final rationaleType =
+        isPermissionDenied ? _resolvePermissionRationaleType(content) : null;
 
     return Align(
       alignment: Alignment.centerLeft,
@@ -1211,27 +1357,68 @@ class _ChatScreenState extends State<ChatScreen> {
         decoration: BoxDecoration(
           color: const Color(0xFF0F172A),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFF334155)),
-        ),
-        child: MarkdownBody(
-          data: content,
-          selectable: true,
-          styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
-            p: theme.textTheme.bodyMedium?.copyWith(
-              color: const Color(0xFFF8FAFC),
-              height: 1.4,
-            ),
-            code: theme.textTheme.bodySmall?.copyWith(
-              fontFamily: 'monospace',
-              backgroundColor: const Color(0xFF1E293B),
-              color: theme.colorScheme.primary,
-            ),
-            codeblockDecoration: BoxDecoration(
-              color: const Color(0xFF1E293B),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFF334155)),
-            ),
+          border: Border.all(
+            color: isPermissionDenied
+                ? const Color(0xFF00E5FF)
+                : const Color(0xFF334155),
           ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            MarkdownBody(
+              data: content,
+              selectable: true,
+              styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+                p: theme.textTheme.bodyMedium?.copyWith(
+                  color: const Color(0xFFF8FAFC),
+                  height: 1.4,
+                ),
+                code: theme.textTheme.bodySmall?.copyWith(
+                  fontFamily: 'monospace',
+                  backgroundColor: const Color(0xFF1E293B),
+                  color: theme.colorScheme.primary,
+                ),
+                codeblockDecoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF334155)),
+                ),
+              ),
+            ),
+            if (isPermissionDenied && rationaleType != null) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 38,
+                child: OutlinedButton.icon(
+                  key: const Key('open_permission_rationale_button'),
+                  onPressed: () =>
+                      _showPermissionRationaleForResponse(context, content),
+                  icon: Icon(
+                    rationaleType.defaultIcon,
+                    size: 16,
+                    color: const Color(0xFF00E5FF),
+                  ),
+                  label: Text(
+                    'Buka ${rationaleType.defaultTitle}',
+                    style: const TextStyle(
+                      color: Color(0xFF00E5FF),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFF00E5FF)),
+                    foregroundColor: const Color(0xFF00E5FF),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -1400,13 +1587,23 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildToolResultCard(BuildContext context, ChatMessage message) {
     final theme = Theme.of(context);
     final name = message.name ?? 'Tool Result';
+    final isPermissionIssue =
+        (message.content ?? '').contains('Permission not granted') ||
+            (message.content ?? '').contains('permission was denied');
+    final rationaleType = isPermissionIssue
+        ? _resolvePermissionRationaleType(message.content ?? '')
+        : null;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
       color: const Color(0xFF1E293B),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: Color(0xFF334155)),
+        side: BorderSide(
+          color: isPermissionIssue
+              ? const Color(0xFF00E5FF)
+              : const Color(0xFF334155),
+        ),
       ),
       clipBehavior: Clip.antiAlias,
       elevation: 0,
@@ -1415,12 +1612,16 @@ class _ChatScreenState extends State<ChatScreen> {
         child: ExpansionTile(
           dense: true,
           leading: Icon(
-            Icons.check_circle_outline,
+            isPermissionIssue
+                ? Icons.security_outlined
+                : Icons.check_circle_outline,
             size: 20,
-            color: theme.colorScheme.primary,
+            color: isPermissionIssue
+                ? const Color(0xFF00E5FF)
+                : theme.colorScheme.primary,
           ),
           title: Text(
-            'Result: $name',
+            isPermissionIssue ? 'Permission Required: $name' : 'Result: $name',
             style: theme.textTheme.bodyMedium?.copyWith(
               fontWeight: FontWeight.w500,
               color: const Color(0xFFF8FAFC),
@@ -1444,6 +1645,41 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
             ),
+            if (isPermissionIssue && rationaleType != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    key: const Key('tool_result_permission_button'),
+                    onPressed: () => _showPermissionRationaleForResponse(
+                      context,
+                      message.content ?? '',
+                    ),
+                    icon: Icon(
+                      rationaleType.defaultIcon,
+                      size: 16,
+                      color: const Color(0xFF00E5FF),
+                    ),
+                    label: Text(
+                      'Buka ${rationaleType.defaultTitle}',
+                      style: const TextStyle(
+                        color: Color(0xFF00E5FF),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFF00E5FF)),
+                      foregroundColor: const Color(0xFF00E5FF),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

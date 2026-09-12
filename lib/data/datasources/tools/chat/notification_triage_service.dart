@@ -158,7 +158,12 @@ class NotificationTriageService implements NotificationTriageServiceBase {
   @override
   Future<bool> checkPermission() async {
     try {
-      return await _platform.isPermissionGranted();
+      var granted = await _platform.isPermissionGranted();
+      if (!granted) {
+        await _platform.requestPermission();
+        granted = await _platform.isPermissionGranted();
+      }
+      return granted;
     } catch (_) {
       return false;
     }

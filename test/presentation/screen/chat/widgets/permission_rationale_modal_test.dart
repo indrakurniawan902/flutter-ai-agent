@@ -55,6 +55,12 @@ void main() {
         'description':
             'Agen membutuhkan akses mikrofon untuk perintah suara dan input audio.',
       },
+      PermissionRationaleType.contacts: {
+        'icon': Icons.contacts_rounded,
+        'title': 'Akses Kontak',
+        'description':
+            'Agen membutuhkan akses kontak untuk mencari nomor telepon dan nama kontak perangkat.',
+      },
     };
 
     for (final entry in cases.entries) {

@@ -7,6 +7,7 @@ enum PermissionRationaleType {
   camera,
   calendar,
   microphone,
+  contacts,
 }
 
 /// Default content (icon, title, description) for each permission type.
@@ -23,6 +24,8 @@ extension PermissionRationaleTypeX on PermissionRationaleType {
         return Icons.calendar_month_rounded;
       case PermissionRationaleType.microphone:
         return Icons.mic_rounded;
+      case PermissionRationaleType.contacts:
+        return Icons.contacts_rounded;
     }
   }
 
@@ -38,6 +41,8 @@ extension PermissionRationaleTypeX on PermissionRationaleType {
         return 'Akses Kalender';
       case PermissionRationaleType.microphone:
         return 'Akses Mikrofon';
+      case PermissionRationaleType.contacts:
+        return 'Akses Kontak';
     }
   }
 
@@ -53,6 +58,8 @@ extension PermissionRationaleTypeX on PermissionRationaleType {
         return 'Agen membutuhkan akses kalender untuk membaca dan membuat jadwal acara.';
       case PermissionRationaleType.microphone:
         return 'Agen membutuhkan akses mikrofon untuk perintah suara dan input audio.';
+      case PermissionRationaleType.contacts:
+        return 'Agen membutuhkan akses kontak untuk mencari nomor telepon dan nama kontak perangkat.';
     }
   }
 }
