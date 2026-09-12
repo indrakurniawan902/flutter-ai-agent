@@ -50,6 +50,10 @@ dependencies:
   google_fonts: ^8.2.1
   go_router: ^14.6.1
 
+  # Voice & audio
+  speech_to_text: ^7.4.0
+  audioplayers: ^6.8.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
