@@ -14,6 +14,7 @@ import 'package:flutter_ai_agent/domain/repositories/chat/chat_local_repository.
 import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/security_policy.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
+import 'package:flutter_ai_agent/domain/services/skills/skills_registry_service.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
 import 'package:flutter_ai_agent/utils/thought_extractor.dart';
@@ -26,6 +27,7 @@ class AgentCubit extends Cubit<AgentState> {
   final LlmRepository _llmRepository;
   final ToolRegistry _toolRegistry;
   final SecureStorageService? _secureStorageService;
+  final SkillsRegistryService? _skillsRegistryService;
   final ChatLocalRepository? _chatLocalRepository;
   String activeProfileId;
   String baseUrl;
@@ -55,6 +57,9 @@ class AgentCubit extends Cubit<AgentState> {
         secureStorageService: getIt.isRegistered<SecureStorageService>()
             ? getIt<SecureStorageService>()
             : null,
+        skillsRegistryService: getIt.isRegistered<SkillsRegistryService>()
+            ? getIt<SkillsRegistryService>()
+            : null,
         chatLocalRepository: chatLocalRepository ??
             (getIt.isRegistered<ChatLocalRepository>()
                 ? getIt<ChatLocalRepository>()
@@ -65,6 +70,7 @@ class AgentCubit extends Cubit<AgentState> {
     LlmRepository? llmRepository,
     ToolRegistry? toolRegistry,
     SecureStorageService? secureStorageService,
+    SkillsRegistryService? skillsRegistryService,
     ChatLocalRepository? chatLocalRepository,
     this.activeProfileId = 'default',
     this.baseUrl = 'https://api.openai.com/v1',
@@ -74,8 +80,12 @@ class AgentCubit extends Cubit<AgentState> {
   })  : _llmRepository = llmRepository ?? getIt<LlmRepository>(),
         _toolRegistry = toolRegistry ?? ToolRegistry(),
         _secureStorageService = secureStorageService, // ignore: prefer_initializing_formals
+        _skillsRegistryService = skillsRegistryService,
         _chatLocalRepository = chatLocalRepository,
         super(const AgentIdle());
+
+  /// Associated skills registry service, if any.
+  SkillsRegistryService? get skillsRegistryService => _skillsRegistryService;
 
   /// Full conversation history.
   List<ChatMessage> get messages => List.unmodifiable(_messages);
@@ -307,6 +317,16 @@ class AgentCubit extends Cubit<AgentState> {
         continue;
       }
 
+      if (!_toolRegistry.isToolEnabled(toolName)) {
+        _messages.add(ChatMessage(
+          role: 'tool',
+          toolCallId: callId,
+          name: toolName,
+          content: 'Error: Tool $toolName is disabled by skill policy.',
+        ));
+        continue;
+      }
+
       // Tier 3: Pause loop and wait for HITL approval.
       if (registered.securityTier == SecurityTier.tier3Hitl) {
         final request = ToolCallRequest(
@@ -411,13 +431,21 @@ class AgentCubit extends Cubit<AgentState> {
     _currentTurn = turn;
     emit(const AgentThinking());
 
+    _skillsRegistryService?.syncWithToolRegistry(_toolRegistry);
     final toolDefs = _toolRegistry.getOpenAiToolDefinitions();
     final serializedMessages = _messages.map((m) => m.toJson()).toList();
+
+    final systemPrompt = _skillsRegistryService?.buildSystemPrompt();
+    final messagesToSend = <Map<String, dynamic>>[
+      if (systemPrompt != null && systemPrompt.isNotEmpty)
+        {'role': 'system', 'content': systemPrompt},
+      ...serializedMessages,
+    ];
 
     final responseEither = await _llmRepository.streamCompletion(
       baseUrl: baseUrl,
       model: model,
-      messages: serializedMessages,
+      messages: messagesToSend,
       tools: toolDefs.isNotEmpty ? toolDefs : null,
       apiKey: apiKey,
     );

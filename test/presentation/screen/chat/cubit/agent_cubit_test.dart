@@ -8,6 +8,8 @@ import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/security_policy.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
+import 'package:flutter_ai_agent/domain/entities/skills/skill.dart';
+import 'package:flutter_ai_agent/domain/services/skills/skills_registry_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -937,6 +939,137 @@ void main() {
       expect(llmCalls, equals(1));
       expect(cubit.state, isA<AgentIdle>());
       expect(cubit.messages, isEmpty);
+    });
+  });
+
+  group('AgentCubit Skills Integration & Prompt Injection', () {
+    test(
+        'injects active skills into system prompt and syncs tools with ToolRegistry',
+        () async {
+      final skillsService = SkillsRegistryService(loadDefaults: false);
+      skillsService.registerSkill(const Skill(
+        id: 'camera_skill',
+        name: 'camera_skill',
+        description: 'Camera perception skill',
+        category: 'Device Control',
+        tier: 'Tier 1 Auto',
+        tools: ['take_photo'],
+        prompts: ['Take photo of receipt'],
+        instructions: 'Transcribe receipts faithfully.',
+        isEnabled: true,
+      ));
+      skillsService.registerSkill(const Skill(
+        id: 'disabled_skill',
+        name: 'disabled_skill',
+        description: 'Disabled skill',
+        category: 'Finance',
+        tier: 'Tier 1 Auto',
+        tools: ['crypto_quote'],
+        isEnabled: false,
+      ));
+
+      toolRegistry.register(RegisteredTool(
+        name: 'take_photo',
+        description: 'Take photo',
+        parameters: const {'type': 'object'},
+        securityTier: SecurityTier.tier1Auto,
+        execute: (_) async => const Right('photo_data'),
+      ));
+      toolRegistry.register(RegisteredTool(
+        name: 'crypto_quote',
+        description: 'Crypto quote',
+        parameters: const {'type': 'object'},
+        securityTier: SecurityTier.tier1Auto,
+        execute: (_) async => const Right('btc_data'),
+      ));
+
+      final skillsCubit = AgentCubit(
+        llmRepository: mockLlmRepository,
+        toolRegistry: toolRegistry,
+        skillsRegistryService: skillsService,
+      );
+
+      List<Map<String, dynamic>>? capturedMessages;
+      List<Map<String, dynamic>>? capturedTools;
+
+      when(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: any(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+          )).thenAnswer((inv) async {
+        capturedMessages =
+            inv.namedArguments[#messages] as List<Map<String, dynamic>>;
+        capturedTools =
+            inv.namedArguments[#tools] as List<Map<String, dynamic>>?;
+        return Right(Stream.fromIterable([
+          const ChatChunk(contentDelta: 'Skill response', finishReason: 'stop'),
+        ]));
+      });
+
+      await skillsCubit.sendMessage('Inspect this item');
+
+      expect(capturedMessages, isNotNull);
+      final systemMessage =
+          capturedMessages!.firstWhere((m) => m['role'] == 'system');
+      expect(systemMessage['content'], contains('camera_skill'));
+      expect(systemMessage['content'],
+          contains('Transcribe receipts faithfully.'));
+      expect(systemMessage['content'], isNot(contains('disabled_skill')));
+
+      expect(capturedTools, isNotNull);
+      expect(
+          capturedTools!.any((t) => t['function']['name'] == 'take_photo'),
+          isTrue);
+      expect(
+          capturedTools!.any((t) => t['function']['name'] == 'crypto_quote'),
+          isFalse);
+
+      await skillsCubit.close();
+    });
+
+    test(
+        'bypasses HITL approval and records disabled error when tool is disabled',
+        () async {
+      toolRegistry.register(RegisteredTool(
+        name: 'dangerous_action',
+        description: 'Dangerous HITL tool',
+        parameters: const {'type': 'object'},
+        securityTier: SecurityTier.tier3Hitl,
+        execute: (_) async => const Right('executed'),
+      ));
+      toolRegistry.setToolEnabled('dangerous_action', false);
+
+      when(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: any(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+          )).thenAnswer((_) async => Right(Stream.fromIterable([
+            const ChatChunk(
+              toolCallDeltas: [
+                ToolCallDelta(
+                    index: 0, id: 'call_1', name: 'dangerous_action'),
+              ],
+            ),
+            const ChatChunk(finishReason: 'tool_calls'),
+          ])));
+
+      final disabledCubit = AgentCubit(
+        llmRepository: mockLlmRepository,
+        toolRegistry: toolRegistry,
+      );
+
+      await disabledCubit.sendMessage('Run dangerous action');
+
+      expect(disabledCubit.state, isNot(isA<WaitingApproval>()));
+      final toolMessage =
+          disabledCubit.messages.firstWhere((m) => m.role == 'tool');
+      expect(toolMessage.content, contains('disabled by skill policy'));
+
+      await disabledCubit.close();
     });
   });
 }
