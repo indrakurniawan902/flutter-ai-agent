@@ -9,13 +9,13 @@ import 'package:flutter_ai_agent/core/errors/failures.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_chunk.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
-import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart';
-import 'package:flutter_ai_agent/features/chat/domain/utils/thought_extractor.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
 import 'package:flutter_ai_agent/domain/models/chat/tool_call_request.dart';
-import 'package:flutter_ai_agent/features/chat/domain/tools/security_policy.dart';
-import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
+import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/security_policy.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
+import 'package:flutter_ai_agent/utils/thought_extractor.dart';
 
 /// Orchestrates the full ReAct agent loop:
 /// User Prompt -> LLM -> Tool Call -> Tool Result -> LLM -> Final Text Answer

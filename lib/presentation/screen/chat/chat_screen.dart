@@ -5,16 +5,16 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_ai_agent/core/di/injection_container.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
-import 'package:flutter_ai_agent/features/chat/domain/utils/thought_extractor.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/widgets/action_approval_sheet.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/widgets/action_confirmation_card.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/widgets/header_console_bar.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/widgets/live_action_stepper_card.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/widgets/reasoning_card.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/widgets/summary_card.dart';
 import 'package:flutter_ai_agent/features/settings/presentation/screens/settings_screen.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_approval_sheet.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_confirmation_card.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/header_console_bar.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/live_action_stepper_card.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/reasoning_card.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/summary_card.dart';
+import 'package:flutter_ai_agent/utils/thought_extractor.dart';
 
 /// Main Chat Screen displaying streaming conversation, tool call cards,
 /// and input prompt area.
