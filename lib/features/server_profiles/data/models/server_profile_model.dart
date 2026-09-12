@@ -1,4 +1,4 @@
-import 'package:flutter_ai_agent/core/constants/constants.dart';
+import 'package:flutter_ai_agent/common/constant.dart';
 import 'package:flutter_ai_agent/features/server_profiles/domain/entities/server_profile.dart';
 
 /// Data model representing [ServerProfile] with serialization/deserialization.

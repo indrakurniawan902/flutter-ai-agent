@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:flutter_ai_agent/core/di/injection_container.dart';
-import 'package:flutter_ai_agent/core/theme/hermes_theme.dart';
+import 'package:flutter_ai_agent/utils/hermes_theme.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/screens/chat_screen.dart';
 import 'package:flutter_ai_agent/features/memory_vault/presentation/screens/memory_vault_screen.dart';
 import 'package:flutter_ai_agent/features/navigation/presentation/cubits/navigation_cubit.dart';

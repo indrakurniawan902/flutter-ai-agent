@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_ai_agent/core/theme/hermes_theme.dart';
+import 'package:flutter_ai_agent/utils/hermes_theme.dart';
 import 'package:flutter_ai_agent/features/chat/domain/models/generative_card_data.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/widgets/action_confirmation_card.dart';
 

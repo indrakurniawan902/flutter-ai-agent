@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:dartz/dartz.dart';
 
-import 'package:flutter_ai_agent/core/errors/failures.dart';
+import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/calendar_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/camera_vision_service.dart';
 import 'package:flutter_ai_agent/features/chat/data/tools/clipboard_service.dart';
