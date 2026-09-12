@@ -26,6 +26,8 @@ import 'package:flutter_ai_agent/data/datasources/remote/pairing/scanner_control
     as _i319;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/ambient_trigger_service.dart'
     as _i315;
+import 'package:flutter_ai_agent/data/datasources/tools/chat/background_service.dart'
+    as _i1033;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/calendar_service.dart'
     as _i1056;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/camera_vision_service.dart'
@@ -44,6 +46,10 @@ import 'package:flutter_ai_agent/data/datasources/tools/chat/notification_servic
     as _i89;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/notification_triage_service.dart'
     as _i447;
+import 'package:flutter_ai_agent/data/datasources/tools/chat/voice_input_service.dart'
+    as _i845;
+import 'package:flutter_ai_agent/data/datasources/tools/chat/voice_output_service.dart'
+    as _i753;
 import 'package:flutter_ai_agent/data/repositories/chat_local_repository_impl.dart'
     as _i92;
 import 'package:flutter_ai_agent/data/repositories/chat_repository_impl.dart'
@@ -58,6 +64,8 @@ import 'package:flutter_ai_agent/domain/services/gateway/gateway_rpc_receiver.da
     as _i806;
 import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart'
     as _i290;
+import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart'
+    as _i791;
 import 'package:flutter_ai_agent/domain/tools/chat/calendar_service.dart'
     as _i1020;
 import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart'
@@ -77,6 +85,10 @@ import 'package:flutter_ai_agent/domain/tools/chat/notification_service.dart'
 import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.dart'
     as _i396;
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart' as _i732;
+import 'package:flutter_ai_agent/domain/tools/chat/voice_input_service.dart'
+    as _i652;
+import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart'
+    as _i45;
 import 'package:flutter_ai_agent/domain/tools/pairing/pairing_parser.dart'
     as _i301;
 import 'package:flutter_ai_agent/domain/tools/pairing/qr_scanner_controller.dart'
@@ -132,20 +144,6 @@ extension GetItInjectableX on _i174.GetIt {
         storage: gh<_i558.FlutterSecureStorage>(),
       ),
     );
-    gh.lazySingleton<_i732.ToolRegistry>(
-      () => _i732.ToolRegistry(
-        clipboardService: gh<_i547.ClipboardServiceBase>(),
-        locationService: gh<_i292.LocationServiceBase>(),
-        deviceContextService: gh<_i3.DeviceContextServiceBase>(),
-        cameraVisionService: gh<_i815.CameraVisionServiceBase>(),
-        calendarService: gh<_i1020.CalendarServiceBase>(),
-        notificationService: gh<_i919.NotificationServiceBase>(),
-        fileWorkspaceService: gh<_i745.FileWorkspaceServiceBase>(),
-        notificationTriageService: gh<_i396.NotificationTriageServiceBase>(),
-        localMemoryService: gh<_i987.LocalMemoryServiceBase>(),
-        ambientTriggerService: gh<_i290.AmbientTriggerServiceBase>(),
-      ),
-    );
     gh.lazySingleton<_i547.ClipboardServiceBase>(
       () => _i105.ClipboardService.create(),
     );
@@ -170,8 +168,17 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i745.FileWorkspaceServiceBase>(
       () => _i70.FileWorkspaceService.create(),
     );
+    gh.lazySingleton<_i791.BackgroundServiceBase>(
+      () => _i1033.BackgroundService.create(),
+    );
     gh.lazySingleton<_i290.AmbientTriggerServiceBase>(
       () => _i315.AmbientTriggerService.create(),
+    );
+    gh.lazySingleton<_i753.TtsClient>(
+      () => _i753.DioTtsClient.create(gh<_i361.Dio>()),
+    );
+    gh.lazySingleton<_i652.VoiceInputServiceBase>(
+      () => _i845.VoiceInputService.create(),
     );
     gh.lazySingleton<_i348.SecureStorageService>(
       () =>
@@ -179,6 +186,23 @@ extension GetItInjectableX on _i174.GetIt {
     );
     gh.lazySingleton<_i292.LocationServiceBase>(
       () => _i320.LocationService.create(),
+    );
+    gh.lazySingleton<_i732.ToolRegistry>(
+      () => _i732.ToolRegistry(
+        clipboardService: gh<_i547.ClipboardServiceBase>(),
+        locationService: gh<_i292.LocationServiceBase>(),
+        deviceContextService: gh<_i3.DeviceContextServiceBase>(),
+        cameraVisionService: gh<_i815.CameraVisionServiceBase>(),
+        calendarService: gh<_i1020.CalendarServiceBase>(),
+        notificationService: gh<_i919.NotificationServiceBase>(),
+        fileWorkspaceService: gh<_i745.FileWorkspaceServiceBase>(),
+        notificationTriageService: gh<_i396.NotificationTriageServiceBase>(),
+        localMemoryService: gh<_i987.LocalMemoryServiceBase>(),
+        ambientTriggerService: gh<_i290.AmbientTriggerServiceBase>(),
+        voiceInputService: gh<_i652.VoiceInputServiceBase>(),
+        voiceOutputService: gh<_i45.VoiceOutputServiceBase>(),
+        backgroundService: gh<_i791.BackgroundServiceBase>(),
+      ),
     );
     gh.lazySingleton<_i396.NotificationTriageServiceBase>(
       () => _i447.NotificationTriageService.create(),
@@ -218,6 +242,9 @@ extension GetItInjectableX on _i174.GetIt {
       () => _i452.SettingsCubit.create(
         secureStorageService: gh<_i348.SecureStorageService>(),
       ),
+    );
+    gh.lazySingleton<_i45.VoiceOutputServiceBase>(
+      () => _i753.VoiceOutputService.create(gh<_i753.TtsClient>()),
     );
     gh.lazySingleton<_i806.GatewayRpcReceiverBase>(
       () => gatewayModule.provideGatewayRpcReceiver(

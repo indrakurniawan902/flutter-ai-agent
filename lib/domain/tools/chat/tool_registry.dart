@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dartz/dartz.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/ambient_event.dart';
 import 'ambient_trigger_service.dart';
 import 'calendar_service.dart';
+import 'background_service.dart';
 import 'camera_vision_service.dart';
 import 'clipboard_service.dart';
 import 'device_context_service.dart';
@@ -16,12 +18,18 @@ import 'location_service.dart';
 import 'notification_service.dart';
 import 'notification_triage_service.dart';
 import 'security_policy.dart';
+import 'voice_input_service.dart';
+import 'voice_output_service.dart';
 
 typedef ToolExecutor = Future<Either<Failure, String>> Function(
   Map<String, dynamic> args,
 );
 
 typedef PermissionChecker = Future<bool> Function();
+
+class ValidationFailure extends Failure {
+  const ValidationFailure([super.message = 'Validation error occurred']);
+}
 
 class RegisteredTool {
   final String name;
@@ -67,6 +75,9 @@ class ToolRegistry {
     NotificationTriageServiceBase? notificationTriageService,
     LocalMemoryServiceBase? localMemoryService,
     AmbientTriggerServiceBase? ambientTriggerService,
+    VoiceInputServiceBase? voiceInputService,
+    VoiceOutputServiceBase? voiceOutputService,
+    BackgroundServiceBase? backgroundService,
   }) {
     if (clipboardService != null) registerClipboardTools(clipboardService);
     if (locationService != null) registerLocationTools(locationService);
@@ -83,6 +94,13 @@ class ToolRegistry {
     if (localMemoryService != null) registerMemoryTools(localMemoryService);
     if (ambientTriggerService != null) {
       registerAmbientTriggerTools(ambientTriggerService);
+    }
+    if (voiceInputService != null) registerVoiceTools(voiceInputService);
+    if (voiceOutputService != null) {
+      registerVoiceOutputTools(voiceOutputService);
+    }
+    if (backgroundService != null) {
+      registerBackgroundServiceTools(backgroundService);
     }
   }
 
@@ -681,6 +699,290 @@ class ToolRegistry {
             longitude: lng,
           );
           return res.map((r) => jsonEncode(r.toJson()));
+        },
+      ),
+    );
+  }
+
+  void registerVoiceTools(VoiceInputServiceBase service) {
+    register(
+      RegisteredTool(
+        name: 'listen_voice_input',
+        description:
+            'Listens to microphone voice input and transcribes spoken audio into text.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'listenDurationSeconds': {
+              'type': 'integer',
+              'description':
+                  'Maximum duration in seconds to listen for voice input (default: 10)',
+            },
+          },
+        },
+        securityTier: SecurityTier.tier2Permission,
+        execute: (args) async {
+          final durationSec =
+              ((args['listenDurationSeconds'] as num?)?.toInt() ?? 10)
+                  .clamp(1, 60);
+          final startResult = await service.startListening(
+            listenFor: Duration(seconds: durationSec),
+          );
+          return startResult.fold(
+            (failure) => Left(failure),
+            (_) async {
+              final completer = Completer<void>();
+              final sub = service.statusStream.listen((status) {
+                if (status == VoiceInputStatus.done ||
+                    status == VoiceInputStatus.error) {
+                  if (!completer.isCompleted) completer.complete();
+                }
+              });
+
+              try {
+                await completer.future.timeout(
+                  Duration(seconds: durationSec),
+                  onTimeout: () {},
+                );
+              } finally {
+                await sub.cancel();
+              }
+
+              return service.stopListening();
+            },
+          );
+        },
+        checkPermission: () => service.checkPermission().then(
+              (res) => res.fold((_) => false, (allowed) => allowed),
+            ),
+      ),
+    );
+  }
+
+  void registerVoiceOutputTools(VoiceOutputServiceBase service) {
+    register(
+      RegisteredTool(
+        name: 'speak_text',
+        description:
+            'Speaks the provided text out loud using Text-to-Speech (TTS).',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'text': {
+              'type': 'string',
+              'description':
+                  'The text content to synthesize and speak out loud.',
+            },
+            'voice': {
+              'type': 'string',
+              'description':
+                  'Voice name to use (e.g. alloy, echo, fable, onyx, nova, shimmer)',
+            },
+          },
+          'required': ['text'],
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) async {
+          final text = args['text'] as String?;
+          if (text == null || text.trim().isEmpty) {
+            return const Left(
+              ValidationFailure('text parameter is required and cannot be empty'),
+            );
+          }
+          final voice = args['voice'] as String?;
+          final result = await service.speakText(text, voice: voice);
+          return result.fold(
+            (failure) => Left(failure),
+            (_) => Right(
+              jsonEncode({
+                'status': 'spoken',
+                'text': text,
+              }),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void registerBackgroundServiceTools(BackgroundServiceBase service) {
+    register(
+      RegisteredTool(
+        name: 'manage_background_service',
+        description:
+            'Controls the background foreground service, safe battery wake-lock, and Android Quick Settings Tile state.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'action': {
+              'type': 'string',
+              'description':
+                  'Operation to perform: start, stop, status, update_notification, acquire_wake_lock, release_wake_lock, get_tile_state, set_tile_state, toggle_tile_state',
+              'enum': [
+                'start',
+                'stop',
+                'status',
+                'update_notification',
+                'acquire_wake_lock',
+                'release_wake_lock',
+                'get_tile_state',
+                'set_tile_state',
+                'toggle_tile_state'
+              ],
+            },
+            'title': {
+              'type': 'string',
+              'description':
+                  'Notification title when action is start or update_notification.',
+            },
+            'content': {
+              'type': 'string',
+              'description':
+                  'Notification body content when action is start or update_notification.',
+            },
+            'timeout_seconds': {
+              'type': 'integer',
+              'description':
+                  'Duration in seconds for wake-lock (clamped safely between 1 and 60 seconds).',
+            },
+            'active': {
+              'type': 'boolean',
+              'description':
+                  'Target tile state when action is set_tile_state.',
+            },
+          },
+          'required': ['action'],
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) async {
+          final action = args['action'] as String?;
+          if (action == null || action.trim().isEmpty) {
+            return const Left(
+              ValidationFailure('action parameter is required'),
+            );
+          }
+
+          switch (action.trim().toLowerCase()) {
+            case 'start':
+              final title = args['title'] as String?;
+              final content = args['content'] as String?;
+              final res = await service.startService(
+                title: title,
+                content: content,
+              );
+              return res.fold(
+                (f) => Left(f),
+                (ok) => Right(jsonEncode({
+                  'status': 'started',
+                  'success': ok,
+                  'title': title ?? 'Flames Agent Active',
+                  'content': content ?? 'Running in background',
+                })),
+              );
+
+            case 'stop':
+              final res = await service.stopService();
+              return res.fold(
+                (f) => Left(f),
+                (ok) => Right(jsonEncode({
+                  'status': 'stopped',
+                  'success': ok,
+                })),
+              );
+
+            case 'status':
+              final isRunning = await service.isRunning();
+              final isHeld = await service.isWakeLockHeld();
+              final tileState = await service.getTileState();
+              return Right(jsonEncode({
+                'is_running': isRunning,
+                'is_wakelock_held': isHeld,
+                'tile_state': tileState.name,
+              }));
+
+            case 'update_notification':
+              final title = args['title'] as String?;
+              final content = args['content'] as String?;
+              if (title == null || content == null) {
+                return const Left(
+                  ValidationFailure(
+                      'title and content required for update_notification'),
+                );
+              }
+              final res = await service.updateNotification(
+                title: title,
+                content: content,
+              );
+              return res.fold(
+                (f) => Left(f),
+                (ok) => Right(jsonEncode({
+                  'status': 'updated',
+                  'success': ok,
+                  'title': title,
+                  'content': content,
+                })),
+              );
+
+            case 'acquire_wake_lock':
+              final timeoutSeconds = args['timeout_seconds'] as num?;
+              final timeout = timeoutSeconds != null
+                  ? Duration(seconds: timeoutSeconds.toInt())
+                  : null;
+              final res = await service.acquireWakeLock(timeout: timeout);
+              return res.fold(
+                (f) => Left(f),
+                (ok) => Right(jsonEncode({
+                  'status': 'wakelock_acquired',
+                  'success': ok,
+                  'timeout_seconds': (timeout?.inSeconds ?? 30).clamp(1, 60),
+                })),
+              );
+
+            case 'release_wake_lock':
+              final res = await service.releaseWakeLock();
+              return res.fold(
+                (f) => Left(f),
+                (ok) => Right(jsonEncode({
+                  'status': 'wakelock_released',
+                  'success': ok,
+                })),
+              );
+
+            case 'get_tile_state':
+              final tileState = await service.getTileState();
+              return Right(jsonEncode({
+                'tile_state': tileState.name,
+              }));
+
+            case 'set_tile_state':
+              final active = args['active'] as bool? ?? false;
+              final targetState =
+                  active ? QuickTileState.active : QuickTileState.inactive;
+              final res = await service.setTileState(targetState);
+              return res.fold(
+                (f) => Left(f),
+                (ok) => Right(jsonEncode({
+                  'status': 'tile_state_set',
+                  'success': ok,
+                  'tile_state': targetState.name,
+                })),
+              );
+
+            case 'toggle_tile_state':
+              final res = await service.toggleTileState();
+              return res.fold(
+                (f) => Left(f),
+                (newState) => Right(jsonEncode({
+                  'status': 'tile_state_toggled',
+                  'tile_state': newState.name,
+                })),
+              );
+
+            default:
+              return Left(
+                ValidationFailure('Unsupported background action: $action'),
+              );
+          }
         },
       ),
     );

@@ -197,7 +197,7 @@ void main() {
       ]));
     });
 
-    test('toJson serializes thought_process when present', () {
+    test('toJson includes thought_process for local persistence', () {
       const msg = ChatMessage(
         role: 'assistant',
         content: 'Sample content',

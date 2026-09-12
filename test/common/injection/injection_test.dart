@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/calendar_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/clipboard_service.dart';
@@ -12,6 +13,8 @@ import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/notification_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/voice_input_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/navigation/cubit/navigation_cubit.dart';
 import 'package:flutter_ai_agent/domain/tools/pairing/pairing_parser.dart';
@@ -22,6 +25,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   setUp(() async {
     await sl.reset();
   });
@@ -71,6 +76,9 @@ void main() {
     expect(sl.isRegistered<NotificationTriageServiceBase>(), isFalse);
     expect(sl.isRegistered<LocalMemoryServiceBase>(), isFalse);
     expect(sl.isRegistered<AmbientTriggerServiceBase>(), isFalse);
+    expect(sl.isRegistered<VoiceInputServiceBase>(), isFalse);
+    expect(sl.isRegistered<VoiceOutputServiceBase>(), isFalse);
+    expect(sl.isRegistered<BackgroundServiceBase>(), isFalse);
     expect(sl.isRegistered<ToolRegistry>(), isFalse);
     expect(sl.isRegistered<AgentCubit>(), isFalse);
     expect(sl.isRegistered<NavigationCubit>(), isFalse);
@@ -89,6 +97,9 @@ void main() {
     expect(sl.isRegistered<NotificationTriageServiceBase>(), isTrue);
     expect(sl.isRegistered<LocalMemoryServiceBase>(), isTrue);
     expect(sl.isRegistered<AmbientTriggerServiceBase>(), isTrue);
+    expect(sl.isRegistered<VoiceInputServiceBase>(), isTrue);
+    expect(sl.isRegistered<VoiceOutputServiceBase>(), isTrue);
+    expect(sl.isRegistered<BackgroundServiceBase>(), isTrue);
     expect(sl.isRegistered<ToolRegistry>(), isTrue);
     expect(sl.isRegistered<AgentCubit>(), isTrue);
     expect(sl.isRegistered<NavigationCubit>(), isTrue);
@@ -117,5 +128,8 @@ void main() {
     expect(registry.hasTool('remove_geofence'), isTrue);
     expect(registry.hasTool('check_ambient_status'), isTrue);
     expect(registry.hasTool('trigger_ambient_check'), isTrue);
+    expect(registry.hasTool('listen_voice_input'), isTrue);
+    expect(registry.hasTool('speak_text'), isTrue);
+    expect(registry.hasTool('manage_background_service'), isTrue);
   });
 }
