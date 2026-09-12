@@ -22,7 +22,8 @@ class PocketNodeScreen extends StatefulWidget {
   State<PocketNodeScreen> createState() => _PocketNodeScreenState();
 }
 
-class _PocketNodeScreenState extends State<PocketNodeScreen> {
+class _PocketNodeScreenState extends State<PocketNodeScreen>
+    with WidgetsBindingObserver {
   bool _geofenceEnabled = true;
   bool _batteryWatchdogEnabled = true;
   bool _notificationListenerEnabled = true;
@@ -41,6 +42,7 @@ class _PocketNodeScreenState extends State<PocketNodeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initNodeTelemetry();
     _loadAmbientTriggerSettings();
     _checkBatteryOptimization();
@@ -48,8 +50,16 @@ class _PocketNodeScreenState extends State<PocketNodeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _gatewayStateSub?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkBatteryOptimization();
+    }
   }
 
   Future<void> _loadAmbientTriggerSettings() async {

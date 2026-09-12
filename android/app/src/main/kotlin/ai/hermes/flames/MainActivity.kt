@@ -224,10 +224,12 @@ class MainActivity : FlutterActivity() {
                                 }
                                 startActivity(intent)
                             } catch (_: Exception) {
-                                val fallback = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                                startActivity(fallback)
+                                try {
+                                    val fallback = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    startActivity(fallback)
+                                } catch (_: Exception) {}
                             }
                             result.success(true)
                         }

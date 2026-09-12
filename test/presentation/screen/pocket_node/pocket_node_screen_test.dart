@@ -277,5 +277,33 @@ void main() {
         findsOneWidget,
       );
     });
+
+    testWidgets(
+        're-checks battery optimization status when app resumes from background',
+        (tester) async {
+      final mockBattery = MockBatteryOptimizationService();
+      var isExempt = false;
+      when(() => mockBattery.isBatteryOptimizationDisabled())
+          .thenAnswer((_) async => Right(isExempt));
+
+      sl.registerSingleton<BatteryOptimizationServiceBase>(mockBattery);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      final cardFinder = find.byKey(const Key('battery_optimization_card'));
+      await tester.scrollUntilVisible(cardFinder, 100.0);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('battery_opt_status_restricted')), findsOneWidget);
+
+      // Simulate user returning from Android settings
+      isExempt = true;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+
+      verify(() => mockBattery.isBatteryOptimizationDisabled()).called(2);
+      expect(find.byKey(const Key('battery_opt_status_exempt')), findsOneWidget);
+    });
   });
 }
