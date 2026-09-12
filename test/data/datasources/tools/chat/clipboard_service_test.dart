@@ -1,7 +1,8 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_ai_agent/core/errors/failures.dart';
-import 'package:flutter_ai_agent/features/chat/data/tools/clipboard_service.dart';
+import 'package:flutter_ai_agent/data/datasources/tools/chat/clipboard_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/clipboard_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/widgets/permission_rationale_modal.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/permission_rationale_modal.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

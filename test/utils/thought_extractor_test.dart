@@ -1,4 +1,4 @@
-import 'package:flutter_ai_agent/features/chat/domain/utils/thought_extractor.dart';
+import 'package:flutter_ai_agent/utils/thought_extractor.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -3,7 +3,8 @@ import 'dart:typed_data';
 
 import 'package:dartz/dartz.dart';
 import 'package:flutter_ai_agent/core/errors/failures.dart';
-import 'package:flutter_ai_agent/features/chat/data/tools/camera_vision_service.dart';
+import 'package:flutter_ai_agent/data/datasources/tools/chat/camera_vision_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mocktail/mocktail.dart';

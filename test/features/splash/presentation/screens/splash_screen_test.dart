@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_ai_agent/core/di/injection_container.dart';
+import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/core/theme/app_theme.dart';
 import 'package:flutter_ai_agent/core/theme/hermes_theme.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/screens/chat_screen.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/chat_screen.dart';
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
 import 'package:flutter_ai_agent/features/splash/presentation/screens/splash_screen.dart';
 import 'package:flutter_test/flutter_test.dart';

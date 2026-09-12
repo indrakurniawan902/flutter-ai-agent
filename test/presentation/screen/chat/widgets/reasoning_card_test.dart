@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_ai_agent/core/theme/hermes_theme.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/widgets/reasoning_card.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/reasoning_card.dart';
 
 void main() {
   Widget buildTestableWidget(Widget child) {

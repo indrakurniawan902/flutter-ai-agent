@@ -2,27 +2,27 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_ai_agent/core/di/injection_container.dart';
+import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
 import 'package:flutter_ai_agent/domain/models/chat/tool_call_request.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/screens/chat_screen.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/widgets/action_approval_sheet.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/chat_screen.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_approval_sheet.dart';
 import 'package:flutter_ai_agent/domain/models/chat/action_step.dart';
 import 'package:flutter_ai_agent/domain/models/chat/generative_card_data.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/widgets/action_confirmation_card.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/widgets/live_action_stepper_card.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/widgets/reasoning_card.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/widgets/summary_card.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_confirmation_card.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/live_action_stepper_card.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/reasoning_card.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/summary_card.dart';
 import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_cubit.dart';
 import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_state.dart';
 import 'package:flutter_ai_agent/features/settings/presentation/screens/settings_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-import '../../../../helpers/mocks.dart';
+import '../../../helpers/mocks.dart';
 
 void main() {
   late MockAgentCubit mockAgentCubit;
