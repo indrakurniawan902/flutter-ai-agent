@@ -192,6 +192,105 @@ void main() {
       expect(err.code, 'internal_error');
     });
 
+    test('GatewayToolManifestMessage serializes tools verbatim', () {
+      final tools = <Map<String, dynamic>>[
+        {
+          'type': 'function',
+          'function': {
+            'name': 'get_battery_level',
+            'description': 'Returns the device battery level.',
+            'parameters': {
+              'type': 'object',
+              'properties': {
+                'include_percent': {'type': 'boolean'},
+              },
+              'required': <String>['include_percent'],
+            },
+          },
+        },
+      ];
+
+      final msg = GatewayToolManifestMessage(
+        deviceId: 'device_123',
+        tools: tools,
+      );
+
+      final json = msg.toJson();
+      expect(json['type'], 'tool_manifest');
+      expect(json['version'], 'v1');
+      expect(json['device_id'], 'device_123');
+      expect(json['tools'], tools);
+
+      final serializedTools = json['tools'] as List<dynamic>;
+      final function =
+          (serializedTools.first as Map<String, dynamic>)['function'];
+      expect(
+        (function as Map<String, dynamic>)['parameters'],
+        {
+          'type': 'object',
+          'properties': {
+            'include_percent': {'type': 'boolean'},
+          },
+          'required': <String>['include_percent'],
+        },
+      );
+    });
+
+    test('GatewayToolManifestMessage round trips through fromJson', () {
+      final msg = GatewayToolManifestMessage(
+        deviceId: 'device_123',
+        tools: <Map<String, dynamic>>[
+          {
+            'type': 'function',
+            'function': {
+              'name': 'get_battery_level',
+              'description': 'Returns the device battery level.',
+              'parameters': {
+                'type': 'object',
+                'properties': {
+                  'include_percent': {'type': 'boolean'},
+                },
+              },
+            },
+          },
+        ],
+      );
+
+      final parsed = GatewayMessage.fromJson(msg.toJson());
+      expect(parsed, isA<GatewayToolManifestMessage>());
+      final manifest = parsed as GatewayToolManifestMessage;
+      expect(manifest.version, msg.version);
+      expect(manifest.deviceId, msg.deviceId);
+      expect(manifest.tools, msg.tools);
+      expect(manifest, msg);
+    });
+
+    test('hello alias parses into a GatewayToolManifestMessage', () {
+      final json = {
+        'type': 'hello',
+        'version': 'v1',
+        'device_id': 'device_123',
+        'tools': <Map<String, dynamic>>[
+          {
+            'type': 'function',
+            'function': {
+              'name': 'get_battery_level',
+              'description': 'Returns the device battery level.',
+              'parameters': {'type': 'object'},
+            },
+          },
+        ],
+      };
+
+      final parsed = GatewayMessage.fromJson(json);
+      expect(parsed, isA<GatewayToolManifestMessage>());
+      final manifest = parsed as GatewayToolManifestMessage;
+      expect(manifest.type, 'tool_manifest');
+      expect(manifest.version, 'v1');
+      expect(manifest.deviceId, 'device_123');
+      expect(manifest.tools, hasLength(1));
+    });
+
     test('GatewayRawMessage handles unknown types', () {
       final json = {
         'type': 'custom_event',
