@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_ai_agent/features/pairing/domain/qr_scanner_controller.dart';
+import 'package:flutter_ai_agent/domain/tools/pairing/qr_scanner_controller.dart';
+import 'package:injectable/injectable.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 /// Clean Architecture wrapper for [MobileScannerController].
+@LazySingleton(as: QrScannerControllerBase)
 class MobileScannerControllerWrapper implements QrScannerControllerBase {
   final MobileScannerController controller;
   final ValueNotifier<bool> _isTorchOnNotifier;

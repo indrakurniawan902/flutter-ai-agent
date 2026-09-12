@@ -1,4 +1,4 @@
-import 'package:flutter_ai_agent/features/pairing/data/scanner_controller_wrapper.dart';
+import 'package:flutter_ai_agent/data/datasources/remote/pairing/scanner_controller_wrapper.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:mocktail/mocktail.dart';

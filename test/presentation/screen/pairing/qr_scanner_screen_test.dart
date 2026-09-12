@@ -2,13 +2,13 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/core/theme/app_theme.dart';
-import 'package:flutter_ai_agent/features/pairing/data/models/pairing_payload.dart';
-import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart';
-import 'package:flutter_ai_agent/features/pairing/presentation/screens/qr_scanner_screen.dart';
+import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
+import 'package:flutter_ai_agent/domain/tools/pairing/pairing_parser.dart';
+import 'package:flutter_ai_agent/presentation/screen/pairing/qr_scanner_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-import '../../../../helpers/mocks.dart';
+import '../../../helpers/mocks.dart';
 
 class MockNavigatorObserver extends Mock implements NavigatorObserver {}
 

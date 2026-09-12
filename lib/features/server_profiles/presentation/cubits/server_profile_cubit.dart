@@ -1,4 +1,4 @@
-import 'package:flutter_ai_agent/features/pairing/data/models/pairing_payload.dart';
+import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
 import 'package:flutter_ai_agent/features/server_profiles/domain/entities/server_profile.dart';
 import 'package:flutter_ai_agent/features/server_profiles/presentation/cubits/server_profile_state.dart';
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';

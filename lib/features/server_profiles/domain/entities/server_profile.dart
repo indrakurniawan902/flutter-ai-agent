@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_ai_agent/core/constants/constants.dart';
-import 'package:flutter_ai_agent/features/pairing/data/models/pairing_payload.dart';
+import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
 
 /// Represents a configuration profile for a remote or local Hermes server gateway.
 class ServerProfile extends Equatable {

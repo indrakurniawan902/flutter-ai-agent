@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_ai_agent/core/errors/failures.dart';
-import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart';
+import 'package:flutter_ai_agent/domain/tools/pairing/pairing_parser.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

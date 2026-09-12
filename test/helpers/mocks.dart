@@ -17,7 +17,7 @@ import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/navigation/cubit/navigation_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/navigation/cubit/navigation_state.dart';
-import 'package:flutter_ai_agent/features/pairing/domain/qr_scanner_controller.dart';
+import 'package:flutter_ai_agent/domain/tools/pairing/qr_scanner_controller.dart';
 import 'package:flutter_ai_agent/features/server_profiles/presentation/cubits/server_profile_cubit.dart';
 import 'package:flutter_ai_agent/features/server_profiles/presentation/cubits/server_profile_state.dart';
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';

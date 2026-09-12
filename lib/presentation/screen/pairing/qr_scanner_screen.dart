@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_ai_agent/features/pairing/data/models/pairing_payload.dart';
-import 'package:flutter_ai_agent/features/pairing/data/scanner_controller_wrapper.dart';
-import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart';
-import 'package:flutter_ai_agent/features/pairing/domain/qr_scanner_controller.dart';
+import 'package:flutter_ai_agent/common/injection/injection.dart';
+import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
+import 'package:flutter_ai_agent/domain/tools/pairing/pairing_parser.dart';
+import 'package:flutter_ai_agent/domain/tools/pairing/qr_scanner_controller.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 /// QR Code Scanner Screen for pairing with Hermes / OpenClaw gateway.
@@ -36,7 +36,7 @@ class QrScannerScreen extends StatefulWidget {
 }
 
 class _QrScannerScreenState extends State<QrScannerScreen> {
-  late final QrScannerControllerBase _controller;
+  QrScannerControllerBase? _controller;
   late final bool _isExternalController;
   bool _isProcessing = false;
 
@@ -48,10 +48,13 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   void initState() {
     super.initState();
     if (widget.controller != null) {
-      _controller = widget.controller!;
+      _controller = widget.controller;
+      _isExternalController = true;
+    } else if (getIt.isRegistered<QrScannerControllerBase>()) {
+      _controller = getIt<QrScannerControllerBase>();
       _isExternalController = true;
     } else {
-      _controller = MobileScannerControllerWrapper();
+      _controller = null;
       _isExternalController = false;
     }
   }
@@ -59,7 +62,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   @override
   void dispose() {
     if (!_isExternalController) {
-      _controller.dispose();
+      _controller?.dispose();
     }
     super.dispose();
   }
@@ -185,6 +188,8 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isTorchOnNotifier = _controller?.isTorchOn;
+
     return Scaffold(
       backgroundColor: darkSurface,
       appBar: AppBar(
@@ -192,20 +197,31 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
         backgroundColor: darkSurface,
         elevation: 0,
         actions: [
-          ValueListenableBuilder<bool>(
-            valueListenable: _controller.isTorchOn,
-            builder: (context, isTorchOn, child) {
-              return IconButton(
-                key: const Key('qr_torch_toggle_button'),
-                tooltip: isTorchOn ? 'Turn Flashlight Off' : 'Turn Flashlight On',
-                icon: Icon(
-                  isTorchOn ? Icons.flash_on : Icons.flash_off,
-                  color: isTorchOn ? accentTeal : Colors.white,
-                ),
-                onPressed: () => _controller.toggleTorch(),
-              );
-            },
-          ),
+          if (isTorchOnNotifier != null)
+            ValueListenableBuilder<bool>(
+              valueListenable: isTorchOnNotifier,
+              builder: (context, isTorchOn, child) {
+                return IconButton(
+                  key: const Key('qr_torch_toggle_button'),
+                  tooltip: isTorchOn ? 'Turn Flashlight Off' : 'Turn Flashlight On',
+                  icon: Icon(
+                    isTorchOn ? Icons.flash_on : Icons.flash_off,
+                    color: isTorchOn ? accentTeal : Colors.white,
+                  ),
+                  onPressed: () => _controller?.toggleTorch(),
+                );
+              },
+            )
+          else
+            IconButton(
+              key: const Key('qr_torch_toggle_button'),
+              tooltip: 'Turn Flashlight On',
+              icon: const Icon(
+                Icons.flash_off,
+                color: Colors.white,
+              ),
+              onPressed: () => _controller?.toggleTorch(),
+            ),
         ],
       ),
       body: Stack(
@@ -215,9 +231,6 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
             child: widget.scannerWidgetBuilder != null
                 ? widget.scannerWidgetBuilder!(context, _handleBarcode)
                 : MobileScanner(
-                    controller: _controller is MobileScannerControllerWrapper
-                        ? _controller.controller
-                        : null,
                     onDetect: (capture) {
                       for (final barcode in capture.barcodes) {
                         final raw = barcode.rawValue;

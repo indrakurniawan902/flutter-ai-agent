@@ -33,7 +33,6 @@ class PairingPayload extends Equatable {
     final rawTimestamp = json['timestamp'];
     DateTime timestamp;
     if (rawTimestamp is int) {
-      // If timestamp is in seconds (10 digits) vs millis (13 digits)
       if (rawTimestamp < 10000000000) {
         timestamp = DateTime.fromMillisecondsSinceEpoch(rawTimestamp * 1000, isUtc: true);
       } else {

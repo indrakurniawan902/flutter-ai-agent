@@ -16,6 +16,8 @@ import 'package:flutter_ai_agent/data/datasources/remote/chat/chat_datasource.da
     as _i522;
 import 'package:flutter_ai_agent/data/datasources/remote/chat/sse_parser.dart'
     as _i598;
+import 'package:flutter_ai_agent/data/datasources/remote/pairing/scanner_controller_wrapper.dart'
+    as _i319;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/calendar_service.dart'
     as _i1056;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/camera_vision_service.dart'
@@ -45,8 +47,10 @@ import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart'
 import 'package:flutter_ai_agent/domain/tools/chat/notification_service.dart'
     as _i919;
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart' as _i732;
-import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart'
-    as _i288;
+import 'package:flutter_ai_agent/domain/tools/pairing/pairing_parser.dart'
+    as _i301;
+import 'package:flutter_ai_agent/domain/tools/pairing/qr_scanner_controller.dart'
+    as _i821;
 import 'package:flutter_ai_agent/features/server_profiles/presentation/cubits/server_profile_cubit.dart'
     as _i22;
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart'
@@ -61,6 +65,7 @@ import 'package:flutter_ai_agent/utils/dio_err_handler.dart' as _i498;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart' as _i558;
 import 'package:get_it/get_it.dart' as _i174;
 import 'package:injectable/injectable.dart' as _i526;
+import 'package:mobile_scanner/mobile_scanner.dart' as _i625;
 
 extension GetItInjectableX on _i174.GetIt {
   // initializes the registration of main-scope dependencies inside of GetIt
@@ -78,7 +83,7 @@ extension GetItInjectableX on _i174.GetIt {
       () => storageModule.provideSecureStorage(),
     );
     gh.lazySingleton<_i598.SseParser>(() => _i598.SseParser());
-    gh.lazySingleton<_i288.PairingParser>(() => const _i288.PairingParser());
+    gh.lazySingleton<_i301.PairingParser>(() => const _i301.PairingParser());
     gh.lazySingleton<_i919.NotificationServiceBase>(
       () => _i89.NotificationService.create(),
     );
@@ -121,6 +126,11 @@ extension GetItInjectableX on _i174.GetIt {
     gh.factory<_i755.SettingsCubit>(
       () => _i755.SettingsCubit.create(
         secureStorageService: gh<_i574.SecureStorageService>(),
+      ),
+    );
+    gh.lazySingleton<_i821.QrScannerControllerBase>(
+      () => _i319.MobileScannerControllerWrapper(
+        controller: gh<_i625.MobileScannerController>(),
       ),
     );
     gh.lazySingleton<_i732.ToolRegistry>(

@@ -1,5 +1,5 @@
 import 'package:flutter_ai_agent/core/constants/constants.dart';
-import 'package:flutter_ai_agent/features/pairing/data/models/pairing_payload.dart';
+import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
 import 'package:flutter_ai_agent/features/server_profiles/data/models/server_profile_model.dart';
 import 'package:flutter_ai_agent/features/server_profiles/domain/entities/server_profile.dart';
 import 'package:flutter_test/flutter_test.dart';
