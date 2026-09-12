@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/app_settings_opener.dart';
 
 /// Permission types that can show a rationale bottom sheet.
 enum PermissionRationaleType {
@@ -79,6 +80,8 @@ class PermissionRationaleModal extends StatelessWidget {
     this.notNowLabel = 'Nanti',
     this.onAllow,
     this.onNotNow,
+    this.isPermanentlyDenied = false,
+    this.onOpenSettings,
   });
 
   final PermissionRationaleType permissionType;
@@ -89,6 +92,8 @@ class PermissionRationaleModal extends StatelessWidget {
   final String notNowLabel;
   final VoidCallback? onAllow;
   final VoidCallback? onNotNow;
+  final bool isPermanentlyDenied;
+  final VoidCallback? onOpenSettings;
 
   static const Color _sheetBackground = Color(0xFF0F172A);
   static const Color _containerBorder = Color(0xFF1E293B);
@@ -105,6 +110,8 @@ class PermissionRationaleModal extends StatelessWidget {
     IconData? customIcon,
     String? allowLabel,
     String? notNowLabel,
+    bool isPermanentlyDenied = false,
+    VoidCallback? onOpenSettings,
   }) {
     return showPermissionRationale(
       context,
@@ -114,6 +121,8 @@ class PermissionRationaleModal extends StatelessWidget {
       customIcon: customIcon,
       allowLabel: allowLabel,
       notNowLabel: notNowLabel,
+      isPermanentlyDenied: isPermanentlyDenied,
+      onOpenSettings: onOpenSettings,
     );
   }
 
@@ -189,6 +198,19 @@ class PermissionRationaleModal extends StatelessWidget {
                 height: 1.5,
               ),
             ),
+            if (isPermanentlyDenied) ...[
+              const SizedBox(height: 12),
+              const Text(
+                'Izin ini ditolak permanen. Aktifkan manual dari pengaturan aplikasi di sistem.',
+                key: Key('permission_rationale_permanently_denied_notice'),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: _inkSecondary,
+                  fontSize: 13,
+                  height: 1.5,
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
             Row(
               children: [
@@ -221,11 +243,25 @@ class PermissionRationaleModal extends StatelessWidget {
                     height: 48,
                     child: ElevatedButton(
                       key: const Key('permission_rationale_allow_btn'),
-                      onPressed: () {
-                        if (onAllow != null) {
-                          onAllow!();
+                      onPressed: () async {
+                        if (isPermanentlyDenied) {
+                          if (onOpenSettings != null) {
+                            onOpenSettings!();
+                          } else {
+                            try {
+                              await AppSettingsOpenerRegistry.instance
+                                  .openAppSettings();
+                            } catch (_) {}
+                            if (context.mounted) {
+                              Navigator.of(context).pop(true);
+                            }
+                          }
                         } else {
-                          Navigator.of(context).pop(true);
+                          if (onAllow != null) {
+                            onAllow!();
+                          } else {
+                            Navigator.of(context).pop(true);
+                          }
                         }
                       },
                       style: ElevatedButton.styleFrom(
@@ -237,7 +273,9 @@ class PermissionRationaleModal extends StatelessWidget {
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      child: Text(allowLabel),
+                      child: Text(
+                        isPermanentlyDenied ? 'Buka Pengaturan' : allowLabel,
+                      ),
                     ),
                   ),
                 ),
@@ -261,6 +299,8 @@ Future<bool?> showPermissionRationale(
   IconData? customIcon,
   String? allowLabel,
   String? notNowLabel,
+  bool isPermanentlyDenied = false,
+  VoidCallback? onOpenSettings,
 }) {
   return showModalBottomSheet<bool>(
     context: context,
@@ -275,6 +315,8 @@ Future<bool?> showPermissionRationale(
       customIcon: customIcon,
       allowLabel: allowLabel ?? 'Izinkan',
       notNowLabel: notNowLabel ?? 'Nanti',
+      isPermanentlyDenied: isPermanentlyDenied,
+      onOpenSettings: onOpenSettings,
     ),
   );
 }
