@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_mode.dart';
@@ -10,10 +12,12 @@ import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
 import 'package:flutter_ai_agent/domain/models/chat/tool_call_request.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/chat_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_approval_sheet.dart';
+import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_link_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_rpc_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/pairing/qr_scanner_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_cubit.dart';
@@ -317,6 +321,42 @@ void main() {
     });
 
     testWidgets(
+        'gateway connect is routed through a registered GatewayLinkCubit',
+        (tester) async {
+      when(() => mockGatewayClient.state)
+          .thenReturn(GatewayConnectionState.disconnected);
+
+      final backgroundFake = _RecordingBackgroundService();
+      final linkCubit = GatewayLinkCubit(
+        gatewayClient: mockGatewayClient,
+        backgroundService: backgroundFake,
+        autoStart: false,
+      );
+      addTearDown(linkCubit.close);
+      sl.registerLazySingleton<GatewayLinkCubit>(() => linkCubit);
+
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.direct));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('chat_mode_toggle')));
+      await tester.pumpAndSettle();
+
+      // Connect went through the link cubit's startWithProfile, which
+      // delegates to the client itself.
+      verify(() => mockGatewayClient.connectWithProfile(sampleProfile))
+          .called(1);
+
+      // The link policy is observing: a connected event drives the
+      // foreground service + wake lock through the background service.
+      gatewayStateController.add(GatewayConnectionState.connected);
+      await tester.pumpAndSettle();
+
+      expect(backgroundFake.calls, contains('startService'));
+      expect(backgroundFake.calls, contains('acquireWakeLock'));
+    });
+
+    testWidgets(
         'toggling mode switches from Gateway to Direct and disconnects gateway',
         (tester) async {
       when(() => mockGatewayClient.state)
@@ -511,4 +551,81 @@ void main() {
       expect(find.byType(ActionApprovalSheet), findsNothing);
     });
   });
+}
+
+class _RecordingBackgroundService implements BackgroundServiceBase {
+  final List<String> calls = [];
+
+  @override
+  Future<Either<Failure, bool>> startService(
+      {String? title, String? content}) async {
+    calls.add('startService');
+    return const Right(true);
+  }
+
+  @override
+  Future<Either<Failure, bool>> stopService() async {
+    calls.add('stopService');
+    return const Right(true);
+  }
+
+  @override
+  Future<bool> isRunning() async => calls.contains('startService') &&
+      !calls.contains('stopService');
+
+  @override
+  Future<Either<Failure, bool>> updateNotification({
+    required String title,
+    required String content,
+  }) async {
+    calls.add('updateNotification');
+    return const Right(true);
+  }
+
+  @override
+  Future<Either<Failure, bool>> acquireWakeLock({Duration? timeout}) async {
+    calls.add('acquireWakeLock');
+    return const Right(true);
+  }
+
+  @override
+  Future<Either<Failure, bool>> releaseWakeLock() async {
+    calls.add('releaseWakeLock');
+    return const Right(true);
+  }
+
+  @override
+  Future<bool> isWakeLockHeld() async =>
+      calls.contains('acquireWakeLock') && !calls.contains('releaseWakeLock');
+
+  @override
+  Future<QuickTileState> getTileState() async => QuickTileState.inactive;
+
+  @override
+  Future<Either<Failure, bool>> setTileState(QuickTileState state) async {
+    calls.add('setTileState');
+    return const Right(true);
+  }
+
+  @override
+  Future<Either<Failure, QuickTileState>> toggleTileState() async {
+    calls.add('toggleTileState');
+    return const Right(QuickTileState.inactive);
+  }
+
+  @override
+  Stream<String> get actionStream => const Stream<String>.empty();
+
+  @override
+  Future<String?> getPendingAction() async => null;
+
+  @override
+  Future<void> clearPendingAction() async {
+    calls.add('clearPendingAction');
+  }
+
+  @override
+  void dispose() {
+    calls.add('dispose');
+  }
 }

@@ -40,6 +40,8 @@ import 'package:flutter_ai_agent/data/datasources/tools/chat/device_context_serv
     as _i205;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/file_workspace_service.dart'
     as _i70;
+import 'package:flutter_ai_agent/data/datasources/tools/chat/intent_launcher_service_impl.dart'
+    as _i313;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/local_memory_service.dart'
     as _i734;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/location_service.dart'
@@ -92,6 +94,8 @@ import 'package:flutter_ai_agent/domain/tools/chat/device_context_service.dart'
     as _i3;
 import 'package:flutter_ai_agent/domain/tools/chat/file_workspace_service.dart'
     as _i745;
+import 'package:flutter_ai_agent/domain/tools/chat/intent_launcher_service.dart'
+    as _i173;
 import 'package:flutter_ai_agent/domain/tools/chat/local_memory_service.dart'
     as _i987;
 import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart'
@@ -111,6 +115,8 @@ import 'package:flutter_ai_agent/domain/tools/pairing/qr_scanner_controller.dart
     as _i821;
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart'
     as _i15;
+import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_link_cubit.dart'
+    as _i98;
 import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_rpc_cubit.dart'
     as _i118;
 import 'package:flutter_ai_agent/presentation/screen/navigation/cubit/navigation_cubit.dart'
@@ -127,7 +133,6 @@ import 'package:flutter_ai_agent/utils/dio_err_handler.dart' as _i498;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart' as _i558;
 import 'package:get_it/get_it.dart' as _i174;
 import 'package:injectable/injectable.dart' as _i526;
-import 'package:mobile_scanner/mobile_scanner.dart' as _i625;
 
 extension GetItInjectableX on _i174.GetIt {
   // initializes the registration of main-scope dependencies inside of GetIt
@@ -138,6 +143,7 @@ extension GetItInjectableX on _i174.GetIt {
     final gh = _i526.GetItHelper(this, environment, environmentFilter);
     final networkModule = _$NetworkModule();
     final storageModule = _$StorageModule();
+    final toolsModule = _$ToolsModule();
     final gatewayModule = _$GatewayModule();
     gh.factory<_i693.NavigationCubit>(() => _i693.NavigationCubit.create());
     gh.singleton<_i498.DioErrHandler>(() => const _i498.DioErrHandler());
@@ -145,7 +151,16 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i558.FlutterSecureStorage>(
       () => storageModule.provideSecureStorage(),
     );
+    gh.lazySingleton<_i777.ContactsProvider>(
+      () => toolsModule.provideContactsProvider(),
+    );
+    gh.lazySingleton<_i777.UrlLauncherProvider>(
+      () => toolsModule.provideUrlLauncherProvider(),
+    );
     gh.lazySingleton<_i598.SseParser>(() => _i598.SseParser());
+    gh.lazySingleton<_i791.SkillsRegistryService>(
+      () => _i791.SkillsRegistryService(),
+    );
     gh.lazySingleton<_i301.PairingParser>(() => const _i301.PairingParser());
     gh.lazySingleton<_i919.NotificationServiceBase>(
       () => _i89.NotificationService.create(),
@@ -161,8 +176,36 @@ extension GetItInjectableX on _i174.GetIt {
         storage: gh<_i558.FlutterSecureStorage>(),
       ),
     );
+    gh.lazySingleton<_i355.QuickActionsProvider>(
+      () => _i355.DefaultQuickActionsProvider(),
+    );
+    gh.lazySingleton<_i732.ToolRegistry>(
+      () => _i732.ToolRegistry(
+        clipboardService: gh<_i547.ClipboardServiceBase>(),
+        locationService: gh<_i292.LocationServiceBase>(),
+        deviceContextService: gh<_i3.DeviceContextServiceBase>(),
+        cameraVisionService: gh<_i815.CameraVisionServiceBase>(),
+        calendarService: gh<_i1020.CalendarServiceBase>(),
+        notificationService: gh<_i919.NotificationServiceBase>(),
+        fileWorkspaceService: gh<_i745.FileWorkspaceServiceBase>(),
+        notificationTriageService: gh<_i396.NotificationTriageServiceBase>(),
+        localMemoryService: gh<_i987.LocalMemoryServiceBase>(),
+        ambientTriggerService: gh<_i290.AmbientTriggerServiceBase>(),
+        voiceInputService: gh<_i652.VoiceInputServiceBase>(),
+        voiceOutputService: gh<_i45.VoiceOutputServiceBase>(),
+        backgroundService: gh<_i791.BackgroundServiceBase>(),
+        contactLauncherTools: gh<_i777.ContactLauncherTools>(),
+        intentLauncherService: gh<_i173.IntentLauncherServiceBase>(),
+      ),
+    );
+    gh.lazySingleton<_i821.QrScannerControllerBase>(
+      () => _i319.MobileScannerControllerWrapper(),
+    );
     gh.lazySingleton<_i547.ClipboardServiceBase>(
       () => _i105.ClipboardService.create(),
+    );
+    gh.lazySingleton<_i122.GatewayClient>(
+      () => gatewayModule.provideGatewayClient(gh<_i732.ToolRegistry>()),
     );
     gh.lazySingleton<_i192.LlmRepository>(
       () => _i236.LlmRepositoryImpl(
@@ -192,23 +235,8 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i205.ShareMediaProvider>(
       () => _i205.ReceiveSharingIntentProvider(),
     );
-    gh.lazySingleton<_i732.ToolRegistry>(
-      () => _i732.ToolRegistry(
-        clipboardService: gh<_i547.ClipboardServiceBase>(),
-        locationService: gh<_i292.LocationServiceBase>(),
-        deviceContextService: gh<_i3.DeviceContextServiceBase>(),
-        cameraVisionService: gh<_i815.CameraVisionServiceBase>(),
-        calendarService: gh<_i1020.CalendarServiceBase>(),
-        notificationService: gh<_i919.NotificationServiceBase>(),
-        fileWorkspaceService: gh<_i745.FileWorkspaceServiceBase>(),
-        notificationTriageService: gh<_i396.NotificationTriageServiceBase>(),
-        localMemoryService: gh<_i987.LocalMemoryServiceBase>(),
-        ambientTriggerService: gh<_i290.AmbientTriggerServiceBase>(),
-        voiceInputService: gh<_i652.VoiceInputServiceBase>(),
-        voiceOutputService: gh<_i45.VoiceOutputServiceBase>(),
-        backgroundService: gh<_i791.BackgroundServiceBase>(),
-        contactLauncherTools: gh<_i777.ContactLauncherTools>(),
-      ),
+    gh.lazySingleton<_i173.IntentLauncherServiceBase>(
+      () => _i313.IntentLauncherServiceImpl.create(),
     );
     gh.lazySingleton<_i745.FileWorkspaceServiceBase>(
       () => _i70.FileWorkspaceService.create(),
@@ -223,16 +251,16 @@ extension GetItInjectableX on _i174.GetIt {
       () => _i1033.BackgroundService.create(),
     );
     gh.lazySingleton<_i777.ContactLauncherTools>(
-      () => _i777.ContactLauncherTools(),
+      () => _i777.ContactLauncherTools(
+        contactsProvider: gh<_i777.ContactsProvider>(),
+        urlLauncherProvider: gh<_i777.UrlLauncherProvider>(),
+      ),
     );
     gh.lazySingleton<_i290.AmbientTriggerServiceBase>(
       () => _i315.AmbientTriggerService.create(),
     );
     gh.lazySingleton<_i652.VoiceInputServiceBase>(
       () => _i845.VoiceInputService.create(),
-    );
-    gh.lazySingleton<_i791.SkillsRegistryService>(
-      () => _i791.SkillsRegistryService(),
     );
     gh.lazySingleton<_i879.BatteryOptimizationServiceBase>(
       () => _i82.BatteryOptimizationService.create(),
@@ -253,15 +281,8 @@ extension GetItInjectableX on _i174.GetIt {
         gh<_i348.SecureStorageService>(),
       ),
     );
-    gh.lazySingleton<_i355.QuickActionsProvider>(
-      () => _i355.DefaultQuickActionsProvider(),
-    );
-    gh.factory<_i15.AgentCubit>(
-      () => _i15.AgentCubit.create(
-        llmRepository: gh<_i192.LlmRepository>(),
-        chatLocalRepository: gh<_i445.ChatLocalRepository>(),
-        localMemoryService: gh<_i987.LocalMemoryServiceBase>(),
-      ),
+    gh.lazySingleton<_i27.GatewayClientBase>(
+      () => gatewayModule.provideGatewayClientBase(gh<_i122.GatewayClient>()),
     );
     gh.factory<_i96.SkillsCubit>(
       () => _i96.SkillsCubit(
@@ -273,9 +294,17 @@ extension GetItInjectableX on _i174.GetIt {
         datasource: gh<_i613.ChatLocalDatasource>(),
       ),
     );
-    gh.lazySingleton<_i821.QrScannerControllerBase>(
-      () => _i319.MobileScannerControllerWrapper(
-        controller: gh<_i625.MobileScannerController>(),
+    gh.factory<_i15.AgentCubit>(
+      () => _i15.AgentCubit.create(
+        llmRepository: gh<_i192.LlmRepository>(),
+        chatLocalRepository: gh<_i445.ChatLocalRepository>(),
+        localMemoryService: gh<_i987.LocalMemoryServiceBase>(),
+      ),
+    );
+    gh.factory<_i118.GatewayRpcCubit>(
+      () => _i118.GatewayRpcCubit.create(
+        gatewayClient: gh<_i27.GatewayClientBase>(),
+        toolRegistry: gh<_i732.ToolRegistry>(),
       ),
     );
     gh.factory<_i819.ServerProfileCubit>(
@@ -288,25 +317,19 @@ extension GetItInjectableX on _i174.GetIt {
         secureStorageService: gh<_i348.SecureStorageService>(),
       ),
     );
-    gh.lazySingleton<_i122.GatewayClient>(
-      () => gatewayModule.provideGatewayClient(gh<_i732.ToolRegistry>()),
-    );
     gh.lazySingleton<_i45.VoiceOutputServiceBase>(
       () => _i753.VoiceOutputService.create(gh<_i753.TtsClient>()),
-    );
-    gh.lazySingleton<_i27.GatewayClientBase>(
-      () => gatewayModule.provideGatewayClientBase(gh<_i122.GatewayClient>()),
-    );
-    gh.factory<_i118.GatewayRpcCubit>(
-      () => _i118.GatewayRpcCubit.create(
-        gatewayClient: gh<_i27.GatewayClientBase>(),
-        toolRegistry: gh<_i732.ToolRegistry>(),
-      ),
     );
     gh.lazySingleton<_i806.GatewayRpcReceiverBase>(
       () => gatewayModule.provideGatewayRpcReceiver(
         gh<_i27.GatewayClientBase>(),
         gh<_i732.ToolRegistry>(),
+      ),
+    );
+    gh.lazySingleton<_i98.GatewayLinkCubit>(
+      () => _i98.GatewayLinkCubit.create(
+        gatewayClient: gh<_i27.GatewayClientBase>(),
+        backgroundService: gh<_i791.BackgroundServiceBase>(),
       ),
     );
     return this;
@@ -316,5 +339,7 @@ extension GetItInjectableX on _i174.GetIt {
 class _$NetworkModule extends _i225.NetworkModule {}
 
 class _$StorageModule extends _i225.StorageModule {}
+
+class _$ToolsModule extends _i225.ToolsModule {}
 
 class _$GatewayModule extends _i225.GatewayModule {}

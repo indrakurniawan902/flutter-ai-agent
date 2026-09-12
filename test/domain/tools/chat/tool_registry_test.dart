@@ -6,6 +6,7 @@ import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/clipboard_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/contact_launcher_tools.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/file_workspace_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/intent_launcher_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/local_memory_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.dart';
@@ -37,6 +38,9 @@ class MockVoiceOutputService extends Mock implements VoiceOutputServiceBase {}
 class MockBackgroundService extends Mock implements BackgroundServiceBase {}
 
 class MockContactLauncherTools extends Mock implements ContactLauncherTools {}
+
+class MockIntentLauncherService extends Mock
+    implements IntentLauncherServiceBase {}
 
 void main() {
   late ToolRegistry registry;
@@ -918,6 +922,129 @@ void main() {
       );
       verify(() => mockContactLauncher.openExternalUrl('https://example.com'))
           .called(1);
+    });
+  });
+
+  group('registerIntentLauncherTools', () {
+    late MockIntentLauncherService mockIntentLauncher;
+
+    setUp(() {
+      mockIntentLauncher = MockIntentLauncherService();
+    });
+
+    test(
+        'registers open_map_navigation, open_email_composer, '
+        'and launch_system_setting', () {
+      registry.registerIntentLauncherTools(mockIntentLauncher);
+
+      expect(registry.hasTool('open_map_navigation'), isTrue);
+      expect(registry.hasTool('open_email_composer'), isTrue);
+      expect(registry.hasTool('launch_system_setting'), isTrue);
+
+      expect(
+        registry.getTool('open_map_navigation')?.securityTier,
+        SecurityTier.tier1Auto,
+      );
+      expect(
+        registry.getTool('open_email_composer')?.securityTier,
+        SecurityTier.tier2Permission,
+      );
+      expect(
+        registry.getTool('launch_system_setting')?.securityTier,
+        SecurityTier.tier2Permission,
+      );
+
+      final mapParams = registry.getTool('open_map_navigation')?.parameters;
+      expect(mapParams?['type'], 'object');
+      expect(mapParams?['properties']?.keys,
+          containsAll(['latitude', 'longitude', 'query']));
+      expect(mapParams?.containsKey('required'), isFalse);
+
+      final emailParams = registry.getTool('open_email_composer')?.parameters;
+      expect(emailParams?['properties']?.keys,
+          containsAll(['to', 'subject', 'body']));
+      expect(emailParams?.containsKey('required'), isFalse);
+
+      final settingParams = registry.getTool('launch_system_setting')?.parameters;
+      expect(settingParams?['properties']?.keys, contains('setting_type'));
+      expect(settingParams?['required'], ['setting_type']);
+    });
+
+    test('open_map_navigation delegates typed coordinates', () async {
+      when(
+        () => mockIntentLauncher.openMapNavigation(
+          latitude: any(named: 'latitude'),
+          longitude: any(named: 'longitude'),
+          query: any(named: 'query'),
+        ),
+      ).thenAnswer((_) async => const Right('ok'));
+
+      registry.registerIntentLauncherTools(mockIntentLauncher);
+
+      final result = await registry.executeTool('open_map_navigation', {
+        'latitude': -6.2,
+        'longitude': 106.8,
+      });
+
+      expect(result, const Right<Failure, String>('ok'));
+      verify(
+        () => mockIntentLauncher.openMapNavigation(
+          latitude: -6.2,
+          longitude: 106.8,
+          query: null,
+        ),
+      ).called(1);
+    });
+
+    test('open_email_composer delegates optional fields', () async {
+      when(
+        () => mockIntentLauncher.openEmailComposer(
+          to: any(named: 'to'),
+          subject: any(named: 'subject'),
+          body: any(named: 'body'),
+        ),
+      ).thenAnswer((_) async => const Right('ok'));
+
+      registry.registerIntentLauncherTools(mockIntentLauncher);
+
+      final result = await registry.executeTool('open_email_composer', {
+        'to': 'dev@example.com',
+        'subject': 'Hi',
+      });
+
+      expect(result, const Right<Failure, String>('ok'));
+      verify(
+        () => mockIntentLauncher.openEmailComposer(
+          to: 'dev@example.com',
+          subject: 'Hi',
+          body: null,
+        ),
+      ).called(1);
+    });
+
+    test('launch_system_setting delegates setting type', () async {
+      when(() => mockIntentLauncher.launchSystemSetting(any()))
+          .thenAnswer((_) async => const Right('ok'));
+
+      registry.registerIntentLauncherTools(mockIntentLauncher);
+
+      final result = await registry.executeTool(
+        'launch_system_setting',
+        {'setting_type': 'wifi'},
+      );
+
+      expect(result, const Right<Failure, String>('ok'));
+      verify(() => mockIntentLauncher.launchSystemSetting('wifi')).called(1);
+    });
+
+    test('constructor auto-registers intent launcher tools', () {
+      final intentRegistry = ToolRegistry(
+        intentLauncherService: MockIntentLauncherService(),
+      );
+
+      expect(intentRegistry.hasTool('open_map_navigation'), isTrue);
+      expect(intentRegistry.hasTool('open_email_composer'), isTrue);
+      expect(intentRegistry.hasTool('launch_system_setting'), isTrue);
     });
   });
 

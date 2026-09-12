@@ -31,6 +31,7 @@ import 'package:flutter_ai_agent/presentation/screen/chat/widgets/permission_rat
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/reasoning_card.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/summary_card.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/voice_waveform_widget.dart';
+import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_link_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_rpc_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/pairing/qr_scanner_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_cubit.dart';
@@ -43,6 +44,7 @@ class ChatScreen extends StatefulWidget {
   final ChatMode initialMode;
   final GatewayClientBase? gatewayClient;
   final GatewayRpcCubit? gatewayRpcCubit;
+  final GatewayLinkCubit? gatewayLinkCubit;
   final ServerProfileCubit? serverProfileCubit;
   final AgentCubit? agentCubit;
   final Widget Function(BuildContext context)? qrScannerBuilder;
@@ -55,6 +57,7 @@ class ChatScreen extends StatefulWidget {
     this.initialMode = ChatMode.direct,
     this.gatewayClient,
     this.gatewayRpcCubit,
+    this.gatewayLinkCubit,
     this.serverProfileCubit,
     this.agentCubit,
     this.qrScannerBuilder,
@@ -91,6 +94,7 @@ class _ChatScreenState extends State<ChatScreen> {
   StreamSubscription<ServerProfileState>? _profileSub;
   String _streamingGatewayDelta = '';
   GatewayRpcCubit? _rpcCubit;
+  GatewayLinkCubit? _linkCubit;
   AgentCubit? _agentCubit;
 
   GatewayClientBase? _resolveGatewayClient() =>
@@ -137,6 +141,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _rpcCubit = widget.gatewayRpcCubit ??
         (sl.isRegistered<GatewayRpcCubit>() ? sl<GatewayRpcCubit>() : null);
+    _linkCubit = widget.gatewayLinkCubit ??
+        (sl.isRegistered<GatewayLinkCubit>() ? sl<GatewayLinkCubit>() : null);
     _agentCubit = widget.agentCubit ??
         (sl.isRegistered<AgentCubit>() ? sl<AgentCubit>() : null);
 
@@ -568,7 +574,11 @@ class _ChatScreenState extends State<ChatScreen> {
     final profileCubit = _resolveServerProfileCubit();
     final activeProfile = profileCubit?.state.activeProfile;
     if (activeProfile != null) {
-      await client.connectWithProfile(activeProfile);
+      if (_linkCubit != null) {
+        await _linkCubit!.startWithProfile(activeProfile);
+      } else {
+        await client.connectWithProfile(activeProfile);
+      }
     } else {
       final storage = sl.isRegistered<SecureStorageService>()
           ? sl<SecureStorageService>()
@@ -577,7 +587,11 @@ class _ChatScreenState extends State<ChatScreen> {
         try {
           final profile = await storage.getActiveServerProfile();
           if (profile != null) {
-            await client.connectWithProfile(profile);
+            if (_linkCubit != null) {
+              await _linkCubit!.startWithProfile(profile);
+            } else {
+              await client.connectWithProfile(profile);
+            }
           }
         } catch (_) {}
       }
@@ -640,7 +654,13 @@ class _ChatScreenState extends State<ChatScreen> {
       }
 
       final client = _resolveGatewayClient();
-      if (client != null) {
+      final pairedProfile = profileCubit?.state.activeProfile;
+      if (_linkCubit != null && pairedProfile != null) {
+        setState(() {
+          _mode = ChatMode.gateway;
+        });
+        await _linkCubit!.startWithProfile(pairedProfile);
+      } else if (client != null) {
         setState(() {
           _mode = ChatMode.gateway;
         });
