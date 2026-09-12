@@ -6,16 +6,19 @@ sealed class SettingsState extends Equatable {
   final String apiKey;
   final String model;
   final double temperature;
+  final bool progressiveToolPruning;
 
   const SettingsState({
     this.baseUrl = '',
     this.apiKey = '',
     this.model = '',
     this.temperature = 0.7,
+    this.progressiveToolPruning = true,
   });
 
   @override
-  List<Object?> get props => [baseUrl, apiKey, model, temperature];
+  List<Object?> get props =>
+      [baseUrl, apiKey, model, temperature, progressiveToolPruning];
 }
 
 /// Initial state before any settings load is triggered.
@@ -25,6 +28,7 @@ class SettingsInitial extends SettingsState {
     super.apiKey,
     super.model,
     super.temperature,
+    super.progressiveToolPruning,
   });
 }
 
@@ -35,6 +39,7 @@ class SettingsLoading extends SettingsState {
     super.apiKey,
     super.model,
     super.temperature,
+    super.progressiveToolPruning,
   });
 }
 
@@ -45,6 +50,7 @@ class SettingsLoaded extends SettingsState {
     required super.apiKey,
     required super.model,
     required super.temperature,
+    super.progressiveToolPruning,
   });
 }
 
@@ -55,6 +61,7 @@ class SettingsSaving extends SettingsState {
     required super.apiKey,
     required super.model,
     required super.temperature,
+    super.progressiveToolPruning,
   });
 }
 
@@ -67,11 +74,13 @@ class SettingsSuccess extends SettingsState {
     required super.apiKey,
     required super.model,
     required super.temperature,
+    super.progressiveToolPruning,
     this.message = 'Settings saved successfully',
   });
 
   @override
-  List<Object?> get props => [baseUrl, apiKey, model, temperature, message];
+  List<Object?> get props =>
+      [baseUrl, apiKey, model, temperature, progressiveToolPruning, message];
 }
 
 /// An error occurred during load, validation, or save.
@@ -83,9 +92,11 @@ class SettingsError extends SettingsState {
     super.apiKey,
     super.model,
     super.temperature,
+    super.progressiveToolPruning,
     required this.message,
   });
 
   @override
-  List<Object?> get props => [baseUrl, apiKey, model, temperature, message];
+  List<Object?> get props =>
+      [baseUrl, apiKey, model, temperature, progressiveToolPruning, message];
 }

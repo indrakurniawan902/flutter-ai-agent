@@ -117,6 +117,46 @@ void main() {
       expect(tempField.controller?.text, '0.7');
     });
 
+    testWidgets('renders progressive tool pruning toggle reflecting settings state', (tester) async {
+      when(() => mockSettingsCubit.state).thenReturn(
+        const SettingsLoaded(
+          baseUrl: 'https://indra-9router.my.id/v1',
+          apiKey: 'sk-initial-key',
+          model: 'ag-glm',
+          temperature: 0.7,
+        ),
+      );
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      final toggleFinder = find.byKey(const Key('settings_progressive_tool_pruning_toggle'));
+      expect(toggleFinder, findsOneWidget);
+      expect(
+        tester.widget<SwitchListTile>(toggleFinder).value,
+        isTrue,
+      );
+
+      when(() => mockSettingsCubit.state).thenReturn(
+        const SettingsLoaded(
+          baseUrl: 'https://indra-9router.my.id/v1',
+          apiKey: 'sk-initial-key',
+          model: 'ag-glm',
+          temperature: 0.7,
+          progressiveToolPruning: false,
+        ),
+      );
+      // Unmount first so initState re-runs and picks up the new cubit state.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      expect(
+        tester.widget<SwitchListTile>(toggleFinder).value,
+        isFalse,
+      );
+    });
+
     testWidgets('toggles API key obscureText when visibility icon is tapped', (tester) async {
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(
@@ -173,6 +213,7 @@ void main() {
             apiKey: any(named: 'apiKey'),
             model: any(named: 'model'),
             temperature: any(named: 'temperature'),
+            progressiveToolPruning: any(named: 'progressiveToolPruning'),
           ));
     });
 
@@ -211,6 +252,7 @@ void main() {
             apiKey: any(named: 'apiKey'),
             model: any(named: 'model'),
             temperature: any(named: 'temperature'),
+            progressiveToolPruning: any(named: 'progressiveToolPruning'),
           )).thenAnswer((_) async => true);
 
       await tester.pumpWidget(buildTestWidget());
@@ -226,6 +268,7 @@ void main() {
             apiKey: 'sk-valid-key',
             model: 'ag-glm',
             temperature: 0.7,
+            progressiveToolPruning: true,
           )).called(1);
     });
 
@@ -729,6 +772,7 @@ void main() {
             apiKey: any(named: 'apiKey'),
             model: any(named: 'model'),
             temperature: any(named: 'temperature'),
+            progressiveToolPruning: any(named: 'progressiveToolPruning'),
           )).thenAnswer((_) async => true);
       when(() => mockServerProfileCubit.updateActiveProfile(
             gatewayUrl: 'https://indra-9router.my.id/v1',

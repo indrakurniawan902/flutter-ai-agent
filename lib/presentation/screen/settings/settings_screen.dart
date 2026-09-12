@@ -94,11 +94,13 @@ class _SettingsViewState extends State<_SettingsView> {
   late final TextEditingController _temperatureController;
 
   bool _obscureApiKey = true;
+  bool _progressiveToolPruning = true;
 
   @override
   void initState() {
     super.initState();
     final initialState = context.read<SettingsCubit>().state;
+    _progressiveToolPruning = initialState.progressiveToolPruning;
     _baseUrlController = TextEditingController(text: initialState.baseUrl);
     _apiKeyController = TextEditingController(text: initialState.apiKey);
     _modelController = TextEditingController(text: initialState.model);
@@ -128,6 +130,7 @@ class _SettingsViewState extends State<_SettingsView> {
             apiKey: apiKey,
             model: model,
             temperature: temp,
+            progressiveToolPruning: _progressiveToolPruning,
           );
 
       try {
@@ -226,6 +229,11 @@ class _SettingsViewState extends State<_SettingsView> {
                 }
                 if (_temperatureController.text != state.temperature.toString()) {
                   _temperatureController.text = state.temperature.toString();
+                }
+                if (_progressiveToolPruning != state.progressiveToolPruning) {
+                  setState(() {
+                    _progressiveToolPruning = state.progressiveToolPruning;
+                  });
                 }
               }
               if (state is SettingsSuccess) {
@@ -489,6 +497,43 @@ class _SettingsViewState extends State<_SettingsView> {
                         }
                         return null;
                       },
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: surfaceContainer,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: borderSlate),
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: SwitchListTile(
+                          key: const Key(
+                              'settings_progressive_tool_pruning_toggle'),
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 12),
+                          activeThumbColor: tealAccent,
+                          title: const Text(
+                            'Progressive Tool Pruning',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                            ),
+                          ),
+                          subtitle: const Text(
+                            'Send only relevant tool schemas per prompt to save tokens',
+                            style:
+                                TextStyle(color: Colors.white70, fontSize: 12),
+                          ),
+                          value: _progressiveToolPruning,
+                          onChanged: (value) {
+                            setState(() {
+                              _progressiveToolPruning = value;
+                            });
+                          },
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 32),
                     SizedBox(
