@@ -3,8 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/ambient_trigger_settings.dart';
 import 'package:flutter_ai_agent/domain/entities/gateway/gateway_connection_state.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/battery_optimization_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/calendar_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/local_memory_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart';
@@ -12,13 +15,6 @@ import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.d
 import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
 import 'package:flutter_ai_agent/utils/hermes_theme.dart';
 
-/// Tab 3: Pocket Node
-///
-/// Features:
-/// - Ambient triggers (Geofence, Battery, Notifications).
-/// - RPC node status & telemetry (Local port, connected clients, protocol).
-/// - Quick diagnostic and network actions.
-/// - State preservation across tab switches.
 class PocketNodeScreen extends StatefulWidget {
   const PocketNodeScreen({super.key});
 
@@ -31,6 +27,7 @@ class _PocketNodeScreenState extends State<PocketNodeScreen> {
   bool _batteryWatchdogEnabled = true;
   bool _notificationListenerEnabled = true;
   bool _heartbeatEnabled = true;
+  bool _batteryOptimizationExempt = false;
 
   String _endpoint = 'ws://127.0.0.1:8644/rpc';
   String _statusText = 'Node 8644 • Online';
@@ -45,12 +42,115 @@ class _PocketNodeScreenState extends State<PocketNodeScreen> {
   void initState() {
     super.initState();
     _initNodeTelemetry();
+    _loadAmbientTriggerSettings();
+    _checkBatteryOptimization();
   }
 
   @override
   void dispose() {
     _gatewayStateSub?.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadAmbientTriggerSettings() async {
+    if (sl.isRegistered<SecureStorageService>()) {
+      try {
+        final settings =
+            await sl<SecureStorageService>().getAmbientTriggerSettings();
+        if (mounted) {
+          setState(() {
+            _geofenceEnabled = settings.geofenceEnabled;
+            _batteryWatchdogEnabled = settings.batteryWatchdogEnabled;
+            _notificationListenerEnabled = settings.notificationListenerEnabled;
+            _heartbeatEnabled = settings.heartbeatEnabled;
+          });
+        }
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _checkBatteryOptimization() async {
+    if (sl.isRegistered<BatteryOptimizationServiceBase>()) {
+      try {
+        final service = sl<BatteryOptimizationServiceBase>();
+        final res = await service.isBatteryOptimizationDisabled();
+        res.fold(
+          (_) {},
+          (exempt) {
+            if (mounted) {
+              setState(() {
+                _batteryOptimizationExempt = exempt;
+              });
+            }
+          },
+        );
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _onTriggerChanged({
+    bool? geofence,
+    bool? batteryWatchdog,
+    bool? notificationListener,
+    bool? heartbeat,
+  }) async {
+    final newGeofence = geofence ?? _geofenceEnabled;
+    final newBattery = batteryWatchdog ?? _batteryWatchdogEnabled;
+    final newNotification =
+        notificationListener ?? _notificationListenerEnabled;
+    final newHeartbeat = heartbeat ?? _heartbeatEnabled;
+
+    setState(() {
+      _geofenceEnabled = newGeofence;
+      _batteryWatchdogEnabled = newBattery;
+      _notificationListenerEnabled = newNotification;
+      _heartbeatEnabled = newHeartbeat;
+    });
+
+    final settings = AmbientTriggerSettings(
+      geofenceEnabled: newGeofence,
+      batteryWatchdogEnabled: newBattery,
+      notificationListenerEnabled: newNotification,
+      heartbeatEnabled: newHeartbeat,
+    );
+
+    if (sl.isRegistered<SecureStorageService>()) {
+      try {
+        await sl<SecureStorageService>().saveAmbientTriggerSettings(settings);
+      } catch (_) {}
+    }
+
+    if (sl.isRegistered<AmbientTriggerServiceBase>()) {
+      try {
+        final service = sl<AmbientTriggerServiceBase>();
+        if (newGeofence || newBattery) {
+          await service.schedulePeriodicCheck();
+        } else {
+          await service.cancelPeriodicCheck();
+        }
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _handleDisableBatteryOptimization() async {
+    if (sl.isRegistered<BatteryOptimizationServiceBase>()) {
+      try {
+        final service = sl<BatteryOptimizationServiceBase>();
+        await service.requestDisableBatteryOptimization();
+        final res = await service.isBatteryOptimizationDisabled();
+        res.fold(
+          (_) {},
+          (exempt) {
+            if (mounted) {
+              setState(() {
+                _batteryOptimizationExempt = exempt;
+              });
+            }
+          },
+        );
+      } catch (_) {}
+    }
+    _showFeedback('Battery optimization exemption requested.');
   }
 
   Future<void> _initNodeTelemetry() async {
@@ -109,7 +209,8 @@ class _PocketNodeScreenState extends State<PocketNodeScreen> {
     setState(() {
       _latencyText = '$latency ms';
     });
-    _showFeedback('Broadcast ping sent to connected gateway (${latency}ms RTT).');
+    _showFeedback(
+        'Broadcast ping sent to connected gateway (${latency}ms RTT).');
   }
 
   void _handleSelfDiagnostics() {
@@ -121,8 +222,13 @@ class _PocketNodeScreenState extends State<PocketNodeScreen> {
     if (sl.isRegistered<VoiceOutputServiceBase>()) operationalServices++;
     if (sl.isRegistered<NotificationTriageServiceBase>()) operationalServices++;
     if (sl.isRegistered<CalendarServiceBase>()) operationalServices++;
+    if (sl.isRegistered<BatteryOptimizationServiceBase>()) {
+      operationalServices++;
+    }
+    if (sl.isRegistered<AmbientTriggerServiceBase>()) operationalServices++;
     if (operationalServices < 6) operationalServices = 6;
-    _showFeedback('Self diagnostics complete: $operationalServices services operational.');
+    _showFeedback(
+        'Self diagnostics complete: $operationalServices services operational.');
   }
 
   void _showFeedback(String message) {
@@ -186,11 +292,8 @@ class _PocketNodeScreenState extends State<PocketNodeScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
         children: [
-          // RPC Telemetry Card
           _buildTelemetryCard(),
           const SizedBox(height: 16),
-
-          // Ambient Triggers Section
           _buildSectionHeader('Ambient Triggers & Observers', Icons.sensors),
           const SizedBox(height: 8),
           _buildTriggerTile(
@@ -199,7 +302,7 @@ class _PocketNodeScreenState extends State<PocketNodeScreen> {
             title: 'Geofence Monitor',
             subtitle: 'Trigger ReAct actions on entry/exit radius',
             value: _geofenceEnabled,
-            onChanged: (val) => setState(() => _geofenceEnabled = val),
+            onChanged: (val) => _onTriggerChanged(geofence: val),
           ),
           const SizedBox(height: 8),
           _buildTriggerTile(
@@ -208,7 +311,7 @@ class _PocketNodeScreenState extends State<PocketNodeScreen> {
             title: 'Battery Watchdog',
             subtitle: 'Low power auto-throttle (<20%) & charging alerts',
             value: _batteryWatchdogEnabled,
-            onChanged: (val) => setState(() => _batteryWatchdogEnabled = val),
+            onChanged: (val) => _onTriggerChanged(batteryWatchdog: val),
           ),
           const SizedBox(height: 8),
           _buildTriggerTile(
@@ -217,7 +320,8 @@ class _PocketNodeScreenState extends State<PocketNodeScreen> {
             title: 'Notification Listener',
             subtitle: 'Intercept system notifications for autonomous triage',
             value: _notificationListenerEnabled,
-            onChanged: (val) => setState(() => _notificationListenerEnabled = val),
+            onChanged: (val) =>
+                _onTriggerChanged(notificationListener: val),
           ),
           const SizedBox(height: 8),
           _buildTriggerTile(
@@ -226,11 +330,16 @@ class _PocketNodeScreenState extends State<PocketNodeScreen> {
             title: 'Gateway Heartbeat Ping',
             subtitle: 'Periodic 30s liveness keep-alive over WebSocket',
             value: _heartbeatEnabled,
-            onChanged: (val) => setState(() => _heartbeatEnabled = val),
+            onChanged: (val) => _onTriggerChanged(heartbeat: val),
           ),
           const SizedBox(height: 20),
-
-          // Quick Actions Section
+          _buildSectionHeader(
+            'Battery Optimization & Background Keep-Alive',
+            Icons.battery_charging_full_outlined,
+          ),
+          const SizedBox(height: 8),
+          _buildBatteryOptimizationCard(),
+          const SizedBox(height: 20),
           _buildSectionHeader('Node Operations & Quick Actions', Icons.bolt),
           const SizedBox(height: 8),
           Row(
@@ -259,8 +368,92 @@ class _PocketNodeScreenState extends State<PocketNodeScreen> {
             key: const Key('action_flush_events'),
             label: 'Flush Event Buffer',
             icon: Icons.cleaning_services_outlined,
-            onTap: () => _showFeedback('Ambient event buffer cleared (0 pending).'),
+            onTap: () =>
+                _showFeedback('Ambient event buffer cleared (0 pending).'),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBatteryOptimizationCard() {
+    final statusColor = _batteryOptimizationExempt
+        ? HermesColors.emerald
+        : HermesColors.amber;
+    return Container(
+      key: const Key('battery_optimization_card'),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: HermesColors.cardSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: HermesColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Battery Optimization',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: HermesColors.inkPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _batteryOptimizationExempt
+                          ? 'Background execution unrestricted by Android Doze'
+                          : 'Background ambient triggers may be throttled by Android Doze',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: HermesColors.inkMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                key: _batteryOptimizationExempt
+                    ? const Key('battery_opt_status_exempt')
+                    : const Key('battery_opt_status_restricted'),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: HermesColors.deepObsidian,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: statusColor),
+                ),
+                child: Text(
+                  _batteryOptimizationExempt
+                      ? 'Unrestricted'
+                      : 'Optimized (Restricted)',
+                  style: HermesTypography.statusPill(
+                    color: statusColor,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (!_batteryOptimizationExempt) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: _buildActionButton(
+                key: const Key('action_disable_battery_opt'),
+                label: 'Disable Optimization',
+                icon: Icons.battery_alert_outlined,
+                onTap: _handleDisableBatteryOptimization,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -297,7 +490,8 @@ class _PocketNodeScreenState extends State<PocketNodeScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.router_outlined, size: 20, color: HermesColors.electricTeal),
+              const Icon(Icons.router_outlined,
+                  size: 20, color: HermesColors.electricTeal),
               const SizedBox(width: 8),
               Text(
                 'RPC Node Telemetry',
@@ -432,9 +626,11 @@ class _PocketNodeScreenState extends State<PocketNodeScreen> {
       icon: Icon(icon, size: 16, color: HermesColors.electricTeal),
       label: Text(
         label,
-        style: HermesTypography.monospace(fontSize: 11, fontWeight: FontWeight.w500),
+        style: HermesTypography.monospace(
+            fontSize: 11, fontWeight: FontWeight.w500),
       ),
       onPressed: onTap,
     );
   }
 }
+
