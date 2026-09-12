@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:dartz/dartz.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/domain/entities/gateway/gateway_connection_state.dart';
 import 'package:flutter_ai_agent/domain/entities/gateway/gateway_message.dart';
+import 'package:flutter_ai_agent/domain/models/chat/tool_call_request.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/security_policy.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_rpc_cubit.dart';
@@ -20,6 +22,9 @@ void main() {
   setUpAll(() {
     registerFallbackValue(
       const GatewayToolCallRequestMessage(id: 'fb', tool: 'fb'),
+    );
+    registerFallbackValue(
+      (ToolCallRequest request) async => true,
     );
   });
 
@@ -377,6 +382,225 @@ void main() {
             result: null,
             error: 'Action schedule_reminder was rejected by user.',
           )).called(1);
+    });
+  });
+
+  group('GatewayRpcCubit - Connection State Reconciliation', () {
+    test(
+        'syncWithConnectionState keeps listening for connected/connecting/'
+        'reconnecting and startListening stays idempotent', () {
+      cubit = GatewayRpcCubit(
+        gatewayClient: mockGatewayClient,
+        toolRegistry: mockToolRegistry,
+        autoStart: false,
+      );
+
+      for (final state in [
+        GatewayConnectionState.connecting,
+        GatewayConnectionState.connected,
+        GatewayConnectionState.reconnecting,
+      ]) {
+        cubit.syncWithConnectionState(state);
+        expect(cubit.isListening, isTrue, reason: 'expected listening: $state');
+      }
+
+      // Idempotent: a single stream subscription across all live states.
+      verify(() => mockGatewayClient.toolCallRequestStream).called(1);
+    });
+
+    test('syncWithConnectionState stops listening when disconnected', () {
+      cubit = GatewayRpcCubit(
+        gatewayClient: mockGatewayClient,
+        toolRegistry: mockToolRegistry,
+      );
+
+      expect(cubit.isListening, isTrue);
+
+      cubit.syncWithConnectionState(GatewayConnectionState.disconnected);
+
+      expect(cubit.isListening, isFalse);
+    });
+
+    test(
+        'request delivered while reconnecting is executed once and gets a '
+        'single response (drop-free, no double execution)', () async {
+      final tool = RegisteredTool(
+        name: 'device_status',
+        description: 'Battery & network status',
+        parameters: const {'type': 'object', 'properties': {}},
+        securityTier: SecurityTier.tier1Auto,
+        execute: (_) async => const Right('{"batteryLevel": 42}'),
+      );
+
+      when(() => mockToolRegistry.getTool('device_status')).thenReturn(tool);
+      when(() => mockToolRegistry.executeTool('device_status', any()))
+          .thenAnswer((_) async => const Right('{"batteryLevel": 42}'));
+
+      cubit = GatewayRpcCubit(
+        gatewayClient: mockGatewayClient,
+        toolRegistry: mockToolRegistry,
+      );
+
+      cubit.syncWithConnectionState(GatewayConnectionState.reconnecting);
+      expect(cubit.isListening, isTrue);
+
+      const request = GatewayToolCallRequestMessage(
+        id: 'call_racing_reconnect',
+        tool: 'device_status',
+        arguments: {},
+      );
+
+      toolRequestController.add(request);
+      await pumpEventQueue();
+
+      verify(() => mockGatewayClient.sendToolCallResponse(
+            callId: 'call_racing_reconnect',
+            result: {'batteryLevel': 42},
+            error: null,
+          )).called(1);
+    });
+
+    test(
+        'never starts the injected receiver and keeps routing via '
+        'handleRequest (single consumer regression guard)', () async {
+      final mockReceiver = MockGatewayDeviceRpcReceiver();
+
+      when(() => mockReceiver.handleRequest(
+            any(),
+            onApprovalRequired: any(named: 'onApprovalRequired'),
+          )).thenAnswer(
+        (_) async => const GatewayToolCallResponseMessage(
+          id: 'call_single_consumer',
+          result: {'ok': true},
+          error: null,
+        ),
+      );
+
+      cubit = GatewayRpcCubit(
+        gatewayClient: mockGatewayClient,
+        toolRegistry: mockToolRegistry,
+        rpcReceiver: mockReceiver,
+      );
+
+      const request = GatewayToolCallRequestMessage(
+        id: 'call_single_consumer',
+        tool: 'device_status',
+        arguments: {},
+      );
+
+      toolRequestController.add(request);
+      await pumpEventQueue();
+
+      verify(() => mockReceiver.handleRequest(
+            any(),
+            onApprovalRequired: any(named: 'onApprovalRequired'),
+          )).called(1);
+      verifyNever(() => mockReceiver.startListening());
+      // The receiver owns the response frame; a second send here would mean a
+      // duplicated subscription / double execution.
+      verifyNever(() => mockGatewayClient.sendToolCallResponse(
+            callId: any(named: 'callId'),
+            result: any(named: 'result'),
+            error: any(named: 'error'),
+          ));
+    });
+  });
+
+  group('Manifest / route name parity', () {
+    late ToolRegistry realRegistry;
+    late MockClipboardService mockClipboardService;
+    late MockLocationService mockLocationService;
+    late MockDeviceContextService mockDeviceContextService;
+
+    setUp(() {
+      mockClipboardService = MockClipboardService();
+      mockLocationService = MockLocationService();
+      mockDeviceContextService = MockDeviceContextService();
+
+      when(() => mockClipboardService.clipboardRead())
+          .thenAnswer((_) async => const Right('clip'));
+      when(() => mockClipboardService.clipboardWrite(any()))
+          .thenAnswer((_) async => const Right('ok'));
+      when(() => mockLocationService.getLocationFormattedJson(
+            accuracy: any(named: 'accuracy'),
+          )).thenAnswer((_) async => const Right('{"latitude": 1.0}'));
+      when(() => mockLocationService.checkPermission())
+          .thenAnswer((_) async => true);
+      when(() => mockDeviceContextService.deviceStatusFormattedJson())
+          .thenAnswer((_) async => const Right('{"batteryLevel": 100}'));
+      when(() => mockDeviceContextService.systemInfoFormattedJson())
+          .thenAnswer((_) async => const Right('{"model": "test"}'));
+
+      realRegistry = ToolRegistry(
+        clipboardService: mockClipboardService,
+        locationService: mockLocationService,
+        deviceContextService: mockDeviceContextService,
+      );
+    });
+
+    Set<String> advertisedNames() => realRegistry
+        .getOpenAiToolDefinitions()
+        .map((definition) =>
+            (definition['function'] as Map<String, dynamic>)['name'] as String)
+        .toSet();
+
+    test('advertises registry names verbatim with no prefix logic', () {
+      final names = advertisedNames();
+
+      expect(names, isNotEmpty);
+
+      // A `device_`-prefixed name is only advertised if the registry literally
+      // registered it that way: the app never prepends a prefix.
+      for (final name in names) {
+        if (name.startsWith('device_')) {
+          expect(realRegistry.hasTool(name), isTrue);
+        }
+      }
+
+      final registryNames = realRegistry.tools.map((tool) => tool.name).toSet();
+      expect(names, equals(registryNames));
+    });
+
+    test('every advertised name resolves through the cubit without not-found',
+        () async {
+      final names = advertisedNames();
+      expect(names, isNotEmpty);
+
+      cubit = GatewayRpcCubit(
+        gatewayClient: mockGatewayClient,
+        toolRegistry: realRegistry,
+      );
+
+      // Auto-approve any Tier 3 HITL gate so every advertised name reaches the
+      // registry and produces a response frame.
+      final approvalSub = cubit.stream.listen((state) {
+        if (state is GatewayRpcWaitingApproval) {
+          cubit.approveAction(state.request.id);
+        }
+      });
+
+      for (final name in names) {
+        toolRequestController.add(
+          GatewayToolCallRequestMessage(id: 'parity_$name', tool: name),
+        );
+        await pumpEventQueue();
+
+        final captured =
+            verify(() => mockGatewayClient.sendToolCallResponse(
+                  callId: 'parity_$name',
+                  result: any(named: 'result'),
+                  error: captureAny(named: 'error'),
+                )).captured;
+
+        expect(captured, hasLength(1));
+        expect(
+          captured.single,
+          isNot('Tool not found: $name'),
+          reason: 'manifest name "$name" must resolve to a registered tool',
+        );
+      }
+
+      await approvalSub.cancel();
     });
   });
 }

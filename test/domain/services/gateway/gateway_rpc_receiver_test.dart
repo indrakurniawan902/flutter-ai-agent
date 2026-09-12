@@ -160,6 +160,30 @@ void main() {
           )).called(1);
     });
 
+    test(
+        'handleRequest returns a structured not-found error and does not throw',
+        () async {
+      when(() => mockToolRegistry.getTool('ghost_tool')).thenReturn(null);
+
+      final response = await receiver.handleRequest(
+        const GatewayToolCallRequestMessage(
+          id: 'req_ghost',
+          tool: 'ghost_tool',
+        ),
+      );
+
+      expect(response.result, isNull);
+      expect(response.error, isA<String>());
+      expect(response.error, isNotEmpty);
+      expect(response.error, contains('ghost_tool'));
+
+      verify(() => mockGatewayClient.sendToolCallResponse(
+            callId: 'req_ghost',
+            result: null,
+            error: response.error,
+          )).called(1);
+    });
+
     test('returns error when tool execution fails with Failure', () async {
       final tool = RegisteredTool(
         name: 'get_location',

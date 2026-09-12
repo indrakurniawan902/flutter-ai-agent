@@ -4,6 +4,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:injectable/injectable.dart';
 
+import 'package:flutter_ai_agent/domain/entities/gateway/gateway_connection_state.dart';
 import 'package:flutter_ai_agent/domain/entities/gateway/gateway_message.dart';
 import 'package:flutter_ai_agent/domain/models/chat/tool_call_request.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
@@ -13,6 +14,12 @@ import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 part 'gateway_rpc_state.dart';
 
 /// Cubit managing bidirectional hardware tool RPC dispatch from remote Hermes gateway.
+///
+/// This cubit is the single consumer of [GatewayClientBase.toolCallRequestStream].
+/// It routes every request through [GatewayRpcReceiverBase.handleRequest] itself and
+/// must never call `startListening()` on the injected receiver: a second subscription
+/// on the same broadcast stream would execute each tool call twice and send two
+/// responses. The receiver handed to this cubit is therefore left unsubscribed.
 @injectable
 class GatewayRpcCubit extends Cubit<GatewayRpcState> {
   final GatewayClientBase _gatewayClient;
@@ -78,6 +85,17 @@ class GatewayRpcCubit extends Cubit<GatewayRpcState> {
   void stopListening() {
     _requestSubscription?.cancel();
     _requestSubscription = null;
+  }
+
+  /// Aligns the RPC listener with the gateway connection lifecycle: listening
+  /// whenever the link is live (connected/connecting/reconnecting) and stopped
+  /// only when it is fully disconnected.
+  void syncWithConnectionState(GatewayConnectionState state) {
+    if (state.isDisconnected) {
+      stopListening();
+    } else {
+      startListening();
+    }
   }
 
   /// Handles incoming tool call request frame from gateway.
