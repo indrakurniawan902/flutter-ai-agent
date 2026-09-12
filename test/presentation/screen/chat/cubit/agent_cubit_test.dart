@@ -10,6 +10,7 @@ import 'package:flutter_ai_agent/domain/tools/chat/security_policy.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 import 'package:flutter_ai_agent/domain/entities/skills/skill.dart';
 import 'package:flutter_ai_agent/domain/services/skills/skills_registry_service.dart';
+import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -69,6 +70,7 @@ void main() {
             messages: any(named: 'messages'),
             tools: any(named: 'tools'),
             apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
           )).thenAnswer((invocation) async {
         final messages = invocation.namedArguments[#messages] as List<Map<String, dynamic>>;
         // If this is Turn 1 (only user message)
@@ -150,6 +152,7 @@ void main() {
             messages: any(named: 'messages'),
             tools: any(named: 'tools'),
             apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
           )).thenAnswer((_) async {
         return Right(Stream.fromIterable([
           const ChatChunk(
@@ -201,6 +204,7 @@ void main() {
             messages: any(named: 'messages'),
             tools: any(named: 'tools'),
             apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
           )).thenAnswer((_) async {
         turnCount++;
         if (turnCount == 1) {
@@ -258,6 +262,7 @@ void main() {
             messages: any(named: 'messages'),
             tools: any(named: 'tools'),
             apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
           )).thenAnswer((_) async {
         turnCount++;
         if (turnCount == 1) {
@@ -304,6 +309,7 @@ void main() {
             messages: any(named: 'messages'),
             tools: any(named: 'tools'),
             apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
           )).thenAnswer((_) async => const Left(ConnectionFailure('Network error')));
 
       await cubit.sendMessage('Hello');
@@ -321,6 +327,7 @@ void main() {
             messages: any(named: 'messages'),
             tools: any(named: 'tools'),
             apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
           )).thenAnswer((_) async => Right(errorStream));
 
       await cubit.sendMessage('Hello');
@@ -367,6 +374,7 @@ void main() {
             messages: any(named: 'messages'),
             tools: any(named: 'tools'),
             apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
           )).thenAnswer((_) async {
         turn++;
         if (turn == 1) {
@@ -437,6 +445,7 @@ void main() {
             messages: any(named: 'messages'),
             tools: any(named: 'tools'),
             apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
           )).thenAnswer((_) async {
         return Right(Stream.fromIterable([
           const ChatChunk(
@@ -465,6 +474,7 @@ void main() {
             messages: any(named: 'messages'),
             tools: any(named: 'tools'),
             apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
           )).called(1);
 
       final toolMessages =
@@ -495,6 +505,7 @@ void main() {
             messages: any(named: 'messages'),
             tools: any(named: 'tools'),
             apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
           )).thenAnswer((_) async {
         return Right(Stream.fromIterable([
           const ChatChunk(
@@ -526,6 +537,7 @@ void main() {
             messages: any(named: 'messages'),
             tools: any(named: 'tools'),
             apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
           )).called(1);
     });
 
@@ -537,6 +549,7 @@ void main() {
             messages: any(named: 'messages'),
             tools: any(named: 'tools'),
             apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
           )).thenAnswer((_) async {
         return Right(Stream.fromIterable([
           const ChatChunk(
@@ -566,6 +579,7 @@ void main() {
             messages: any(named: 'messages'),
             tools: any(named: 'tools'),
             apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
           )).thenAnswer((_) async => Right(controller.stream));
 
       final sendFuture = cubit.sendMessage('Hello streaming');
@@ -604,6 +618,7 @@ void main() {
             messages: any(named: 'messages'),
             tools: any(named: 'tools'),
             apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
           )).thenAnswer((_) async => Right(controller.stream));
 
       final sendFuture = cubit.sendMessage('Hello cancel');
@@ -671,6 +686,7 @@ void main() {
             messages: any(named: 'messages'),
             tools: any(named: 'tools'),
             apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
           )).thenAnswer((_) async {
         llmCalls++;
         if (llmCalls == 1) {
@@ -746,6 +762,7 @@ void main() {
             messages: any(named: 'messages'),
             tools: any(named: 'tools'),
             apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
           )).thenAnswer((_) async {
         llmCalls++;
         if (llmCalls == 1) {
@@ -818,6 +835,7 @@ void main() {
             messages: any(named: 'messages'),
             tools: any(named: 'tools'),
             apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
           )).thenAnswer((_) {
         calls++;
         if (calls == 1) return parked.future;
@@ -897,6 +915,7 @@ void main() {
             messages: any(named: 'messages'),
             tools: any(named: 'tools'),
             apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
           )).thenAnswer((_) async {
         llmCalls++;
         if (llmCalls == 1) {
@@ -998,6 +1017,7 @@ void main() {
             messages: any(named: 'messages'),
             tools: any(named: 'tools'),
             apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
           )).thenAnswer((inv) async {
         capturedMessages =
             inv.namedArguments[#messages] as List<Map<String, dynamic>>;
@@ -1047,6 +1067,7 @@ void main() {
             messages: any(named: 'messages'),
             tools: any(named: 'tools'),
             apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
           )).thenAnswer((_) async => Right(Stream.fromIterable([
             const ChatChunk(
               toolCallDeltas: [
@@ -1070,6 +1091,83 @@ void main() {
       expect(toolMessage.content, contains('disabled by skill policy'));
 
       await disabledCubit.close();
+    });
+  });
+
+  group('AgentCubit Temperature Sync', () {
+    late MockSecureStorageService mockSecureStorageService;
+
+    setUp(() {
+      mockSecureStorageService = MockSecureStorageService();
+      when(() => mockSecureStorageService.getSettings()).thenAnswer(
+        (_) async => const SettingsData(
+          baseUrl: 'https://x/v1',
+          apiKey: 'k',
+          model: 'm-2',
+          temperature: 0.3,
+        ),
+      );
+    });
+
+    test('refreshSettings reads model and temperature from secure storage',
+        () async {
+      final syncCubit = AgentCubit(
+        llmRepository: mockLlmRepository,
+        secureStorageService: mockSecureStorageService,
+      );
+
+      await syncCubit.refreshSettings();
+
+      expect(syncCubit.model, equals('m-2'));
+      expect(syncCubit.temperature, equals(0.3));
+
+      await syncCubit.close();
+    });
+
+    test('switchProfile refreshes settings before loading history', () async {
+      final syncCubit = AgentCubit(
+        llmRepository: mockLlmRepository,
+        secureStorageService: mockSecureStorageService,
+      );
+
+      await syncCubit.switchProfile('profile-2');
+
+      expect(syncCubit.activeProfileId, equals('profile-2'));
+      expect(syncCubit.model, equals('m-2'));
+      expect(syncCubit.temperature, equals(0.3));
+
+      await syncCubit.close();
+    });
+
+    test('sendMessage passes temperature to llm repository', () async {
+      when(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: any(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
+          )).thenAnswer((_) async => Right(Stream.fromIterable([
+            const ChatChunk(contentDelta: 'ok', finishReason: 'stop'),
+          ])));
+
+      final syncCubit = AgentCubit(
+        llmRepository: mockLlmRepository,
+        temperature: 0.9,
+      );
+
+      await syncCubit.sendMessage('hi');
+
+      verify(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: any(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+            temperature: 0.9,
+          )).called(1);
+
+      await syncCubit.close();
     });
   });
 }

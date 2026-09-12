@@ -1,5 +1,6 @@
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_ai_agent/common/constant.dart';
 import 'package:flutter_ai_agent/utils/app_theme.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_cubit.dart';
@@ -52,6 +53,12 @@ void main() {
     );
     when(() => mockSettingsCubit.updateFromProfile(any()))
         .thenAnswer((_) {});
+    when(() => mockServerProfileCubit.updateActiveProfile(
+          gatewayUrl: any(named: 'gatewayUrl'),
+          token: any(named: 'token'),
+          model: any(named: 'model'),
+          temperature: any(named: 'temperature'),
+        )).thenAnswer((_) async {});
   });
 
   Widget buildTestWidget({
@@ -346,6 +353,8 @@ void main() {
             gatewayUrl: 'http://localhost:8080',
             token: 'sk-local',
             makeActive: true,
+            model: any(named: 'model'),
+            temperature: any(named: 'temperature'),
           )).thenAnswer((_) async {});
 
       await tester.pumpWidget(buildTestWidget());
@@ -371,6 +380,8 @@ void main() {
             gatewayUrl: 'http://localhost:8080',
             token: 'sk-local',
             makeActive: true,
+            model: any(named: 'model'),
+            temperature: any(named: 'temperature'),
           )).called(1);
     });
 
@@ -492,6 +503,8 @@ void main() {
             gatewayUrl: any(named: 'gatewayUrl'),
             token: any(named: 'token'),
             makeActive: any(named: 'makeActive'),
+            model: any(named: 'model'),
+            temperature: any(named: 'temperature'),
           ));
     });
 
@@ -534,6 +547,8 @@ void main() {
             gatewayUrl: any(named: 'gatewayUrl'),
             token: any(named: 'token'),
             makeActive: any(named: 'makeActive'),
+            model: any(named: 'model'),
+            temperature: any(named: 'temperature'),
           ));
     });
 
@@ -596,6 +611,146 @@ void main() {
       expect(apiKeyField.controller?.text, 'sk-custom-token');
 
       verify(() => mockSettingsCubit.updateFromProfile(customProfile)).called(1);
+    });
+  });
+
+  group('SettingsScreen - Add Profile Model & Temperature', () {
+    testWidgets('add profile dialog renders model and temperature fields with defaults', (tester) async {
+      when(() => mockSettingsCubit.state).thenReturn(
+        const SettingsLoaded(
+          baseUrl: 'https://indra-9router.my.id/v1',
+          apiKey: 'test-api-key',
+          model: 'ag-glm',
+          temperature: 0.7,
+        ),
+      );
+      when(() => mockServerProfileCubit.state).thenReturn(
+        const ServerProfileLoaded(profiles: [], activeProfile: null),
+      );
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('settings_add_profile_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('add_profile_model_field')), findsOneWidget);
+      expect(
+        find.byKey(const Key('add_profile_temperature_field')),
+        findsOneWidget,
+      );
+
+      final modelField = tester.widget<TextFormField>(
+        find.byKey(const Key('add_profile_model_field')),
+      );
+      expect(modelField.controller?.text, AppConstants.defaultModel);
+
+      final tempField = tester.widget<TextFormField>(
+        find.byKey(const Key('add_profile_temperature_field')),
+      );
+      expect(
+        tempField.controller?.text,
+        AppConstants.defaultTemperature.toString(),
+      );
+    });
+
+    testWidgets('submitting add profile dialog forwards model and temperature to addProfile', (tester) async {
+      when(() => mockSettingsCubit.state).thenReturn(
+        const SettingsLoaded(
+          baseUrl: 'https://indra-9router.my.id/v1',
+          apiKey: 'test-api-key',
+          model: 'ag-glm',
+          temperature: 0.7,
+        ),
+      );
+      when(() => mockServerProfileCubit.state).thenReturn(
+        const ServerProfileLoaded(profiles: [], activeProfile: null),
+      );
+      when(() => mockServerProfileCubit.addProfile(
+            name: 'Custom Dev',
+            gatewayUrl: 'http://localhost:8080',
+            token: 'sk-custom',
+            makeActive: true,
+            model: 'gpt-4o-mini',
+            temperature: 0.3,
+          )).thenAnswer((_) async {});
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('settings_add_profile_button')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('add_profile_name_field')),
+        'Custom Dev',
+      );
+      await tester.enterText(
+        find.byKey(const Key('add_profile_url_field')),
+        'http://localhost:8080',
+      );
+      await tester.enterText(
+        find.byKey(const Key('add_profile_token_field')),
+        'sk-custom',
+      );
+      await tester.enterText(
+        find.byKey(const Key('add_profile_model_field')),
+        'gpt-4o-mini',
+      );
+      await tester.enterText(
+        find.byKey(const Key('add_profile_temperature_field')),
+        '0.3',
+      );
+
+      await tester.tap(find.byKey(const Key('add_profile_submit_button')));
+      await tester.pumpAndSettle();
+
+      verify(() => mockServerProfileCubit.addProfile(
+            name: 'Custom Dev',
+            gatewayUrl: 'http://localhost:8080',
+            token: 'sk-custom',
+            makeActive: true,
+            model: 'gpt-4o-mini',
+            temperature: 0.3,
+          )).called(1);
+    });
+
+    testWidgets('saving settings also updates the active server profile', (tester) async {
+      when(() => mockSettingsCubit.state).thenReturn(
+        const SettingsLoaded(
+          baseUrl: 'https://indra-9router.my.id/v1',
+          apiKey: 'sk-valid-key',
+          model: 'ag-glm',
+          temperature: 0.7,
+        ),
+      );
+      when(() => mockSettingsCubit.saveSettings(
+            baseUrl: any(named: 'baseUrl'),
+            apiKey: any(named: 'apiKey'),
+            model: any(named: 'model'),
+            temperature: any(named: 'temperature'),
+          )).thenAnswer((_) async => true);
+      when(() => mockServerProfileCubit.updateActiveProfile(
+            gatewayUrl: 'https://indra-9router.my.id/v1',
+            token: 'sk-valid-key',
+            model: 'ag-glm',
+            temperature: 0.7,
+          )).thenAnswer((_) async {});
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      final saveButton = find.byKey(const Key('settings_save_button'));
+      await tester.ensureVisible(saveButton);
+      await tester.tap(saveButton);
+      await tester.pumpAndSettle();
+
+      verify(() => mockServerProfileCubit.updateActiveProfile(
+            gatewayUrl: 'https://indra-9router.my.id/v1',
+            token: 'sk-valid-key',
+            model: 'ag-glm',
+            temperature: 0.7,
+          )).called(1);
     });
   });
 }

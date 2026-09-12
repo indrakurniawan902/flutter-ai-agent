@@ -153,6 +153,7 @@ void main() {
               messages: any(named: 'messages'),
               tools: any(named: 'tools'),
               apiKey: any(named: 'apiKey'),
+              temperature: any(named: 'temperature'),
             )).thenAnswer((invocation) async {
           final messages =
               invocation.namedArguments[#messages] as List<Map<String, dynamic>>;
@@ -267,6 +268,7 @@ void main() {
               messages: any(named: 'messages'),
               tools: any(named: 'tools'),
               apiKey: any(named: 'apiKey'),
+              temperature: any(named: 'temperature'),
             )).thenAnswer((invocation) async {
           final messages =
               invocation.namedArguments[#messages] as List<Map<String, dynamic>>;
@@ -357,6 +359,7 @@ void main() {
               messages: any(named: 'messages'),
               tools: any(named: 'tools'),
               apiKey: any(named: 'apiKey'),
+              temperature: any(named: 'temperature'),
             )).thenAnswer((invocation) async {
           final messages =
               invocation.namedArguments[#messages] as List<Map<String, dynamic>>;
@@ -516,6 +519,7 @@ void main() {
               messages: any(named: 'messages'),
               tools: any(named: 'tools'),
               apiKey: any(named: 'apiKey'),
+              temperature: any(named: 'temperature'),
             )).thenAnswer((_) async {
           turn++;
           if (turn == 1) {

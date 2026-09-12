@@ -196,7 +196,7 @@ void main() {
       result.fold(
         (failure) {
           expect(failure, isA<ServerFailure>());
-          expect(failure.message, contains('Cannot launch WhatsApp'));
+          expect(failure.message, contains('No app available to handle WhatsApp'));
         },
         (_) => fail('Expected Left but got Right'),
       );

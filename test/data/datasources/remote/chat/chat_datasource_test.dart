@@ -158,5 +158,46 @@ void main() {
       expect(body['tools'], isNotNull);
       expect(body['stream'], isTrue);
     });
+
+    test('sends temperature in request body when provided', () async {
+      stubDioPost(fakeStreamResponse(['data: [DONE]']));
+
+      await datasource.streamCompletion(
+        baseUrl: baseUrl,
+        model: model,
+        messages: messages,
+        temperature: 0.7,
+      );
+
+      final captured = verify(() => mockDio.post<ResponseBody>(
+            any(),
+            data: captureAny(named: 'data'),
+            options: any(named: 'options'),
+          )).captured;
+
+      final body = jsonDecode(captured.first as String) as Map<String, dynamic>;
+      expect(body['temperature'], 0.7);
+      expect(body['stream'], isTrue);
+    });
+
+    test('omits temperature in request body when null', () async {
+      stubDioPost(fakeStreamResponse(['data: [DONE]']));
+
+      await datasource.streamCompletion(
+        baseUrl: baseUrl,
+        model: model,
+        messages: messages,
+        temperature: null,
+      );
+
+      final captured = verify(() => mockDio.post<ResponseBody>(
+            any(),
+            data: captureAny(named: 'data'),
+            options: any(named: 'options'),
+          )).captured;
+
+      final body = jsonDecode(captured.first as String) as Map<String, dynamic>;
+      expect(body.containsKey('temperature'), isFalse);
+    });
   });
 }

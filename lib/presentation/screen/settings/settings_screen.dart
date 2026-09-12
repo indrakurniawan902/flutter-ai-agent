@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_ai_agent/common/constant.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
@@ -115,15 +116,29 @@ class _SettingsViewState extends State<_SettingsView> {
     super.dispose();
   }
 
-  void _onSave() {
+  Future<void> _onSave() async {
     if (_formKey.currentState?.validate() ?? false) {
       final temp = double.tryParse(_temperatureController.text.trim()) ?? 0.7;
+      final baseUrl = _baseUrlController.text.trim();
+      final apiKey = _apiKeyController.text.trim();
+      final model = _modelController.text.trim();
+
       context.read<SettingsCubit>().saveSettings(
-            baseUrl: _baseUrlController.text.trim(),
-            apiKey: _apiKeyController.text.trim(),
-            model: _modelController.text.trim(),
+            baseUrl: baseUrl,
+            apiKey: apiKey,
+            model: model,
             temperature: temp,
           );
+
+      try {
+        final serverProfileCubit = context.read<ServerProfileCubit>();
+        await serverProfileCubit.updateActiveProfile(
+          gatewayUrl: baseUrl,
+          token: apiKey,
+          model: model,
+          temperature: temp.clamp(0.0, 2.0),
+        );
+      } catch (_) {}
     }
   }
 
@@ -487,7 +502,7 @@ class _SettingsViewState extends State<_SettingsView> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        onPressed: isSaving ? null : _onSave,
+                        onPressed: isSaving ? null : () => _onSave(),
                         child: isSaving
                             ? const SizedBox(
                                 width: 20,
@@ -647,6 +662,8 @@ class _AddProfileDialogState extends State<_AddProfileDialog> {
   late final TextEditingController _nameController;
   late final TextEditingController _urlController;
   late final TextEditingController _tokenController;
+  late final TextEditingController _modelController;
+  late final TextEditingController _temperatureController;
 
   @override
   void initState() {
@@ -654,6 +671,10 @@ class _AddProfileDialogState extends State<_AddProfileDialog> {
     _nameController = TextEditingController();
     _urlController = TextEditingController();
     _tokenController = TextEditingController();
+    _modelController = TextEditingController(text: AppConstants.defaultModel);
+    _temperatureController = TextEditingController(
+      text: AppConstants.defaultTemperature.toString(),
+    );
   }
 
   @override
@@ -661,6 +682,8 @@ class _AddProfileDialogState extends State<_AddProfileDialog> {
     _nameController.dispose();
     _urlController.dispose();
     _tokenController.dispose();
+    _modelController.dispose();
+    _temperatureController.dispose();
     super.dispose();
   }
 
@@ -727,6 +750,39 @@ class _AddProfileDialogState extends State<_AddProfileDialog> {
                 validator: (v) =>
                     (v?.trim().isEmpty ?? true) ? 'Token cannot be empty' : null,
               ),
+              const SizedBox(height: 12),
+              TextFormField(
+                key: const Key('add_profile_model_field'),
+                controller: _modelController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Model Name',
+                  hintText: 'ag-glm',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) =>
+                    (v?.trim().isEmpty ?? true) ? 'Model cannot be empty' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                key: const Key('add_profile_temperature_field'),
+                controller: _temperatureController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Temperature',
+                  hintText: '0.7',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) {
+                  final d = double.tryParse(v?.trim() ?? '');
+                  if (d == null || d < 0.0 || d > 2.0) {
+                    return 'Temperature must be between 0.0 and 2.0';
+                  }
+                  return null;
+                },
+              ),
             ],
           ),
         ),
@@ -744,11 +800,15 @@ class _AddProfileDialogState extends State<_AddProfileDialog> {
           ),
           onPressed: () {
             if (_dialogFormKey.currentState?.validate() ?? false) {
+              final temp =
+                  double.tryParse(_temperatureController.text.trim()) ?? 0.7;
               context.read<ServerProfileCubit>().addProfile(
                     name: _nameController.text.trim(),
                     gatewayUrl: _urlController.text.trim(),
                     token: _tokenController.text.trim(),
                     makeActive: true,
+                    model: _modelController.text.trim(),
+                    temperature: temp.clamp(0.0, 2.0),
                   );
               Navigator.of(context).pop();
             }

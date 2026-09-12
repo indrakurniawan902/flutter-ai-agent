@@ -130,7 +130,11 @@ class ContactLauncherTools {
       final uri = Uri.parse(urlString);
       final canLaunch = await _urlLauncherProvider.canLaunchUrl(uri);
       if (!canLaunch) {
-        return Left(ServerFailure('Cannot launch WhatsApp for $phone'));
+        return const Left(
+          ServerFailure(
+            'No app available to handle WhatsApp on this device',
+          ),
+        );
       }
       final launched = await _urlLauncherProvider.launchUrl(
         uri,
