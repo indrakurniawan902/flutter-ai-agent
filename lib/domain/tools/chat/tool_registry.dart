@@ -4,12 +4,17 @@ import 'package:dartz/dartz.dart';
 import 'package:injectable/injectable.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/ambient_event.dart';
+import 'ambient_trigger_service.dart';
 import 'calendar_service.dart';
 import 'camera_vision_service.dart';
 import 'clipboard_service.dart';
 import 'device_context_service.dart';
+import 'file_workspace_service.dart';
+import 'local_memory_service.dart';
 import 'location_service.dart';
 import 'notification_service.dart';
+import 'notification_triage_service.dart';
 import 'security_policy.dart';
 
 typedef ToolExecutor = Future<Either<Failure, String>> Function(
@@ -370,6 +375,298 @@ class ToolRegistry {
           );
           return res.map((_) =>
               'Reminder scheduled successfully for "$title" in $delay minutes.');
+        },
+      ),
+    );
+  }
+
+  void registerFileWorkspaceTools(FileWorkspaceServiceBase service) {
+    register(
+      RegisteredTool(
+        name: 'read_device_file',
+        description: 'Reads a text file from the device workspace.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'path': {
+              'type': 'string',
+              'description': 'Absolute file path to read',
+            },
+            'maxLines': {
+              'type': 'integer',
+              'description': 'Maximum lines to read',
+            },
+            'offset': {
+              'type': 'integer',
+              'description': 'Line offset to start reading from',
+            },
+          },
+          'required': ['path'],
+        },
+        securityTier: SecurityTier.tier2Permission,
+        checkPermission: () => service.checkPermission(),
+        execute: (args) => service.readFile(
+          args['path']?.toString() ?? '',
+          maxLines: (args['maxLines'] as num?)?.toInt(),
+          offset: (args['offset'] as num?)?.toInt(),
+        ),
+      ),
+    );
+    register(
+      RegisteredTool(
+        name: 'list_device_files',
+        description: 'Lists files in a device workspace directory.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'directoryPath': {
+              'type': 'string',
+              'description': 'Directory path to list',
+            },
+            'recursive': {
+              'type': 'boolean',
+              'description': 'List recursively',
+            },
+          },
+          'required': ['directoryPath'],
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) => service.listFilesFormattedJson(
+          args['directoryPath']?.toString() ?? '',
+          recursive: args['recursive'] as bool? ?? false,
+        ),
+      ),
+    );
+  }
+
+  void registerNotificationTriageTools(NotificationTriageServiceBase service) {
+    register(
+      RegisteredTool(
+        name: 'read_recent_notifications',
+        description: 'Reads recent device notifications.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'limit': {
+              'type': 'integer',
+              'description': 'Maximum notifications to return',
+            },
+            'appFilter': {
+              'type': 'string',
+              'description': 'Filter by package or app name',
+            },
+          },
+        },
+        securityTier: SecurityTier.tier2Permission,
+        checkPermission: () => service.checkPermission(),
+        execute: (args) => service.readRecentNotificationsFormattedJson(
+          limit: (args['limit'] as num?)?.toInt() ?? 20,
+          appFilter: args['appFilter']?.toString(),
+        ),
+      ),
+    );
+    register(
+      RegisteredTool(
+        name: 'extract_latest_otp',
+        description: 'Extracts the latest OTP code from notifications.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'appFilter': {
+              'type': 'string',
+              'description': 'Filter by package or app name',
+            },
+            'limit': {
+              'type': 'integer',
+              'description': 'Notifications to scan',
+            },
+          },
+        },
+        securityTier: SecurityTier.tier2Permission,
+        checkPermission: () => service.checkPermission(),
+        execute: (args) => service.extractLatestOtpFormattedJson(
+          appFilter: args['appFilter']?.toString(),
+          limit: (args['limit'] as num?)?.toInt() ?? 20,
+        ),
+      ),
+    );
+  }
+
+  void registerMemoryTools(LocalMemoryServiceBase service) {
+    register(
+      RegisteredTool(
+        name: 'save_memory',
+        description: 'Saves a key-value memory entry.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'key': {'type': 'string', 'description': 'Memory key'},
+            'content': {'type': 'string', 'description': 'Memory content'},
+            'tags': {
+              'type': 'array',
+              'items': {'type': 'string'},
+              'description': 'Optional tags',
+            },
+          },
+          'required': ['key', 'content'],
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) => service.saveMemoryFormattedJson(args),
+      ),
+    );
+    register(
+      RegisteredTool(
+        name: 'search_memories',
+        description: 'Searches saved memories by query.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'query': {'type': 'string', 'description': 'Search query'},
+            'limit': {'type': 'integer', 'description': 'Maximum results'},
+          },
+          'required': ['query'],
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) => service.searchMemoriesFormattedJson(args),
+      ),
+    );
+    register(
+      RegisteredTool(
+        name: 'delete_memory',
+        description: 'Deletes a memory by id or key.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'id': {'type': 'integer', 'description': 'Memory id'},
+            'key': {'type': 'string', 'description': 'Memory key'},
+          },
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) => service.deleteMemoryFormattedJson(args),
+      ),
+    );
+    register(
+      RegisteredTool(
+        name: 'list_memories',
+        description: 'Lists saved memories.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'limit': {'type': 'integer', 'description': 'Maximum results'},
+          },
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) => service.listMemoriesFormattedJson(args),
+      ),
+    );
+  }
+
+  void registerAmbientTriggerTools(AmbientTriggerServiceBase service) {
+    register(
+      RegisteredTool(
+        name: 'register_geofence',
+        description: 'Registers a geofence region.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'id': {'type': 'string', 'description': 'Geofence id'},
+            'latitude': {'type': 'number', 'description': 'Center latitude'},
+            'longitude': {'type': 'number', 'description': 'Center longitude'},
+            'radiusMeters': {
+              'type': 'number',
+              'description': 'Radius in meters',
+            },
+          },
+          'required': ['id', 'latitude', 'longitude'],
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) async {
+          final region = GeofenceRegion.fromJson({
+            'id': args['id']?.toString() ?? '',
+            'latitude': (args['latitude'] as num?)?.toDouble() ?? 0.0,
+            'longitude': (args['longitude'] as num?)?.toDouble() ?? 0.0,
+            'radiusMeters':
+                (args['radiusMeters'] as num?)?.toDouble() ?? 100.0,
+          });
+          service.addGeofence(region);
+          return Right<Failure, String>(
+            'Geofence registered: ${region.id}',
+          );
+        },
+      ),
+    );
+    register(
+      RegisteredTool(
+        name: 'list_geofences',
+        description: 'Lists registered geofence regions.',
+        parameters: const {
+          'type': 'object',
+          'properties': <String, dynamic>{},
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (_) async => Right<Failure, String>(
+          jsonEncode(service.regions.map((r) => r.toJson()).toList()),
+        ),
+      ),
+    );
+    register(
+      RegisteredTool(
+        name: 'remove_geofence',
+        description: 'Removes a geofence region by id.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'id': {'type': 'string', 'description': 'Geofence id'},
+          },
+          'required': ['id'],
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) async {
+          final id = args['id']?.toString() ?? '';
+          service.removeGeofence(id);
+          return Right<Failure, String>('Geofence removed: $id');
+        },
+      ),
+    );
+    register(
+      RegisteredTool(
+        name: 'check_ambient_status',
+        description: 'Returns ambient trigger status and thresholds.',
+        parameters: const {
+          'type': 'object',
+          'properties': <String, dynamic>{},
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (_) async => Right<Failure, String>(
+          jsonEncode({
+            'geofenceCount': service.regions.length,
+            'lowThreshold': service.lowThreshold,
+            'criticalThreshold': service.criticalThreshold,
+            'cooldownMinutes': service.cooldown.inMinutes,
+          }),
+        ),
+      ),
+    );
+    register(
+      RegisteredTool(
+        name: 'trigger_ambient_check',
+        description: 'Runs an ambient battery/geofence check.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'latitude': {'type': 'number', 'description': 'Current latitude'},
+            'longitude': {'type': 'number', 'description': 'Current longitude'},
+          },
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) async {
+          final lat = (args['latitude'] as num?)?.toDouble();
+          final lng = (args['longitude'] as num?)?.toDouble();
+          final res = await service.checkAll(
+            latitude: lat,
+            longitude: lng,
+          );
+          return res.map((r) => jsonEncode(r.toJson()));
         },
       ),
     );
