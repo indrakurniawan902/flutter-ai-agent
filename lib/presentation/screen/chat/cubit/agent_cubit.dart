@@ -54,7 +54,7 @@ class AgentCubit extends Cubit<AgentState> {
     required LlmRepository llmRepository,
     ChatLocalRepository? chatLocalRepository,
     LocalMemoryServiceBase? localMemoryService,
-    double temperature = 0.7,
+    @ignoreParam double temperature = 0.7,
   }) =>
       AgentCubit(
         llmRepository: llmRepository,

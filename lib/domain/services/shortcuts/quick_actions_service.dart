@@ -38,7 +38,7 @@ abstract class QuickActionsProvider {
 class DefaultQuickActionsProvider implements QuickActionsProvider {
   final QuickActions _quickActions;
 
-  DefaultQuickActionsProvider({QuickActions? quickActions})
+  DefaultQuickActionsProvider({@ignoreParam QuickActions? quickActions})
       : _quickActions = quickActions ?? const QuickActions();
 
   @override

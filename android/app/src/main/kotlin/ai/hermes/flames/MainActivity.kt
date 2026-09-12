@@ -23,6 +23,7 @@ class MainActivity : FlutterActivity() {
     private val BACKGROUND_CHANNEL = "ai.hermes.flames/background_service"
     private val CONTACTS_CHANNEL = "ai.hermes.flames/contacts"
     private val BATTERY_CHANNEL = "ai.hermes.flames/battery_optimization"
+    private val INTENT_SETTINGS_CHANNEL = "ai.hermes.flames/intent_settings"
 
     private val CONTACTS_PERMISSION_REQUEST_CODE = 1001
     private var pendingContactsResult: MethodChannel.Result? = null
@@ -232,6 +233,52 @@ class MainActivity : FlutterActivity() {
                                 } catch (_: Exception) {}
                             }
                             result.success(true)
+                        }
+                    }
+                    else -> {
+                        result.notImplemented()
+                    }
+                }
+            }
+
+        // Intent Settings Channel
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, INTENT_SETTINGS_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "openSystemSettings" -> {
+                        val type = call.argument<String>("type")
+                        val action = when (type) {
+                            "bluetooth" -> Settings.ACTION_BLUETOOTH_SETTINGS
+                            "wifi" -> Settings.ACTION_WIFI_SETTINGS
+                            "battery_saver" -> Settings.ACTION_BATTERY_SAVER_SETTINGS
+                            "airplane_mode" -> Settings.ACTION_AIRPLANE_MODE_SETTINGS
+                            "location" -> Settings.ACTION_LOCATION_SOURCE_SETTINGS
+                            "display" -> Settings.ACTION_DISPLAY_SETTINGS
+                            "sound" -> Settings.ACTION_SOUND_SETTINGS
+                            "apps" -> Settings.ACTION_MANAGE_ALL_APPLICATIONS_SETTINGS
+                            else -> null
+                        }
+                        if (action == null) {
+                            result.success(false)
+                        } else {
+                            try {
+                                startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                result.success(true)
+                            } catch (_: Exception) {
+                                if (type == "apps") {
+                                    try {
+                                        startActivity(
+                                            Intent(Settings.ACTION_APPLICATION_SETTINGS)
+                                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        )
+                                        result.success(true)
+                                    } catch (_: Exception) {
+                                        result.success(false)
+                                    }
+                                } else {
+                                    result.success(false)
+                                }
+                            }
                         }
                     }
                     else -> {

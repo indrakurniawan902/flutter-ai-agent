@@ -1,9 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:injectable/injectable.dart';
-import 'package:quick_actions/quick_actions.dart';
 
-import 'package:flutter_ai_agent/common/constant.dart';
 import 'package:flutter_ai_agent/data/datasources/remote/gateway/gateway_client.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_rpc_receiver.dart';
@@ -26,6 +24,16 @@ abstract class StorageModule {
 }
 
 @module
+abstract class ToolsModule {
+  @lazySingleton
+  ContactsProvider provideContactsProvider() => DefaultContactsProvider();
+
+  @lazySingleton
+  UrlLauncherProvider provideUrlLauncherProvider() =>
+      DefaultUrlLauncherProvider();
+}
+
+@module
 abstract class GatewayModule {
   @lazySingleton
   GatewayClient provideGatewayClient(ToolRegistry toolRegistry) =>
@@ -43,26 +51,4 @@ abstract class GatewayModule {
         gatewayClient: client,
         toolRegistry: toolRegistry,
       );
-}
-
-@module
-abstract class ToolsModule {
-  @lazySingleton
-  ContactsProvider provideContactsProvider() => DefaultContactsProvider();
-
-  @lazySingleton
-  UrlLauncherProvider provideUrlLauncherProvider() =>
-      DefaultUrlLauncherProvider();
-
-  @lazySingleton
-  QuickActions provideQuickActions() => QuickActions();
-
-  // Generator injects these ctor defaults as container deps; values mirror
-  // the original parameter defaults (loadDefaults/autoLoad = true,
-  // AgentCubit temperature = AppConstants.defaultTemperature).
-  @lazySingleton
-  bool provideLoadDefaults() => true;
-
-  @lazySingleton
-  double provideDefaultTemperature() => AppConstants.defaultTemperature;
 }

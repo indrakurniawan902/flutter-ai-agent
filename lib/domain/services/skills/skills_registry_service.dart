@@ -10,7 +10,7 @@ import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 class SkillsRegistryService {
   final Map<String, Skill> _skills = {};
 
-  SkillsRegistryService({bool loadDefaults = true}) {
+  SkillsRegistryService({@ignoreParam bool loadDefaults = true}) {
     if (loadDefaults) {
       _initializeBundledSkills();
     }
