@@ -24,6 +24,8 @@ import 'package:flutter_ai_agent/data/datasources/remote/gateway/gateway_client.
     as _i122;
 import 'package:flutter_ai_agent/data/datasources/remote/pairing/scanner_controller_wrapper.dart'
     as _i319;
+import 'package:flutter_ai_agent/data/datasources/tools/chat/ambient_trigger_service.dart'
+    as _i315;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/calendar_service.dart'
     as _i1056;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/camera_vision_service.dart'
@@ -32,10 +34,16 @@ import 'package:flutter_ai_agent/data/datasources/tools/chat/clipboard_service.d
     as _i105;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/device_context_service.dart'
     as _i205;
+import 'package:flutter_ai_agent/data/datasources/tools/chat/file_workspace_service.dart'
+    as _i70;
+import 'package:flutter_ai_agent/data/datasources/tools/chat/local_memory_service.dart'
+    as _i734;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/location_service.dart'
     as _i320;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/notification_service.dart'
     as _i89;
+import 'package:flutter_ai_agent/data/datasources/tools/chat/notification_triage_service.dart'
+    as _i447;
 import 'package:flutter_ai_agent/data/repositories/chat_local_repository_impl.dart'
     as _i92;
 import 'package:flutter_ai_agent/data/repositories/chat_repository_impl.dart'
@@ -48,6 +56,8 @@ import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dar
     as _i27;
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_rpc_receiver.dart'
     as _i806;
+import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart'
+    as _i290;
 import 'package:flutter_ai_agent/domain/tools/chat/calendar_service.dart'
     as _i1020;
 import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart'
@@ -56,10 +66,16 @@ import 'package:flutter_ai_agent/domain/tools/chat/clipboard_service.dart'
     as _i547;
 import 'package:flutter_ai_agent/domain/tools/chat/device_context_service.dart'
     as _i3;
+import 'package:flutter_ai_agent/domain/tools/chat/file_workspace_service.dart'
+    as _i745;
+import 'package:flutter_ai_agent/domain/tools/chat/local_memory_service.dart'
+    as _i987;
 import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart'
     as _i292;
 import 'package:flutter_ai_agent/domain/tools/chat/notification_service.dart'
     as _i919;
+import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.dart'
+    as _i396;
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart' as _i732;
 import 'package:flutter_ai_agent/domain/tools/pairing/pairing_parser.dart'
     as _i301;
@@ -116,6 +132,20 @@ extension GetItInjectableX on _i174.GetIt {
         storage: gh<_i558.FlutterSecureStorage>(),
       ),
     );
+    gh.lazySingleton<_i732.ToolRegistry>(
+      () => _i732.ToolRegistry(
+        clipboardService: gh<_i547.ClipboardServiceBase>(),
+        locationService: gh<_i292.LocationServiceBase>(),
+        deviceContextService: gh<_i3.DeviceContextServiceBase>(),
+        cameraVisionService: gh<_i815.CameraVisionServiceBase>(),
+        calendarService: gh<_i1020.CalendarServiceBase>(),
+        notificationService: gh<_i919.NotificationServiceBase>(),
+        fileWorkspaceService: gh<_i745.FileWorkspaceServiceBase>(),
+        notificationTriageService: gh<_i396.NotificationTriageServiceBase>(),
+        localMemoryService: gh<_i987.LocalMemoryServiceBase>(),
+        ambientTriggerService: gh<_i290.AmbientTriggerServiceBase>(),
+      ),
+    );
     gh.lazySingleton<_i547.ClipboardServiceBase>(
       () => _i105.ClipboardService.create(),
     );
@@ -128,17 +158,20 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i1020.CalendarServiceBase>(
       () => _i1056.CalendarService.create(),
     );
+    gh.lazySingleton<_i987.LocalMemoryServiceBase>(
+      () => _i734.LocalMemoryService.create(),
+    );
     gh.lazySingleton<_i815.CameraVisionServiceBase>(
       () => _i561.CameraVisionService.create(),
     );
     gh.lazySingleton<_i3.DeviceContextServiceBase>(
       () => _i205.DeviceContextService.create(),
     );
-    gh.factory<_i15.AgentCubit>(
-      () => _i15.AgentCubit.create(
-        llmRepository: gh<_i192.LlmRepository>(),
-        chatLocalRepository: gh<_i445.ChatLocalRepository>(),
-      ),
+    gh.lazySingleton<_i745.FileWorkspaceServiceBase>(
+      () => _i70.FileWorkspaceService.create(),
+    );
+    gh.lazySingleton<_i290.AmbientTriggerServiceBase>(
+      () => _i315.AmbientTriggerService.create(),
     );
     gh.lazySingleton<_i348.SecureStorageService>(
       () =>
@@ -146,6 +179,9 @@ extension GetItInjectableX on _i174.GetIt {
     );
     gh.lazySingleton<_i292.LocationServiceBase>(
       () => _i320.LocationService.create(),
+    );
+    gh.lazySingleton<_i396.NotificationTriageServiceBase>(
+      () => _i447.NotificationTriageService.create(),
     );
     gh.lazySingleton<_i27.GatewayClientBase>(
       () => gatewayModule.provideGatewayClientBase(gh<_i122.GatewayClient>()),
@@ -160,14 +196,11 @@ extension GetItInjectableX on _i174.GetIt {
         controller: gh<_i625.MobileScannerController>(),
       ),
     );
-    gh.lazySingleton<_i732.ToolRegistry>(
-      () => _i732.ToolRegistry(
-        clipboardService: gh<_i547.ClipboardServiceBase>(),
-        locationService: gh<_i292.LocationServiceBase>(),
-        deviceContextService: gh<_i3.DeviceContextServiceBase>(),
-        cameraVisionService: gh<_i815.CameraVisionServiceBase>(),
-        calendarService: gh<_i1020.CalendarServiceBase>(),
-        notificationService: gh<_i919.NotificationServiceBase>(),
+    gh.factory<_i15.AgentCubit>(
+      () => _i15.AgentCubit.create(
+        llmRepository: gh<_i192.LlmRepository>(),
+        chatLocalRepository: gh<_i445.ChatLocalRepository>(),
+        localMemoryService: gh<_i987.LocalMemoryServiceBase>(),
       ),
     );
     gh.factory<_i118.GatewayRpcCubit>(
