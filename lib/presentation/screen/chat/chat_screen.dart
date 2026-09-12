@@ -1,11 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:flutter_ai_agent/common/injection/injection.dart';
+import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/chat_mode.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter_ai_agent/domain/entities/gateway/gateway_connection_state.dart';
+import 'package:flutter_ai_agent/domain/entities/gateway/gateway_message.dart';
+import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
+import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_routes.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
@@ -15,12 +23,31 @@ import 'package:flutter_ai_agent/presentation/screen/chat/widgets/header_console
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/live_action_stepper_card.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/reasoning_card.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/summary_card.dart';
+import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_rpc_cubit.dart';
+import 'package:flutter_ai_agent/presentation/screen/pairing/qr_scanner_screen.dart';
+import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_cubit.dart';
+import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_state.dart';
 import 'package:flutter_ai_agent/utils/thought_extractor.dart';
 
 /// Main Chat Screen displaying streaming conversation, tool call cards,
-/// and input prompt area.
+/// gateway connection indicator, mode switcher, and input prompt area.
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  final ChatMode initialMode;
+  final GatewayClientBase? gatewayClient;
+  final GatewayRpcCubit? gatewayRpcCubit;
+  final ServerProfileCubit? serverProfileCubit;
+  final AgentCubit? agentCubit;
+  final Widget Function(BuildContext context)? qrScannerBuilder;
+
+  const ChatScreen({
+    super.key,
+    this.initialMode = ChatMode.direct,
+    this.gatewayClient,
+    this.gatewayRpcCubit,
+    this.serverProfileCubit,
+    this.agentCubit,
+    this.qrScannerBuilder,
+  });
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -32,10 +59,109 @@ class _ChatScreenState extends State<ChatScreen> {
   final FocusNode _focusNode = FocusNode();
   bool _isComposing = false;
 
+  late ChatMode _mode;
+  late GatewayConnectionState _gatewayConnectionState;
+  StreamSubscription<GatewayConnectionState>? _gatewayStateSub;
+  StreamSubscription<GatewayMessage>? _gatewayMessageSub;
+  StreamSubscription<GatewayTextDeltaMessage>? _gatewayTextDeltaSub;
+  StreamSubscription<ServerProfileState>? _profileSub;
+  String _streamingGatewayDelta = '';
+  GatewayRpcCubit? _rpcCubit;
+  AgentCubit? _agentCubit;
+
+  GatewayClientBase? _resolveGatewayClient() =>
+      widget.gatewayClient ??
+      (sl.isRegistered<GatewayClientBase>()
+          ? sl<GatewayClientBase>()
+          : null);
+
+  GatewayRpcCubit? _resolveGatewayRpcCubit() => _rpcCubit;
+
+  ServerProfileCubit? _resolveServerProfileCubit() =>
+      widget.serverProfileCubit ??
+      (sl.isRegistered<ServerProfileCubit>()
+          ? sl<ServerProfileCubit>()
+          : null);
+
+  AgentCubit? _resolveAgentCubit() => _agentCubit;
+
   @override
   void initState() {
     super.initState();
+    _mode = widget.initialMode;
     _textController.addListener(_onTextChanged);
+
+    _rpcCubit = widget.gatewayRpcCubit ??
+        (sl.isRegistered<GatewayRpcCubit>() ? sl<GatewayRpcCubit>() : null);
+    _agentCubit = widget.agentCubit ??
+        (sl.isRegistered<AgentCubit>() ? sl<AgentCubit>() : null);
+
+    final client = _resolveGatewayClient();
+    _gatewayConnectionState =
+        client?.state ?? GatewayConnectionState.disconnected;
+
+    _gatewayStateSub = client?.stateStream.listen((state) {
+      if (mounted) {
+        setState(() {
+          _gatewayConnectionState = state;
+        });
+      }
+    });
+
+    _gatewayTextDeltaSub = client?.textDeltaStream.listen((delta) {
+      if (mounted && _mode == ChatMode.gateway) {
+        setState(() {
+          _streamingGatewayDelta += delta.delta;
+        });
+        _scrollToBottom();
+      }
+    });
+
+    _gatewayMessageSub = client?.messageStream.listen((message) {
+      if (mounted && _mode == ChatMode.gateway) {
+        if (message is GatewayChatMessage) {
+          setState(() {
+            _streamingGatewayDelta = '';
+          });
+          _agentCubit?.addMessage(
+            ChatMessage(
+              role: message.role,
+              content: message.content,
+            ),
+          );
+          _scrollToBottom();
+        }
+      }
+    });
+
+    final profileCubit = _resolveServerProfileCubit();
+    final activeProfile = profileCubit?.state.activeProfile;
+    if (activeProfile != null) {
+      try {
+        final future = _agentCubit?.switchProfile(activeProfile.id);
+        if (future != null) {
+          unawaited(future.catchError((_) {}));
+        }
+      } catch (_) {}
+    }
+    _profileSub = profileCubit?.stream.listen((profileState) {
+      final active = profileState.activeProfile;
+      if (active != null && mounted) {
+        try {
+          final future = _agentCubit?.switchProfile(active.id);
+          if (future != null) {
+            unawaited(future.catchError((_) {}));
+          }
+        } catch (_) {}
+      }
+    });
+
+    if (widget.initialMode == ChatMode.gateway &&
+        _gatewayConnectionState.isDisconnected) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _connectGatewayIfPossible();
+      });
+    }
   }
 
   void _onTextChanged() {
@@ -49,6 +175,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    _gatewayStateSub?.cancel();
+    _gatewayMessageSub?.cancel();
+    _gatewayTextDeltaSub?.cancel();
+    _profileSub?.cancel();
     _textController.removeListener(_onTextChanged);
     _textController.dispose();
     _scrollController.dispose();
@@ -68,141 +198,589 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  Color get _indicatorColor {
+    if (_mode == ChatMode.direct) {
+      return const Color(0xFF94A3B8);
+    }
+    switch (_gatewayConnectionState) {
+      case GatewayConnectionState.connected:
+        return const Color(0xFF22C55E);
+      case GatewayConnectionState.reconnecting:
+      case GatewayConnectionState.connecting:
+        return const Color(0xFFF59E0B);
+      case GatewayConnectionState.disconnected:
+        return const Color(0xFF94A3B8);
+    }
+  }
+
+  String get _indicatorLabel {
+    if (_mode == ChatMode.direct) {
+      return 'Standalone';
+    }
+    switch (_gatewayConnectionState) {
+      case GatewayConnectionState.connected:
+        return 'Connected';
+      case GatewayConnectionState.reconnecting:
+        return 'Reconnecting';
+      case GatewayConnectionState.connecting:
+        return 'Connecting';
+      case GatewayConnectionState.disconnected:
+        return 'Disconnected';
+    }
+  }
+
+  Future<void> _connectGatewayIfPossible() async {
+    final client = _resolveGatewayClient();
+    if (client == null || !client.state.isDisconnected) return;
+
+    final profileCubit = _resolveServerProfileCubit();
+    final activeProfile = profileCubit?.state.activeProfile;
+    if (activeProfile != null) {
+      await client.connectWithProfile(activeProfile);
+    } else {
+      final storage = sl.isRegistered<SecureStorageService>()
+          ? sl<SecureStorageService>()
+          : null;
+      if (storage != null) {
+        try {
+          final profile = await storage.getActiveServerProfile();
+          if (profile != null) {
+            await client.connectWithProfile(profile);
+          }
+        } catch (_) {}
+      }
+    }
+  }
+
+  Future<void> _toggleMode() async {
+    if (_mode == ChatMode.direct) {
+      setState(() {
+        _mode = ChatMode.gateway;
+      });
+
+      final client = _resolveGatewayClient();
+      if (client != null && client.state.isDisconnected) {
+        await _connectGatewayIfPossible();
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Switched to Gateway Remote Node mode'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } else {
+      setState(() {
+        _mode = ChatMode.direct;
+      });
+
+      final client = _resolveGatewayClient();
+      if (client != null && !client.state.isDisconnected) {
+        await client.disconnect(reason: 'Switched to Direct mode');
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Switched to Direct LLM mode'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _openQrScanner() async {
+    final payload = await Navigator.of(context).push<PairingPayload>(
+      MaterialPageRoute(
+        builder: widget.qrScannerBuilder ?? (_) => const QrScannerScreen(),
+      ),
+    );
+
+    if (payload != null && mounted) {
+      final profileCubit = _resolveServerProfileCubit();
+      if (profileCubit != null) {
+        await profileCubit.addFromPairingPayload(payload, makeActive: true);
+      }
+
+      final client = _resolveGatewayClient();
+      if (client != null) {
+        setState(() {
+          _mode = ChatMode.gateway;
+        });
+        await client.connect(payload.gatewayUrl, token: payload.token);
+      }
+
+      if (mounted) {
+        final profileName = payload.profileName.isEmpty
+            ? 'Hermes Gateway'
+            : payload.profileName;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Paired with $profileName'),
+            backgroundColor: const Color(0xFF008080),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showConnectionDetailsDialog(BuildContext context) {
+    final activeProfile = _resolveServerProfileCubit()?.state.activeProfile;
+    final profileName = activeProfile?.name ?? 'No active profile';
+    final gatewayUrl = activeProfile?.gatewayUrl ?? 'Not configured';
+    final color = _indicatorColor;
+    final label = _indicatorLabel;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF0F172A),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: Color(0xFF334155)),
+          ),
+          title: const Text(
+            'Connection Status',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildDetailRow(
+                'Mode',
+                _mode == ChatMode.gateway
+                    ? 'Gateway Remote Node'
+                    : 'Direct LLM (Standalone)',
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  const Text(
+                    'Status: ',
+                    style: TextStyle(
+                      color: Color(0xFF94A3B8),
+                      fontSize: 13,
+                    ),
+                  ),
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: color,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: color,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              _buildDetailRow('Profile', profileName),
+              const SizedBox(height: 10),
+              _buildDetailRow('Gateway URL', gatewayUrl),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text(
+                'Close',
+                style: TextStyle(color: Color(0xFF008080)),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xFF94A3B8),
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _confirmReset(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Reset Conversation'),
+          content: const Text(
+            'Are you sure you want to reset the conversation and clear history?',
+          ),
+          actions: [
+            TextButton(
+              key: const Key('cancel_reset_button'),
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              key: const Key('confirm_reset_button'),
+              onPressed: () {
+                context.read<AgentCubit>().reset();
+                setState(() {
+                  _streamingGatewayDelta = '';
+                });
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Reset'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _confirmStop(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Stop Generation'),
+          content: const Text(
+            'Are you sure you want to stop generation?',
+          ),
+          actions: [
+            TextButton(
+              key: const Key('cancel_stop_button'),
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              key: const Key('confirm_stop_button'),
+              onPressed: () {
+                context.read<AgentCubit>().stop();
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Stop'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _handleSubmitted(BuildContext context, String text) {
     final prompt = text.trim();
     if (prompt.isEmpty) return;
 
     _textController.clear();
-    context.read<AgentCubit>().sendMessage(prompt);
+
+    if (_mode == ChatMode.direct) {
+      context.read<AgentCubit>().sendMessage(prompt);
+    } else {
+      final client = _resolveGatewayClient();
+      if (client != null && client.state.isConnected) {
+        client.sendChatMessage(prompt);
+        try {
+          _agentCubit?.addMessage(
+            ChatMessage(role: 'user', content: prompt),
+          );
+        } catch (_) {
+          try {
+            context.read<AgentCubit>().addMessage(
+                  ChatMessage(role: 'user', content: prompt),
+                );
+          } catch (_) {}
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('Gateway not connected. Please connect or scan QR code.'),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
     _scrollToBottom();
+  }
+
+  Widget _buildConnectionIndicator(BuildContext context) {
+    final color = _indicatorColor;
+    final label = _indicatorLabel;
+
+    return Tooltip(
+      message: _mode == ChatMode.direct
+          ? 'Direct LLM Mode (Standalone)'
+          : 'Gateway Mode: $label',
+      child: InkWell(
+        key: const Key('chat_connection_indicator'),
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _showConnectionDetailsDialog(context),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E293B),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFF334155)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                key: const Key('connection_led_dot'),
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: color,
+                  boxShadow: [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.4),
+                      blurRadius: 4,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final rpcCubit = _resolveGatewayRpcCubit();
+    final agentForProvider = _resolveAgentCubit();
 
-    return BlocProvider<AgentCubit>(
-      create: (_) => sl<AgentCubit>(),
-      child: Builder(
-        builder: (context) {
-          return Scaffold(
-            appBar: AppBar(
-              title: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: Image.asset(
-                      'assets/images/flames_logo.png',
-                      key: const Key('chat_app_bar_logo'),
-                      width: 26,
-                      height: 26,
-                      cacheWidth: 52,
-                      cacheHeight: 52,
-                      fit: BoxFit.contain,
-                      excludeFromSemantics: true,
-                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Flames',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-              actions: [
-                IconButton(
-                  key: const Key('chat_reset_button'),
-                  icon: const Icon(Icons.refresh),
-                  tooltip: 'Reset Conversation',
-                  onPressed: () {
-                    context.read<AgentCubit>().reset();
-                  },
-                ),
-                BlocBuilder<AgentCubit, AgentState>(
-                  builder: (context, state) {
-                    final isBusy = state is AgentThinking ||
-                        state is AgentStreaming ||
-                        state is ExecutingTool;
-                    if (!isBusy) return const SizedBox.shrink();
-                    return IconButton(
-                      key: const Key('chat_stop_button'),
-                      icon: const Icon(
-                        Icons.stop_circle_outlined,
-                        color: Colors.redAccent,
-                      ),
-                      tooltip: 'Stop Generation',
-                      onPressed: () => context.read<AgentCubit>().stop(),
-                    );
-                  },
-                ),
-                IconButton(
-                  key: const Key('chat_settings_button'),
-                  icon: const Icon(Icons.settings),
-                  tooltip: 'Settings',
-                  onPressed: () {
-                    context.pushNamed(AppRoutes.nrSettings);
-                  },
-                ),
-              ],
-            ),
-            body: BlocConsumer<AgentCubit, AgentState>(
-              listener: (context, state) {
-                _scrollToBottom();
+    Widget bodyContent = BlocConsumer<AgentCubit, AgentState>(
+      listener: (context, state) {
+        _scrollToBottom();
 
-                if (state is WaitingApproval) {
-                  ActionApprovalSheet.show(
-                    context,
-                    request: state.request,
-                    onApprove: (_) {
-                      Navigator.of(context).pop();
-                      context.read<AgentCubit>().approveAction();
-                    },
-                    onReject: (_) {
-                      Navigator.of(context).pop();
-                      context.read<AgentCubit>().rejectAction();
-                    },
-                  );
-                } else if (state is AgentError) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(state.message),
-                      backgroundColor: colorScheme.error,
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                }
-              },
-              builder: (context, state) {
-                final cubit = context.read<AgentCubit>();
-                final messages = cubit.messages;
-
-                return SafeArea(
-                  child: Column(
-                    children: [
-                      const HeaderConsoleBar(),
-                      Expanded(
-                        child: messages.isEmpty && state is AgentIdle
-                            ? _buildEmptyState(context)
-                            : _buildMessageList(context, messages, state),
-                      ),
-                      if (state is AgentThinking) _buildThinkingBar(context),
-                      _buildInputBar(context, state),
-                    ],
-                  ),
-                );
-              },
+        if (state is WaitingApproval) {
+          ActionApprovalSheet.show(
+            context,
+            request: state.request,
+            onApprove: (_) {
+              Navigator.of(context).pop();
+              context.read<AgentCubit>().approveAction();
+            },
+            onReject: (_) {
+              Navigator.of(context).pop();
+              context.read<AgentCubit>().rejectAction();
+            },
+          );
+        } else if (state is AgentError) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.message),
+              backgroundColor: colorScheme.error,
+              behavior: SnackBarBehavior.floating,
             ),
           );
+        }
+      },
+      builder: (context, state) {
+        final cubit = context.read<AgentCubit>();
+        final messages = cubit.messages;
+
+        return SafeArea(
+          child: Column(
+            children: [
+              const HeaderConsoleBar(),
+              Expanded(
+                child: messages.isEmpty &&
+                        state is AgentIdle &&
+                        _streamingGatewayDelta.isEmpty
+                    ? _buildEmptyState(context)
+                    : _buildMessageList(context, messages, state),
+              ),
+              if (state is AgentThinking) _buildThinkingBar(context),
+              _buildInputBar(context, state),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (rpcCubit != null) {
+      bodyContent = BlocListener<GatewayRpcCubit, GatewayRpcState>(
+        bloc: rpcCubit,
+        listener: (context, rpcState) {
+          if (rpcState is GatewayRpcWaitingApproval) {
+            ActionApprovalSheet.show(
+              context,
+              request: rpcState.request,
+              onApprove: (_) {
+                Navigator.of(context).pop();
+                rpcCubit.approveAction(rpcState.request.id);
+              },
+              onReject: (_) {
+                Navigator.of(context).pop();
+                rpcCubit.rejectAction(rpcState.request.id);
+              },
+            );
+          } else if (rpcState is GatewayRpcError) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(rpcState.message),
+                backgroundColor: colorScheme.error,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
         },
-      ),
+        child: bodyContent,
+      );
+    }
+
+    final scaffold = Builder(
+      builder: (context) {
+        return Scaffold(
+          appBar: AppBar(
+            title: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Image.asset(
+                    'assets/images/flames_logo.png',
+                    key: const Key('chat_app_bar_logo'),
+                    width: 26,
+                    height: 26,
+                    cacheWidth: 52,
+                    cacheHeight: 52,
+                    fit: BoxFit.contain,
+                    excludeFromSemantics: true,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Flames',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(width: 8),
+                _buildConnectionIndicator(context),
+              ],
+            ),
+            actions: [
+              IconButton(
+                key: const Key('chat_mode_toggle'),
+                icon: Icon(
+                  _mode == ChatMode.gateway
+                      ? Icons.hub_rounded
+                      : Icons.phone_android_rounded,
+                  color: _mode == ChatMode.gateway
+                      ? const Color(0xFF008080)
+                      : const Color(0xFF94A3B8),
+                ),
+                tooltip: _mode == ChatMode.gateway
+                    ? 'Switch to Direct LLM Mode'
+                    : 'Switch to Gateway Mode',
+                onPressed: _toggleMode,
+              ),
+              IconButton(
+                key: const Key('chat_qr_scan_button'),
+                icon: const Icon(Icons.qr_code_scanner),
+                tooltip: 'Scan Pairing QR',
+                onPressed: _openQrScanner,
+              ),
+              IconButton(
+                key: const Key('chat_reset_button'),
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Reset Conversation',
+                onPressed: () => _confirmReset(context),
+              ),
+              BlocBuilder<AgentCubit, AgentState>(
+                builder: (context, state) {
+                  final isBusy = state is AgentThinking ||
+                      state is AgentStreaming ||
+                      state is ExecutingTool;
+                  if (!isBusy) return const SizedBox.shrink();
+                  return IconButton(
+                    key: const Key('chat_stop_button'),
+                    icon: const Icon(
+                      Icons.stop_circle_outlined,
+                      color: Colors.redAccent,
+                    ),
+                    tooltip: 'Stop Generation',
+                    onPressed: () => _confirmStop(context),
+                  );
+                },
+              ),
+              IconButton(
+                key: const Key('chat_settings_button'),
+                icon: const Icon(Icons.settings),
+                tooltip: 'Settings',
+                onPressed: () {
+                  context.pushNamed(AppRoutes.nrSettings);
+                },
+              ),
+            ],
+          ),
+          body: bodyContent,
+        );
+      },
+    );
+
+    if (widget.agentCubit != null) {
+      return BlocProvider<AgentCubit>.value(
+        value: widget.agentCubit!,
+        child: scaffold,
+      );
+    }
+    return BlocProvider<AgentCubit>(
+      create: (_) =>
+          agentForProvider ?? sl<AgentCubit>(),
+      child: scaffold,
     );
   }
 
   Widget _buildEmptyState(BuildContext context) {
     final theme = Theme.of(context);
+    final isGateway = _mode == ChatMode.gateway;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -217,21 +795,23 @@ class _ChatScreenState extends State<ChatScreen> {
                 border: Border.all(color: theme.colorScheme.outlineVariant),
               ),
               child: Icon(
-                Icons.smart_toy_outlined,
+                isGateway ? Icons.hub_rounded : Icons.smart_toy_outlined,
                 size: 40,
                 color: theme.colorScheme.primary,
               ),
             ),
             const SizedBox(height: 16),
             Text(
-              'Autonomous Device Agent',
+              isGateway ? 'Gateway Remote Node' : 'Autonomous Device Agent',
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Ask a question or request device actions like reading the clipboard, checking battery, or scheduling reminders.',
+              isGateway
+                  ? 'Connected to Hermes Gateway. Mobile device tools are ready for remote dispatch.'
+                  : 'Ask a question or request device actions like reading the clipboard, checking battery, or scheduling reminders.',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
@@ -248,8 +828,11 @@ class _ChatScreenState extends State<ChatScreen> {
     List<ChatMessage> messages,
     AgentState state,
   ) {
+    final isGatewayStreaming =
+        _mode == ChatMode.gateway && _streamingGatewayDelta.isNotEmpty;
     final itemsCount = messages.length +
         (state is AgentStreaming ? 1 : 0) +
+        (isGatewayStreaming ? 1 : 0) +
         (state is ExecutingTool ? 1 : 0);
 
     return ListView.builder(
@@ -262,12 +845,14 @@ class _ChatScreenState extends State<ChatScreen> {
           return _buildMessageItem(context, message);
         }
 
-        // Active streaming chunk
         if (state is AgentStreaming) {
           return _buildStreamingBubble(context, state.partialText);
         }
 
-        // Active tool execution indicator
+        if (isGatewayStreaming) {
+          return _buildStreamingBubble(context, _streamingGatewayDelta);
+        }
+
         if (state is ExecutingTool) {
           return _buildExecutingToolCard(context, state.toolName, state.arguments);
         }
@@ -315,7 +900,6 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildAssistantMessage(BuildContext context, ChatMessage message) {
     final children = <Widget>[];
 
-    // If message contains a live action stepper pipeline
     if (message.actionSteps != null && message.actionSteps!.isNotEmpty) {
       children.add(
         LiveActionStepperCard(
@@ -324,7 +908,6 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     }
 
-    // If message contains an action confirmation micro-ui card
     if (message.confirmationCard != null) {
       children.add(
         ActionConfirmationCard(
@@ -339,7 +922,6 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     }
 
-    // If message contains a summary micro-ui card
     if (message.summaryCard != null) {
       children.add(
         SummaryCard(
@@ -348,7 +930,6 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     }
 
-    // If tool calls were initiated
     if (message.toolCalls != null && message.toolCalls!.isNotEmpty) {
       for (final tc in message.toolCalls!) {
         children.add(_buildToolCallCard(context, tc));
