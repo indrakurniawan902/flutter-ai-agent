@@ -91,6 +91,9 @@ class ChatMessage extends Equatable {
     if (name != null) {
       map['name'] = name;
     }
+    if (thoughtProcess != null) {
+      map['thought_process'] = thoughtProcess;
+    }
     return map;
   }
 

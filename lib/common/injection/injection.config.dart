@@ -12,12 +12,16 @@
 
 import 'package:dio/dio.dart' as _i361;
 import 'package:flutter_ai_agent/common/injection/modules.dart' as _i225;
+import 'package:flutter_ai_agent/data/datasources/local/chat/chat_local_datasource.dart'
+    as _i613;
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart'
     as _i348;
 import 'package:flutter_ai_agent/data/datasources/remote/chat/chat_datasource.dart'
     as _i522;
 import 'package:flutter_ai_agent/data/datasources/remote/chat/sse_parser.dart'
     as _i598;
+import 'package:flutter_ai_agent/data/datasources/remote/gateway/gateway_client.dart'
+    as _i122;
 import 'package:flutter_ai_agent/data/datasources/remote/pairing/scanner_controller_wrapper.dart'
     as _i319;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/background_service.dart'
@@ -38,10 +42,18 @@ import 'package:flutter_ai_agent/data/datasources/tools/chat/voice_input_service
     as _i845;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/voice_output_service.dart'
     as _i753;
+import 'package:flutter_ai_agent/data/repositories/chat_local_repository_impl.dart'
+    as _i92;
 import 'package:flutter_ai_agent/data/repositories/chat_repository_impl.dart'
     as _i236;
+import 'package:flutter_ai_agent/domain/repositories/chat/chat_local_repository.dart'
+    as _i445;
 import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart'
     as _i192;
+import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart'
+    as _i27;
+import 'package:flutter_ai_agent/domain/services/gateway/gateway_rpc_receiver.dart'
+    as _i806;
 import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart'
     as _i791;
 import 'package:flutter_ai_agent/domain/tools/chat/calendar_service.dart'
@@ -67,6 +79,8 @@ import 'package:flutter_ai_agent/domain/tools/pairing/qr_scanner_controller.dart
     as _i821;
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart'
     as _i15;
+import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_rpc_cubit.dart'
+    as _i118;
 import 'package:flutter_ai_agent/presentation/screen/navigation/cubit/navigation_cubit.dart'
     as _i693;
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_cubit.dart'
@@ -88,11 +102,15 @@ extension GetItInjectableX on _i174.GetIt {
     final gh = _i526.GetItHelper(this, environment, environmentFilter);
     final networkModule = _$NetworkModule();
     final storageModule = _$StorageModule();
+    final gatewayModule = _$GatewayModule();
     gh.factory<_i693.NavigationCubit>(() => _i693.NavigationCubit.create());
     gh.singleton<_i498.DioErrHandler>(() => const _i498.DioErrHandler());
     gh.lazySingleton<_i361.Dio>(() => networkModule.provideDio());
     gh.lazySingleton<_i558.FlutterSecureStorage>(
       () => storageModule.provideSecureStorage(),
+    );
+    gh.lazySingleton<_i122.GatewayClient>(
+      () => gatewayModule.provideGatewayClient(),
     );
     gh.lazySingleton<_i598.SseParser>(() => _i598.SseParser());
     gh.lazySingleton<_i301.PairingParser>(() => const _i301.PairingParser());
@@ -103,6 +121,11 @@ extension GetItInjectableX on _i174.GetIt {
       () => _i522.ChatDatasourceImpl(
         dio: gh<_i361.Dio>(),
         sseParser: gh<_i598.SseParser>(),
+      ),
+    );
+    gh.lazySingleton<_i613.ChatLocalDatasource>(
+      () => _i613.ChatLocalDatasourceImpl(
+        storage: gh<_i558.FlutterSecureStorage>(),
       ),
     );
     gh.lazySingleton<_i547.ClipboardServiceBase>(
@@ -132,12 +155,26 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i652.VoiceInputServiceBase>(
       () => _i845.VoiceInputService.create(),
     );
+    gh.factory<_i15.AgentCubit>(
+      () => _i15.AgentCubit.create(
+        llmRepository: gh<_i192.LlmRepository>(),
+        chatLocalRepository: gh<_i445.ChatLocalRepository>(),
+      ),
+    );
     gh.lazySingleton<_i348.SecureStorageService>(
       () =>
           _i348.SecureStorageService(storage: gh<_i558.FlutterSecureStorage>()),
     );
     gh.lazySingleton<_i292.LocationServiceBase>(
       () => _i320.LocationService.create(),
+    );
+    gh.lazySingleton<_i27.GatewayClientBase>(
+      () => gatewayModule.provideGatewayClientBase(gh<_i122.GatewayClient>()),
+    );
+    gh.lazySingleton<_i445.ChatLocalRepository>(
+      () => _i92.ChatLocalRepositoryImpl(
+        datasource: gh<_i613.ChatLocalDatasource>(),
+      ),
     );
     gh.lazySingleton<_i732.ToolRegistry>(
       () => _i732.ToolRegistry(
@@ -157,8 +194,11 @@ extension GetItInjectableX on _i174.GetIt {
         controller: gh<_i625.MobileScannerController>(),
       ),
     );
-    gh.factory<_i15.AgentCubit>(
-      () => _i15.AgentCubit.create(llmRepository: gh<_i192.LlmRepository>()),
+    gh.factory<_i118.GatewayRpcCubit>(
+      () => _i118.GatewayRpcCubit.create(
+        gatewayClient: gh<_i27.GatewayClientBase>(),
+        toolRegistry: gh<_i732.ToolRegistry>(),
+      ),
     );
     gh.factory<_i819.ServerProfileCubit>(
       () => _i819.ServerProfileCubit.create(
@@ -173,6 +213,12 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i45.VoiceOutputServiceBase>(
       () => _i753.VoiceOutputService.create(gh<_i753.TtsClient>()),
     );
+    gh.lazySingleton<_i806.GatewayRpcReceiverBase>(
+      () => gatewayModule.provideGatewayRpcReceiver(
+        gh<_i27.GatewayClientBase>(),
+        gh<_i732.ToolRegistry>(),
+      ),
+    );
     return this;
   }
 }
@@ -180,3 +226,5 @@ extension GetItInjectableX on _i174.GetIt {
 class _$NetworkModule extends _i225.NetworkModule {}
 
 class _$StorageModule extends _i225.StorageModule {}
+
+class _$GatewayModule extends _i225.GatewayModule {}
