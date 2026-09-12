@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_ai_agent/features/chat/domain/models/tool_call_request.dart';
+import 'package:flutter_ai_agent/domain/models/chat/tool_call_request.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/widgets/action_approval_sheet.dart';
 import 'package:flutter_test/flutter_test.dart';
 

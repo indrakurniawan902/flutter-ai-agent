@@ -1,15 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:dio/dio.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:injectable/injectable.dart';
 
-import 'package:flutter_ai_agent/common/failure.dart';
-import 'package:flutter_ai_agent/features/chat/data/llm_repository.dart';
-import 'package:flutter_ai_agent/features/chat/data/models/chat_models.dart';
+import 'package:flutter_ai_agent/common/injection/injection.dart';
+import 'package:flutter_ai_agent/core/errors/failures.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/chat_chunk.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
+import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart';
 import 'package:flutter_ai_agent/features/chat/domain/utils/thought_extractor.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
-import 'package:flutter_ai_agent/features/chat/domain/models/tool_call_request.dart';
+import 'package:flutter_ai_agent/domain/models/chat/tool_call_request.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/security_policy.dart';
 import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
@@ -17,6 +20,7 @@ import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.d
 /// Orchestrates the full ReAct agent loop:
 /// User Prompt -> LLM -> Tool Call -> Tool Result -> LLM -> Final Text Answer
 /// with tier-based Human-in-the-Loop (HITL) gate.
+@injectable
 class AgentCubit extends Cubit<AgentState> {
   final LlmRepository _llmRepository;
   final ToolRegistry _toolRegistry;
@@ -35,6 +39,20 @@ class AgentCubit extends Cubit<AgentState> {
   bool _isCancelled = false;
   int _runGeneration = 0;
 
+  @factoryMethod
+  factory AgentCubit.create({
+    required LlmRepository llmRepository,
+  }) =>
+      AgentCubit(
+        llmRepository: llmRepository,
+        toolRegistry: getIt.isRegistered<ToolRegistry>()
+            ? getIt<ToolRegistry>()
+            : null,
+        secureStorageService: getIt.isRegistered<SecureStorageService>()
+            ? getIt<SecureStorageService>()
+            : null,
+      );
+
   AgentCubit({
     LlmRepository? llmRepository,
     ToolRegistry? toolRegistry,
@@ -43,7 +61,7 @@ class AgentCubit extends Cubit<AgentState> {
     this.model = 'gpt-4o',
     this.apiKey,
     this.maxTurns = 10,
-  })  : _llmRepository = llmRepository ?? LlmRepository(dio: Dio()),
+  })  : _llmRepository = llmRepository ?? getIt<LlmRepository>(),
         _toolRegistry = toolRegistry ?? ToolRegistry(),
         _secureStorageService = secureStorageService, // ignore: prefer_initializing_formals
         super(const AgentIdle());

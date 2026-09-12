@@ -3,7 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
 import 'package:flutter_ai_agent/core/di/injection_container.dart';
-import 'package:flutter_ai_agent/features/chat/data/models/chat_models.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
 import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
 import 'package:flutter_ai_agent/features/chat/domain/utils/thought_extractor.dart';

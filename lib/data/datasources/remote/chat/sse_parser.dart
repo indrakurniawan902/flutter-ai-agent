@@ -1,18 +1,12 @@
 import 'dart:convert';
 
-import 'package:flutter_ai_agent/features/chat/data/models/chat_models.dart';
+import 'package:flutter_ai_agent/data/models/chat/chat_remote_response.dart';
+import 'package:injectable/injectable.dart';
 
-/// Parses Server-Sent Events (SSE) text lines into ChatChunk objects.
-///
-/// Handles the OpenAI streaming format:
-///   data: {"id":"...", "choices":[{"delta":{"content":"..."}}]}
-///   data: [DONE]
+@lazySingleton
 class SseParser {
-  /// Parse a raw SSE text block (possibly multi-line) into ChatChunks.
-  ///
-  /// Returns an empty list for comment lines, empty lines, or [DONE].
-  List<ChatChunk> parse(String rawText) {
-    final chunks = <ChatChunk>[];
+  List<ChatChunkRemoteResponse> parse(String rawText) {
+    final chunks = <ChatChunkRemoteResponse>[];
     final lines = rawText.split('\n');
 
     for (final line in lines) {
@@ -32,9 +26,8 @@ class SseParser {
 
       try {
         final json = jsonDecode(data) as Map<String, dynamic>;
-        chunks.add(ChatChunk.fromJson(json));
+        chunks.add(ChatChunkRemoteResponse.fromJson(json));
       } on FormatException {
-        // Skip malformed JSON lines
         continue;
       }
     }
@@ -42,7 +35,6 @@ class SseParser {
     return chunks;
   }
 
-  /// Returns true if this SSE line signals the end of the stream.
   bool isDone(String line) {
     final trimmed = line.trim();
     return trimmed == 'data: [DONE]';

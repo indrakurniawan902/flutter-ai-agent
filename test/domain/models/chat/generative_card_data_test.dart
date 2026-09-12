@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_ai_agent/features/chat/domain/models/generative_card_data.dart';
+import 'package:flutter_ai_agent/domain/models/chat/generative_card_data.dart';
 
 void main() {
   group('GenerativeCardData Models', () {

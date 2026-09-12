@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_ai_agent/features/chat/data/sse_parser.dart';
+import 'package:flutter_ai_agent/data/datasources/remote/chat/sse_parser.dart';
 
 void main() {
   late SseParser parser;

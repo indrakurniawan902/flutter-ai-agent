@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
+import 'package:injectable/injectable.dart';
 
+@singleton
 class DioErrHandler {
   const DioErrHandler();
 
@@ -12,12 +14,6 @@ class DioErrHandler {
       case DioExceptionType.badResponse:
         if (error.response?.statusCode == 401) {
           return 'Authentication failed. Please login again.';
-        }
-        if (error.response?.statusCode == 404) {
-          return 'Resource not found.';
-        }
-        if (error.response?.statusCode == 500) {
-          return 'Server error occurred. Please try again later.';
         }
         return 'An unexpected error occurred. Please try again later.';
       default:
