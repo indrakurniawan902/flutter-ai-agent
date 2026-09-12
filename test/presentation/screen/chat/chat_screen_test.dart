@@ -19,7 +19,10 @@ import 'package:flutter_ai_agent/presentation/screen/chat/widgets/summary_card.d
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/settings_screen.dart';
+import 'package:flutter_ai_agent/core/theme/app_theme.dart';
+import 'package:flutter_ai_agent/presentation/navigation/app_routes.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 
 import '../../../helpers/mocks.dart';
@@ -60,8 +63,25 @@ void main() {
   });
 
   Widget createWidgetUnderTest() {
-    return const MaterialApp(
-      home: ChatScreen(),
+    final router = GoRouter(
+      initialLocation: '/chat',
+      routes: [
+        GoRoute(
+          path: '/chat',
+          name: AppRoutes.nrChat,
+          builder: (context, state) => const ChatScreen(),
+        ),
+        GoRoute(
+          path: '/settings',
+          name: AppRoutes.nrSettings,
+          builder: (context, state) => const SettingsScreen(),
+        ),
+      ],
+    );
+
+    return MaterialApp.router(
+      theme: AppTheme.darkTheme,
+      routerConfig: router,
     );
   }
 

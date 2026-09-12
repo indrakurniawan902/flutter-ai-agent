@@ -1,6 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_ai_agent/app.dart';
+import 'package:flutter_ai_agent/myapp.dart';
+import 'package:flutter_ai_agent/presentation/navigation/app_router.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_chunk.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
@@ -86,6 +87,8 @@ void main() {
         secureStorageService: sl<SecureStorageService>(),
       ),
     );
+
+    appRouter.go('/splash');
   });
 
   tearDown(() async {

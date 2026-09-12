@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_ai_agent/app.dart';
+import 'package:flutter_ai_agent/myapp.dart';
+import 'package:flutter_ai_agent/presentation/navigation/app_router.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/models/chat/action_step.dart';
@@ -81,6 +82,8 @@ void main() {
     sl.registerFactory<SettingsCubit>(() => mockSettingsCubit);
     sl.registerFactory<ServerProfileCubit>(() => mockServerProfileCubit);
     sl.registerFactory<NavigationCubit>(() => NavigationCubit());
+
+    appRouter.go('/splash');
   });
 
   void setTestScreen(WidgetTester tester) {
@@ -282,9 +285,10 @@ void main() {
           ),
         ]);
 
-        await tester.pumpWidget(const App(splashDuration: Duration.zero));
+        appRouter.go('/home');
+        await tester.pumpWidget(const App());
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 300));
 
         // 1. Verify Stepper Card renders
         expect(find.byType(LiveActionStepperCard), findsOneWidget);
