@@ -2,6 +2,11 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:injectable/injectable.dart';
 
+import 'package:flutter_ai_agent/data/datasources/remote/gateway/gateway_client.dart';
+import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
+import 'package:flutter_ai_agent/domain/services/gateway/gateway_rpc_receiver.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
+
 @module
 abstract class NetworkModule {
   @lazySingleton
@@ -15,4 +20,23 @@ abstract class NetworkModule {
 abstract class StorageModule {
   @lazySingleton
   FlutterSecureStorage provideSecureStorage() => const FlutterSecureStorage();
+}
+
+@module
+abstract class GatewayModule {
+  @lazySingleton
+  GatewayClient provideGatewayClient() => GatewayClient();
+
+  @lazySingleton
+  GatewayClientBase provideGatewayClientBase(GatewayClient client) => client;
+
+  @lazySingleton
+  GatewayRpcReceiverBase provideGatewayRpcReceiver(
+    GatewayClientBase client,
+    ToolRegistry toolRegistry,
+  ) =>
+      GatewayDeviceRpcReceiver(
+        gatewayClient: client,
+        toolRegistry: toolRegistry,
+      );
 }

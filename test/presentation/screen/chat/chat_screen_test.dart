@@ -134,14 +134,32 @@ void main() {
       expect(find.text('Hello Agent'), findsNothing); // TextField cleared
     });
 
-    testWidgets('tapping reset button calls cubit.reset()', (tester) async {
+    testWidgets('tapping reset button shows confirmation dialog; Cancel does not reset; Reset resets',
+        (tester) async {
       when(() => mockAgentCubit.reset()).thenReturn(null);
 
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('chat_reset_button')));
-      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Reset Conversation'), findsOneWidget);
+      expect(
+        find.text(
+            'Are you sure you want to reset the conversation and clear history?'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const Key('cancel_reset_button')));
+      await tester.pumpAndSettle();
+      verifyNever(() => mockAgentCubit.reset());
+
+      await tester.tap(find.byKey(const Key('chat_reset_button')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('confirm_reset_button')));
+      await tester.pumpAndSettle();
 
       verify(() => mockAgentCubit.reset()).called(1);
     });
@@ -496,7 +514,8 @@ void main() {
       expect(find.byKey(const Key('chat_stop_button')), findsOneWidget);
     });
 
-    testWidgets('tapping stop button calls cubit.stop()', (tester) async {
+    testWidgets('tapping stop button shows confirmation dialog; Cancel does not stop; Stop stops',
+        (tester) async {
       when(() => mockAgentCubit.state)
           .thenReturn(const AgentStreaming('partial'));
 
@@ -505,6 +524,26 @@ void main() {
 
       await tester.tap(find.byKey(const Key('chat_stop_button')));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('Stop Generation'), findsOneWidget);
+      expect(
+        find.text('Are you sure you want to stop generation?'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const Key('cancel_stop_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      verifyNever(() => mockAgentCubit.stop());
+
+      await tester.tap(find.byKey(const Key('chat_stop_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.byKey(const Key('confirm_stop_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       verify(() => mockAgentCubit.stop()).called(1);
     });
