@@ -39,6 +39,8 @@ void main() {
           .thenAnswer((_) async => 'init-model');
       when(() => mockStorageService.getTemperature())
           .thenAnswer((_) async => 0.5);
+      when(() => mockStorageService.getProgressiveToolPruning())
+          .thenAnswer((_) async => true);
 
       final cubit = SettingsCubit(secureStorageService: mockStorageService);
 
@@ -66,6 +68,8 @@ void main() {
             .thenAnswer((_) async => 'custom-model');
         when(() => mockStorageService.getTemperature())
             .thenAnswer((_) async => 0.9);
+        when(() => mockStorageService.getProgressiveToolPruning())
+            .thenAnswer((_) async => true);
       },
       build: () => SettingsCubit(
         secureStorageService: mockStorageService,
@@ -95,6 +99,8 @@ void main() {
         when(() => mockStorageService.getApiKey()).thenAnswer((_) async => null);
         when(() => mockStorageService.getModel()).thenAnswer((_) async => null);
         when(() => mockStorageService.getTemperature()).thenAnswer((_) async => null);
+        when(() => mockStorageService.getProgressiveToolPruning())
+            .thenAnswer((_) async => true);
       },
       build: () => SettingsCubit(
         secureStorageService: mockStorageService,
@@ -115,6 +121,72 @@ void main() {
           temperature: AppConstants.defaultTemperature,
         ),
       ],
+    );
+
+    blocTest<SettingsCubit, SettingsState>(
+      'emits SettingsLoaded with progressiveToolPruning=false when storage has flag disabled',
+      setUp: () {
+        when(() => mockStorageService.getBaseUrl()).thenAnswer((_) async => null);
+        when(() => mockStorageService.getApiKey()).thenAnswer((_) async => null);
+        when(() => mockStorageService.getModel()).thenAnswer((_) async => null);
+        when(() => mockStorageService.getTemperature()).thenAnswer((_) async => null);
+        when(() => mockStorageService.getProgressiveToolPruning())
+            .thenAnswer((_) async => false);
+      },
+      build: () => SettingsCubit(
+        secureStorageService: mockStorageService,
+        autoLoad: false,
+      ),
+      act: (cubit) => cubit.loadSettings(),
+      expect: () => [
+        const SettingsLoading(baseUrl: '', apiKey: '', model: '', temperature: 0.7),
+        const SettingsLoaded(
+          baseUrl: AppConstants.defaultBaseUrl,
+          apiKey: '',
+          model: AppConstants.defaultModel,
+          temperature: AppConstants.defaultTemperature,
+          progressiveToolPruning: false,
+        ),
+      ],
+    );
+
+    blocTest<SettingsCubit, SettingsState>(
+      'persists progressiveToolPruning flag when saving settings',
+      setUp: () {
+        when(() => mockStorageService.saveSettings(
+              baseUrl: 'https://flag-router.com/v1',
+              apiKey: 'sk-flag-key',
+              model: 'ag-glm',
+              temperature: 0.7,
+              progressiveToolPruning: false,
+            )).thenAnswer((_) async {});
+      },
+      build: () => SettingsCubit(
+        secureStorageService: mockStorageService,
+        autoLoad: false,
+      ),
+      act: (cubit) => cubit.saveSettings(
+        baseUrl: 'https://flag-router.com/v1',
+        apiKey: 'sk-flag-key',
+        model: 'ag-glm',
+        temperature: 0.7,
+        progressiveToolPruning: false,
+      ),
+      expect: () => [
+        isA<SettingsSaving>()
+            .having((s) => s.progressiveToolPruning, 'progressiveToolPruning', false),
+        isA<SettingsSuccess>()
+            .having((s) => s.progressiveToolPruning, 'progressiveToolPruning', false),
+      ],
+      verify: (_) {
+        verify(() => mockStorageService.saveSettings(
+              baseUrl: 'https://flag-router.com/v1',
+              apiKey: 'sk-flag-key',
+              model: 'ag-glm',
+              temperature: 0.7,
+              progressiveToolPruning: false,
+            )).called(1);
+      },
     );
 
     blocTest<SettingsCubit, SettingsState>(
@@ -157,6 +229,7 @@ void main() {
               apiKey: validApiKey,
               model: validModel,
               temperature: validTemp,
+              progressiveToolPruning: true,
             )).thenAnswer((_) async {});
       },
       build: () => SettingsCubit(
@@ -190,6 +263,7 @@ void main() {
               apiKey: validApiKey,
               model: validModel,
               temperature: validTemp,
+              progressiveToolPruning: true,
             )).called(1);
       },
     );
@@ -221,6 +295,7 @@ void main() {
               apiKey: any(named: 'apiKey'),
               model: any(named: 'model'),
               temperature: any(named: 'temperature'),
+              progressiveToolPruning: any(named: 'progressiveToolPruning'),
             ));
       },
     );
@@ -252,6 +327,7 @@ void main() {
               apiKey: any(named: 'apiKey'),
               model: any(named: 'model'),
               temperature: any(named: 'temperature'),
+              progressiveToolPruning: any(named: 'progressiveToolPruning'),
             ));
       },
     );
@@ -264,6 +340,7 @@ void main() {
               apiKey: validApiKey,
               model: validModel,
               temperature: 2.0,
+              progressiveToolPruning: true,
             )).thenAnswer((_) async {});
       },
       build: () => SettingsCubit(
@@ -297,6 +374,7 @@ void main() {
               apiKey: validApiKey,
               model: validModel,
               temperature: 2.0,
+              progressiveToolPruning: true,
             )).called(1);
       },
     );
@@ -309,6 +387,7 @@ void main() {
               apiKey: validApiKey,
               model: validModel,
               temperature: validTemp,
+              progressiveToolPruning: true,
             )).thenThrow(Exception('Write failure'));
       },
       build: () => SettingsCubit(
@@ -341,6 +420,8 @@ void main() {
         when(() => mockStorageService.saveBaseUrl(any())).thenAnswer((_) async {});
         when(() => mockStorageService.saveModel(any())).thenAnswer((_) async {});
         when(() => mockStorageService.saveTemperature(any())).thenAnswer((_) async {});
+        when(() => mockStorageService.saveProgressiveToolPruning(any()))
+            .thenAnswer((_) async {});
       },
       build: () => SettingsCubit(
         secureStorageService: mockStorageService,
@@ -376,6 +457,8 @@ void main() {
         when(() => mockStorageService.saveModel(any())).thenAnswer((_) async {});
         when(() => mockStorageService.saveTemperature(any())).thenAnswer((_) async {});
         when(() => mockStorageService.saveApiKey(any())).thenAnswer((_) async {});
+        when(() => mockStorageService.saveProgressiveToolPruning(any()))
+            .thenAnswer((_) async {});
       },
       build: () => SettingsCubit(
         secureStorageService: mockStorageService,

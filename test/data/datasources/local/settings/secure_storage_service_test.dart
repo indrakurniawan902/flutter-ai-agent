@@ -198,6 +198,9 @@ void main() {
           .thenAnswer((_) async => 'ag-glm');
       when(() => mockStorage.read(key: SecureStorageService.keyTemperature))
           .thenAnswer((_) async => '0.8');
+      when(() => mockStorage.read(
+              key: SecureStorageService.keyProgressiveToolPruning))
+          .thenAnswer((_) async => 'true');
 
       final settings = await service.getSettings();
 
@@ -205,6 +208,7 @@ void main() {
       expect(settings.apiKey, 'sk-12345');
       expect(settings.model, 'ag-glm');
       expect(settings.temperature, 0.8);
+      expect(settings.progressiveToolPruning, true);
     });
 
     test('clearAll delegates to deleteAll on storage', () async {

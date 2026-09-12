@@ -14,6 +14,7 @@ import 'package:flutter_ai_agent/domain/entities/chat/memory_item.dart';
 import 'package:flutter_ai_agent/domain/repositories/chat/chat_local_repository.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/local_memory_service.dart';
 import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart';
+import 'package:flutter_ai_agent/domain/services/tools/tool_pruning_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/security_policy.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 import 'package:flutter_ai_agent/domain/services/skills/skills_registry_service.dart';
@@ -32,6 +33,7 @@ class AgentCubit extends Cubit<AgentState> {
   final SkillsRegistryService? _skillsRegistryService;
   final ChatLocalRepository? _chatLocalRepository;
   final LocalMemoryServiceBase? _localMemoryService;
+  final ToolPruningService? _toolPruningService;
   final List<MemoryItem> _activeMemories = [];
   String activeProfileId;
   String baseUrl;
@@ -39,6 +41,7 @@ class AgentCubit extends Cubit<AgentState> {
   double temperature;
   String? apiKey;
   final int maxTurns;
+  bool progressiveToolPruning = true;
 
   final List<ChatMessage> _messages = [];
   final List<ToolCallDelta> _pendingTurnToolCalls = [];
@@ -67,6 +70,9 @@ class AgentCubit extends Cubit<AgentState> {
         skillsRegistryService: getIt.isRegistered<SkillsRegistryService>()
             ? getIt<SkillsRegistryService>()
             : null,
+        toolPruningService: getIt.isRegistered<ToolPruningService>()
+            ? getIt<ToolPruningService>()
+            : null,
         chatLocalRepository: chatLocalRepository ??
             (getIt.isRegistered<ChatLocalRepository>()
                 ? getIt<ChatLocalRepository>()
@@ -83,6 +89,7 @@ class AgentCubit extends Cubit<AgentState> {
     ToolRegistry? toolRegistry,
     SecureStorageService? secureStorageService,
     SkillsRegistryService? skillsRegistryService,
+    ToolPruningService? toolPruningService,
     ChatLocalRepository? chatLocalRepository,
     LocalMemoryServiceBase? localMemoryService,
     this.activeProfileId = 'default',
@@ -95,6 +102,7 @@ class AgentCubit extends Cubit<AgentState> {
         _toolRegistry = toolRegistry ?? ToolRegistry(),
         _secureStorageService = secureStorageService, // ignore: prefer_initializing_formals
         _skillsRegistryService = skillsRegistryService,
+        _toolPruningService = toolPruningService, // ignore: prefer_initializing_formals
         _chatLocalRepository = chatLocalRepository,
         _localMemoryService = localMemoryService,
         super(const AgentIdle());
@@ -176,6 +184,7 @@ class AgentCubit extends Cubit<AgentState> {
         apiKey = (settings.apiKey != null && settings.apiKey!.isNotEmpty)
             ? settings.apiKey
             : null;
+        progressiveToolPruning = settings.progressiveToolPruning ?? true;
       } catch (_) {
         // Fallback to in-memory configuration on storage error
       }
@@ -464,7 +473,22 @@ class AgentCubit extends Cubit<AgentState> {
     emit(const AgentThinking());
 
     _skillsRegistryService?.syncWithToolRegistry(_toolRegistry);
-    final toolDefs = _toolRegistry.getOpenAiToolDefinitions();
+    var toolDefs = _toolRegistry.getOpenAiToolDefinitions();
+    final pruningService = _toolPruningService;
+    if (pruningService != null) {
+      String pruningPrompt = '';
+      for (final message in _messages.reversed) {
+        if (message.role == 'user') {
+          pruningPrompt = message.content ?? '';
+          break;
+        }
+      }
+      toolDefs = pruningService.prune(
+        prompt: pruningPrompt,
+        fullToolDefinitions: toolDefs,
+        enabled: progressiveToolPruning,
+      );
+    }
     final serializedMessages = _messages.map((m) => m.toJson()).toList();
     if (_activeMemories.isNotEmpty) {
       final memoryPrompt =

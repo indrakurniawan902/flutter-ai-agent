@@ -33,6 +33,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       apiKey: state.apiKey,
       model: state.model,
       temperature: state.temperature,
+      progressiveToolPruning: state.progressiveToolPruning,
     ));
 
     try {
@@ -40,12 +41,14 @@ class SettingsCubit extends Cubit<SettingsState> {
       final apiKey = await _storageService.getApiKey() ?? '';
       final model = await _storageService.getModel() ?? AppConstants.defaultModel;
       final temperature = await _storageService.getTemperature() ?? AppConstants.defaultTemperature;
+      final progressiveToolPruning = await _storageService.getProgressiveToolPruning();
 
       emit(SettingsLoaded(
         baseUrl: baseUrl,
         apiKey: apiKey,
         model: model,
         temperature: temperature,
+        progressiveToolPruning: progressiveToolPruning,
       ));
     } catch (e) {
       emit(SettingsError(
@@ -54,6 +57,7 @@ class SettingsCubit extends Cubit<SettingsState> {
         apiKey: state.apiKey,
         model: state.model,
         temperature: state.temperature,
+        progressiveToolPruning: state.progressiveToolPruning,
       ));
     }
   }
@@ -64,6 +68,7 @@ class SettingsCubit extends Cubit<SettingsState> {
     required String apiKey,
     required String model,
     required double temperature,
+    bool progressiveToolPruning = true,
   }) async {
     final trimmedUrl = baseUrl.trim();
     final uri = Uri.tryParse(trimmedUrl);
@@ -76,6 +81,7 @@ class SettingsCubit extends Cubit<SettingsState> {
         apiKey: apiKey,
         model: model,
         temperature: temperature,
+        progressiveToolPruning: progressiveToolPruning,
         message: 'Please enter a valid HTTP/HTTPS URL',
       ));
       return false;
@@ -88,6 +94,7 @@ class SettingsCubit extends Cubit<SettingsState> {
         apiKey: apiKey,
         model: model,
         temperature: temperature,
+        progressiveToolPruning: progressiveToolPruning,
         message: 'API Key cannot be empty',
       ));
       return false;
@@ -100,6 +107,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       apiKey: trimmedApiKey,
       model: model.trim(),
       temperature: clampedTemp,
+      progressiveToolPruning: progressiveToolPruning,
     ));
 
     try {
@@ -108,6 +116,7 @@ class SettingsCubit extends Cubit<SettingsState> {
         apiKey: trimmedApiKey,
         model: model.trim(),
         temperature: clampedTemp,
+        progressiveToolPruning: progressiveToolPruning,
       );
 
       emit(SettingsSuccess(
@@ -115,6 +124,7 @@ class SettingsCubit extends Cubit<SettingsState> {
         apiKey: trimmedApiKey,
         model: model.trim(),
         temperature: clampedTemp,
+        progressiveToolPruning: progressiveToolPruning,
         message: 'Settings saved successfully',
       ));
       return true;
@@ -124,6 +134,7 @@ class SettingsCubit extends Cubit<SettingsState> {
         apiKey: trimmedApiKey,
         model: model.trim(),
         temperature: clampedTemp,
+        progressiveToolPruning: progressiveToolPruning,
         message: 'Failed to save settings: ${e.toString()}',
       ));
       return false;
@@ -138,6 +149,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       await _storageService.saveBaseUrl(AppConstants.defaultBaseUrl);
       await _storageService.saveModel(AppConstants.defaultModel);
       await _storageService.saveTemperature(AppConstants.defaultTemperature);
+      await _storageService.saveProgressiveToolPruning(true);
       if (!preserveApiKey) {
         await _storageService.saveApiKey('');
       }
@@ -147,6 +159,7 @@ class SettingsCubit extends Cubit<SettingsState> {
         apiKey: key,
         model: AppConstants.defaultModel,
         temperature: AppConstants.defaultTemperature,
+        progressiveToolPruning: true,
       ));
     } catch (e) {
       emit(SettingsError(
@@ -154,6 +167,7 @@ class SettingsCubit extends Cubit<SettingsState> {
         apiKey: state.apiKey,
         model: state.model,
         temperature: state.temperature,
+        progressiveToolPruning: state.progressiveToolPruning,
         message: 'Failed to reset settings: ${e.toString()}',
       ));
     }
@@ -166,6 +180,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       apiKey: profile.token,
       model: profile.model,
       temperature: profile.temperature,
+      progressiveToolPruning: state.progressiveToolPruning,
     ));
   }
 }

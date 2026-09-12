@@ -13,16 +13,19 @@ class SettingsData extends Equatable {
   final String? apiKey;
   final String? model;
   final double? temperature;
+  final bool? progressiveToolPruning;
 
   const SettingsData({
     this.baseUrl,
     this.apiKey,
     this.model,
     this.temperature,
+    this.progressiveToolPruning,
   });
 
   @override
-  List<Object?> get props => [baseUrl, apiKey, model, temperature];
+  List<Object?> get props =>
+      [baseUrl, apiKey, model, temperature, progressiveToolPruning];
 }
 
 /// Service wrapping FlutterSecureStorage to securely persist LLM endpoint configurations and server profiles.
@@ -34,6 +37,7 @@ class SecureStorageService {
   static const String keyTemperature = 'llm_temperature';
   static const String keyServerProfiles = 'server_profiles_list';
   static const String keyAmbientTriggerSettings = 'ambient_trigger_settings';
+  static const String keyProgressiveToolPruning = 'progressive_tool_pruning';
 
   final FlutterSecureStorage _storage;
 
@@ -74,18 +78,33 @@ class SecureStorageService {
     return double.tryParse(value);
   }
 
+  Future<void> saveProgressiveToolPruning(bool value) async {
+    await _storage.write(key: keyProgressiveToolPruning, value: '$value');
+  }
+
+  Future<bool> getProgressiveToolPruning() async {
+    final value = await _storage.read(key: keyProgressiveToolPruning);
+    if (value == null) return true;
+    return value == 'true';
+  }
+
   Future<void> saveSettings({
     required String baseUrl,
     required String apiKey,
     required String model,
     required double temperature,
+    bool? progressiveToolPruning,
   }) async {
-    await Future.wait([
+    final futures = <Future<void>>[
       saveBaseUrl(baseUrl),
       saveApiKey(apiKey),
       saveModel(model),
       saveTemperature(temperature),
-    ]);
+    ];
+    if (progressiveToolPruning != null) {
+      futures.add(saveProgressiveToolPruning(progressiveToolPruning));
+    }
+    await Future.wait(futures);
   }
 
   Future<SettingsData> getSettings() async {
@@ -94,6 +113,7 @@ class SecureStorageService {
       getApiKey(),
       getModel(),
       getTemperature(),
+      getProgressiveToolPruning(),
     ]);
 
     return SettingsData(
@@ -101,6 +121,7 @@ class SecureStorageService {
       apiKey: results[1] as String?,
       model: results[2] as String?,
       temperature: results[3] as double?,
+      progressiveToolPruning: results[4] as bool,
     );
   }
 

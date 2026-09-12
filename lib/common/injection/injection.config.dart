@@ -58,6 +58,8 @@ import 'package:flutter_ai_agent/data/repositories/chat_local_repository_impl.da
     as _i92;
 import 'package:flutter_ai_agent/data/repositories/chat_repository_impl.dart'
     as _i236;
+import 'package:flutter_ai_agent/data/services/tools/tool_pruning_service_impl.dart'
+    as _i641;
 import 'package:flutter_ai_agent/domain/repositories/chat/chat_local_repository.dart'
     as _i445;
 import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart'
@@ -72,6 +74,8 @@ import 'package:flutter_ai_agent/domain/services/shortcuts/quick_actions_service
     as _i355;
 import 'package:flutter_ai_agent/domain/services/skills/skills_registry_service.dart'
     as _i791;
+import 'package:flutter_ai_agent/domain/services/tools/tool_pruning_service.dart'
+    as _i939;
 import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart'
     as _i290;
 import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart'
@@ -215,6 +219,9 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i355.QuickActionsService>(
       () =>
           _i355.QuickActionsService(provider: gh<_i355.QuickActionsProvider>()),
+    );
+    gh.lazySingleton<_i939.ToolPruningService>(
+      () => const _i641.ToolPruningServiceImpl(),
     );
     gh.lazySingleton<_i987.LocalMemoryServiceBase>(
       () => _i734.LocalMemoryService.create(),
