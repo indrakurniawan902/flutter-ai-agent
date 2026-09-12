@@ -1,6 +1,6 @@
 import 'package:bloc_test/bloc_test.dart';
-import 'package:flutter_ai_agent/features/navigation/presentation/cubits/navigation_cubit.dart';
-import 'package:flutter_ai_agent/features/navigation/presentation/cubits/navigation_state.dart';
+import 'package:flutter_ai_agent/presentation/screen/navigation/cubit/navigation_cubit.dart';
+import 'package:flutter_ai_agent/presentation/screen/navigation/cubit/navigation_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

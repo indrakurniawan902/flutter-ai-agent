@@ -45,8 +45,6 @@ import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart'
 import 'package:flutter_ai_agent/domain/tools/chat/notification_service.dart'
     as _i919;
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart' as _i732;
-import 'package:flutter_ai_agent/features/navigation/presentation/cubits/navigation_cubit.dart'
-    as _i982;
 import 'package:flutter_ai_agent/features/pairing/domain/pairing_parser.dart'
     as _i288;
 import 'package:flutter_ai_agent/features/server_profiles/presentation/cubits/server_profile_cubit.dart'
@@ -57,6 +55,8 @@ import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_
     as _i755;
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart'
     as _i15;
+import 'package:flutter_ai_agent/presentation/screen/navigation/cubit/navigation_cubit.dart'
+    as _i693;
 import 'package:flutter_ai_agent/utils/dio_err_handler.dart' as _i498;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart' as _i558;
 import 'package:get_it/get_it.dart' as _i174;
@@ -71,7 +71,7 @@ extension GetItInjectableX on _i174.GetIt {
     final gh = _i526.GetItHelper(this, environment, environmentFilter);
     final networkModule = _$NetworkModule();
     final storageModule = _$StorageModule();
-    gh.factory<_i982.NavigationCubit>(() => _i982.NavigationCubit.create());
+    gh.factory<_i693.NavigationCubit>(() => _i693.NavigationCubit.create());
     gh.singleton<_i498.DioErrHandler>(() => const _i498.DioErrHandler());
     gh.lazySingleton<_i361.Dio>(() => networkModule.provideDio());
     gh.lazySingleton<_i558.FlutterSecureStorage>(

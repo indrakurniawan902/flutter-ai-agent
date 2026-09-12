@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/core/theme/hermes_theme.dart';
-import 'package:flutter_ai_agent/features/memory_vault/presentation/screens/memory_vault_screen.dart';
+import 'package:flutter_ai_agent/presentation/screen/memory_vault/memory_vault_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

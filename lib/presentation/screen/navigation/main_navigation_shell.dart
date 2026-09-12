@@ -4,13 +4,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/core/theme/hermes_theme.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/chat_screen.dart';
-import 'package:flutter_ai_agent/features/memory_vault/presentation/screens/memory_vault_screen.dart';
-import 'package:flutter_ai_agent/features/navigation/presentation/cubits/navigation_cubit.dart';
-import 'package:flutter_ai_agent/features/navigation/presentation/cubits/navigation_state.dart';
-import 'package:flutter_ai_agent/features/navigation/presentation/widgets/floating_bottom_nav_bar.dart';
-import 'package:flutter_ai_agent/features/pocket_node/presentation/screens/pocket_node_screen.dart';
+import 'package:flutter_ai_agent/presentation/screen/memory_vault/memory_vault_screen.dart';
+import 'package:flutter_ai_agent/presentation/screen/navigation/cubit/navigation_cubit.dart';
+import 'package:flutter_ai_agent/presentation/screen/navigation/cubit/navigation_state.dart';
+import 'package:flutter_ai_agent/presentation/widget/floating_bottom_nav_bar.dart';
+import 'package:flutter_ai_agent/presentation/screen/pocket_node/pocket_node_screen.dart';
 import 'package:flutter_ai_agent/features/settings/presentation/screens/settings_screen.dart';
-import 'package:flutter_ai_agent/features/skills/presentation/screens/skills_hub_screen.dart';
+import 'package:flutter_ai_agent/presentation/screen/skills/skills_hub_screen.dart';
 
 /// Main persistent tab shell for Flames.
 ///

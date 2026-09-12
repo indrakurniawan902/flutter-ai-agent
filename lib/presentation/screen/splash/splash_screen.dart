@@ -129,34 +129,34 @@ class _SplashScreenState extends State<SplashScreen>
                       },
                     ),
                   ),
-                const SizedBox(height: 24),
-                const Text(
-                  'FLAMES',
-                  key: Key('splash_app_title'),
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 4.0,
-                    color: Colors.white,
+                  const SizedBox(height: 24),
+                  const Text(
+                    'FLAMES',
+                    key: Key('splash_app_title'),
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 4.0,
+                      color: Colors.white,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Autonomous Device Workstation',
-                  key: Key('splash_app_subtitle'),
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w400,
-                    letterSpacing: 1.2,
-                    color: HermesColors.inkMuted,
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Autonomous Device Workstation',
+                    key: Key('splash_app_subtitle'),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w400,
+                      letterSpacing: 1.2,
+                      color: HermesColors.inkMuted,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
   }
 }
