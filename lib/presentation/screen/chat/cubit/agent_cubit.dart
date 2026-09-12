@@ -36,6 +36,7 @@ class AgentCubit extends Cubit<AgentState> {
   String activeProfileId;
   String baseUrl;
   String model;
+  double temperature;
   String? apiKey;
   final int maxTurns;
 
@@ -53,6 +54,7 @@ class AgentCubit extends Cubit<AgentState> {
     required LlmRepository llmRepository,
     ChatLocalRepository? chatLocalRepository,
     LocalMemoryServiceBase? localMemoryService,
+    double temperature = 0.7,
   }) =>
       AgentCubit(
         llmRepository: llmRepository,
@@ -73,6 +75,7 @@ class AgentCubit extends Cubit<AgentState> {
             (getIt.isRegistered<LocalMemoryServiceBase>()
                 ? getIt<LocalMemoryServiceBase>()
                 : null),
+        temperature: temperature,
       );
 
   AgentCubit({
@@ -85,6 +88,7 @@ class AgentCubit extends Cubit<AgentState> {
     this.activeProfileId = 'default',
     this.baseUrl = 'https://api.openai.com/v1',
     this.model = 'gpt-4o',
+    this.temperature = 0.7,
     this.apiKey,
     this.maxTurns = 10,
   })  : _llmRepository = llmRepository ?? getIt<LlmRepository>(),
@@ -151,6 +155,7 @@ class AgentCubit extends Cubit<AgentState> {
   /// Switches active profile and loads its history.
   Future<void> switchProfile(String newProfileId) async {
     activeProfileId = newProfileId;
+    await refreshSettings();
     await loadChatHistory(newProfileId);
   }
 
@@ -164,6 +169,9 @@ class AgentCubit extends Cubit<AgentState> {
         }
         if (settings.model != null && settings.model!.isNotEmpty) {
           model = settings.model!;
+        }
+        if (settings.temperature != null) {
+          temperature = settings.temperature!;
         }
         apiKey = (settings.apiKey != null && settings.apiKey!.isNotEmpty)
             ? settings.apiKey
@@ -480,6 +488,7 @@ class AgentCubit extends Cubit<AgentState> {
       messages: messagesToSend,
       tools: toolDefs.isNotEmpty ? toolDefs : null,
       apiKey: apiKey,
+      temperature: temperature,
     );
 
     await responseEither.fold(

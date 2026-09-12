@@ -40,3 +40,9 @@ class StorageFailure extends Failure {
 class PermissionFailure extends Failure {
   const PermissionFailure([super.message = 'Permission denied']);
 }
+
+class UnsupportedEndpointFailure extends Failure {
+  const UnsupportedEndpointFailure([
+    super.message = 'Endpoint not supported by the active server',
+  ]);
+}

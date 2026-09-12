@@ -87,6 +87,9 @@ class VoiceInputService implements VoiceInputServiceBase {
   @factoryMethod
   factory VoiceInputService.create() => VoiceInputService();
 
+  static const String recognitionUnavailableMessage =
+      'Speech recognition unavailable or voice pack missing on this device';
+
   final SpeechToTextWrapper _speech;
 
   final _transcriptionController = StreamController<String>.broadcast();
@@ -168,9 +171,20 @@ class VoiceInputService implements VoiceInputServiceBase {
         );
         if (!ready) {
           _listening = false;
-          return const Left(PermissionFailure(
-            'Microphone permission denied or speech recognition unavailable',
-          ));
+          bool hasPerm = false;
+          try {
+            hasPerm = await _speech.hasPermission();
+          } catch (_) {
+            hasPerm = false;
+          }
+          if (!hasPerm) {
+            return const Left(
+              PermissionFailure('Microphone permission denied'),
+            );
+          }
+          return const Left(
+            ServerFailure(recognitionUnavailableMessage),
+          );
         }
       }
       await _speech.listen(

@@ -256,6 +256,7 @@ void main() {
               messages: any(named: 'messages'),
               tools: any(named: 'tools'),
               apiKey: any(named: 'apiKey'),
+              temperature: any(named: 'temperature'),
             )).thenAnswer((invocation) async {
           final msgs =
               invocation.namedArguments[#messages] as List<Map<String, dynamic>>;
@@ -404,6 +405,7 @@ void main() {
               messages: any(named: 'messages'),
               tools: any(named: 'tools'),
               apiKey: any(named: 'apiKey'),
+              temperature: any(named: 'temperature'),
             )).thenAnswer((invocation) async {
           return Right(Stream.fromIterable([
             const ChatChunk(
@@ -466,6 +468,7 @@ void main() {
               messages: any(named: 'messages'),
               tools: any(named: 'tools'),
               apiKey: any(named: 'apiKey'),
+              temperature: any(named: 'temperature'),
             )).thenAnswer((invocation) async {
           return Right(Stream.fromIterable([
             const ChatChunk(
@@ -535,6 +538,7 @@ void main() {
               messages: any(named: 'messages'),
               tools: any(named: 'tools'),
               apiKey: any(named: 'apiKey'),
+              temperature: any(named: 'temperature'),
             )).thenAnswer((invocation) async {
           return Right(Stream.fromIterable([
             const ChatChunk(

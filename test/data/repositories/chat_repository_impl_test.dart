@@ -174,5 +174,35 @@ void main() {
 
       streamController.close();
     });
+
+    test('forwards temperature to datasource', () async {
+      final streamController = StreamController<ChatChunkRemoteResponse>();
+      when(() => mockDatasource.streamCompletion(
+            baseUrl: baseUrl,
+            model: model,
+            messages: messages,
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
+          )).thenAnswer((_) async => streamController.stream);
+
+      await repository.streamCompletion(
+        baseUrl: baseUrl,
+        model: model,
+        messages: messages,
+        temperature: 0.7,
+      );
+
+      verify(() => mockDatasource.streamCompletion(
+            baseUrl: baseUrl,
+            model: model,
+            messages: messages,
+            tools: null,
+            apiKey: null,
+            temperature: 0.7,
+          )).called(1);
+
+      streamController.close();
+    });
   });
 }

@@ -25,7 +25,8 @@ abstract class StorageModule {
 @module
 abstract class GatewayModule {
   @lazySingleton
-  GatewayClient provideGatewayClient() => GatewayClient();
+  GatewayClient provideGatewayClient(ToolRegistry toolRegistry) =>
+      GatewayClient(toolManifestProvider: toolRegistry.getOpenAiToolDefinitions);
 
   @lazySingleton
   GatewayClientBase provideGatewayClientBase(GatewayClient client) => client;

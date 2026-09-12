@@ -196,7 +196,7 @@ void main() {
       result.fold(
         (failure) {
           expect(failure, isA<ServerFailure>());
-          expect(failure.message, contains('Cannot launch WhatsApp'));
+          expect(failure.message, contains('No app available to handle WhatsApp'));
         },
         (_) => fail('Expected Left but got Right'),
       );
@@ -363,6 +363,110 @@ void main() {
         (failure) {
           expect(failure, isA<ServerFailure>());
           expect(failure.message, contains('Browser failure'));
+        },
+        (_) => fail('Expected Left but got Right'),
+      );
+    });
+  });
+
+  group('openPhoneCall', () {
+    test('sanitizes phone and launches phone dialer successfully', () async {
+      when(() => mockUrlLauncherProvider.canLaunchUrl(any()))
+          .thenAnswer((_) async => true);
+      when(
+        () => mockUrlLauncherProvider.launchUrl(
+          any(),
+          mode: any(named: 'mode'),
+        ),
+      ).thenAnswer((_) async => true);
+
+      final result = await tools.openPhoneCall('+62 812-3456-789');
+
+      expect(result, isA<Right<Failure, String>>());
+      result.fold(
+        (failure) => fail('Expected Right but got Left: $failure'),
+        (message) => expect(message, contains('+62 812-3456-789')),
+      );
+
+      final captured = verify(
+        () => mockUrlLauncherProvider.launchUrl(
+          captureAny(),
+          mode: LaunchMode.externalApplication,
+        ),
+      ).captured;
+
+      final uri = captured.first as Uri;
+      expect(uri.scheme, 'tel');
+      expect(uri.path, '628123456789');
+    });
+
+    test('returns Left(ServerFailure) when phone has no digits', () async {
+      final result = await tools.openPhoneCall('+++ --- ()');
+
+      expect(result, isA<Left<Failure, String>>());
+      result.fold(
+        (failure) {
+          expect(failure, isA<ServerFailure>());
+          expect(failure.message, contains('Invalid phone number'));
+        },
+        (_) => fail('Expected Left but got Right'),
+      );
+      verifyNever(() => mockUrlLauncherProvider.canLaunchUrl(any()));
+    });
+
+    test('returns Left(ServerFailure) when canLaunchUrl returns false',
+        () async {
+      when(() => mockUrlLauncherProvider.canLaunchUrl(any()))
+          .thenAnswer((_) async => false);
+
+      final result = await tools.openPhoneCall('+628123456789');
+
+      expect(result, isA<Left<Failure, String>>());
+      result.fold(
+        (failure) {
+          expect(failure, isA<ServerFailure>());
+          expect(
+            failure.message,
+            contains('No app available to handle phone calls'),
+          );
+        },
+        (_) => fail('Expected Left but got Right'),
+      );
+    });
+
+    test('returns Left(ServerFailure) when launchUrl returns false', () async {
+      when(() => mockUrlLauncherProvider.canLaunchUrl(any()))
+          .thenAnswer((_) async => true);
+      when(
+        () => mockUrlLauncherProvider.launchUrl(
+          any(),
+          mode: any(named: 'mode'),
+        ),
+      ).thenAnswer((_) async => false);
+
+      final result = await tools.openPhoneCall('+628123456789');
+
+      expect(result, isA<Left<Failure, String>>());
+      result.fold(
+        (failure) {
+          expect(failure, isA<ServerFailure>());
+          expect(failure.message, contains('Failed to open the dialer'));
+        },
+        (_) => fail('Expected Left but got Right'),
+      );
+    });
+
+    test('returns Left(ServerFailure) when url launcher throws', () async {
+      when(() => mockUrlLauncherProvider.canLaunchUrl(any()))
+          .thenThrow(Exception('Dialer launch failure'));
+
+      final result = await tools.openPhoneCall('+628123456789');
+
+      expect(result, isA<Left<Failure, String>>());
+      result.fold(
+        (failure) {
+          expect(failure, isA<ServerFailure>());
+          expect(failure.message, contains('Dialer launch failure'));
         },
         (_) => fail('Expected Left but got Right'),
       );

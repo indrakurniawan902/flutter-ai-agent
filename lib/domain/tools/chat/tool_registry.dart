@@ -1065,6 +1065,27 @@ class ToolRegistry {
 
     register(
       RegisteredTool(
+        name: 'make_phone_call',
+        description:
+            'Opens the device dialer with a phone number so the user can place a call.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'phone': {
+              'type': 'string',
+              'description': 'Phone number with country code',
+            },
+          },
+          'required': ['phone'],
+        },
+        securityTier: SecurityTier.tier3Hitl,
+        execute: (args) =>
+            tools.openPhoneCall(args['phone']?.toString() ?? ''),
+      ),
+    );
+
+    register(
+      RegisteredTool(
         name: 'open_external_url',
         description: 'Opens an external web URL in the browser.',
         parameters: const {

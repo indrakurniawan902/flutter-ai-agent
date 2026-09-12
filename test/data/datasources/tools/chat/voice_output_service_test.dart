@@ -467,5 +467,120 @@ void main() {
       final result = await client.synthesize(text: 'Hello');
       expect(result, equals(Uint8List.fromList([1, 2, 3])));
     });
+
+    test(
+        'synthesize throws UnsupportedEndpointException on 404 DioException',
+        () async {
+      when(
+        () => mockDio.post<List<int>>(
+          'https://api.openai.com/v1/audio/speech',
+          data: any(named: 'data'),
+          options: any(named: 'options'),
+        ),
+      ).thenThrow(
+        DioException(
+          requestOptions: RequestOptions(path: '/audio/speech'),
+          type: DioExceptionType.badResponse,
+          response: Response<dynamic>(
+            requestOptions: RequestOptions(path: '/audio/speech'),
+            statusCode: 404,
+          ),
+        ),
+      );
+
+      await expectLater(
+        () => ttsClient.synthesize(text: 'Test TTS'),
+        throwsA(isA<UnsupportedEndpointException>()),
+      );
+    });
+
+    test('synthesize throws UnsupportedEndpointException on 404 response',
+        () async {
+      when(
+        () => mockDio.post<List<int>>(
+          'https://api.openai.com/v1/audio/speech',
+          data: any(named: 'data'),
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer(
+        (_) async => Response<List<int>>(
+          data: [1],
+          statusCode: 404,
+          statusMessage: 'Not Found',
+          requestOptions: RequestOptions(path: '/audio/speech'),
+        ),
+      );
+
+      await expectLater(
+        () => ttsClient.synthesize(text: 'Test TTS'),
+        throwsA(isA<UnsupportedEndpointException>()),
+      );
+    });
+  });
+
+  group('VoiceOutputService - Unsupported TTS endpoint propagation', () {
+    void stubTtsThrowingUnsupported() {
+      when(
+        () => mockTtsClient.synthesize(
+          text: any(named: 'text'),
+          voice: any(named: 'voice'),
+          model: any(named: 'model'),
+          speed: any(named: 'speed'),
+        ),
+      ).thenThrow(const UnsupportedEndpointException());
+    }
+
+    test(
+        'speakText returns Left(UnsupportedEndpointFailure) and emits errorStream on 404',
+        () async {
+      stubTtsThrowingUnsupported();
+
+      final errors = <String>[];
+      final statuses = <VoiceOutputStatus>[];
+      final errorSub = service.errorStream.listen(errors.add);
+      final statusSub = service.statusStream.listen(statuses.add);
+
+      final result = await service.speakText('Hello');
+
+      await pumpEventQueue();
+      await errorSub.cancel();
+      await statusSub.cancel();
+
+      result.fold(
+        (failure) {
+          expect(failure, isA<UnsupportedEndpointFailure>());
+          expect(failure.message, DioTtsClient.unsupportedEndpointMessage);
+        },
+        (_) => fail('Expected Left(UnsupportedEndpointFailure)'),
+      );
+      expect(errors, [DioTtsClient.unsupportedEndpointMessage]);
+      expect(service.currentStatus, VoiceOutputStatus.error);
+      expect(statuses, contains(VoiceOutputStatus.error));
+      verifyNever(() => mockPlayer.play(any(that: isA<BytesSource>())));
+    });
+
+    test(
+        'queueText returns Left(UnsupportedEndpointFailure) and emits errorStream on 404',
+        () async {
+      stubTtsThrowingUnsupported();
+
+      final errors = <String>[];
+      final errorSub = service.errorStream.listen(errors.add);
+
+      final result = await service.queueText('Queued text');
+
+      await pumpEventQueue();
+      await errorSub.cancel();
+
+      result.fold(
+        (failure) {
+          expect(failure, isA<UnsupportedEndpointFailure>());
+          expect(failure.message, DioTtsClient.unsupportedEndpointMessage);
+        },
+        (_) => fail('Expected Left(UnsupportedEndpointFailure)'),
+      );
+      expect(errors, [DioTtsClient.unsupportedEndpointMessage]);
+      expect(service.currentStatus, VoiceOutputStatus.error);
+    });
   });
 }

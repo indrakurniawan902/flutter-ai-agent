@@ -57,6 +57,7 @@ void main() {
       profileName: 'Hermes Gateway',
       timestamp: DateTime(2026, 9, 11),
     ));
+    registerFallbackValue(GatewayConnectionState.disconnected);
   });
 
   setUp(() async {
@@ -116,6 +117,10 @@ void main() {
         .thenReturn(const GatewayRpcInitial());
     when(() => mockGatewayRpcCubit.stream)
         .thenAnswer((_) => gatewayRpcStateController.stream);
+    when(() => mockGatewayRpcCubit.startListening()).thenReturn(null);
+    when(() => mockGatewayRpcCubit.stopListening()).thenReturn(null);
+    when(() => mockGatewayRpcCubit.syncWithConnectionState(any()))
+        .thenReturn(null);
 
     when(() => mockServerProfileCubit.state).thenReturn(
       ServerProfileLoaded(profiles: [sampleProfile], activeProfile: sampleProfile),
@@ -330,6 +335,58 @@ void main() {
       expect(find.text('Standalone'), findsOneWidget);
       verify(() => mockGatewayClient.disconnect(reason: any(named: 'reason')))
           .called(1);
+    });
+
+    testWidgets(
+        'switching to Direct stops the RPC listener and switching back to '
+        'Gateway starts it again', (tester) async {
+      when(() => mockGatewayClient.state)
+          .thenReturn(GatewayConnectionState.disconnected);
+
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.direct));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('chat_mode_toggle')));
+      await tester.pumpAndSettle();
+
+      verify(() => mockGatewayRpcCubit.startListening()).called(1);
+      expect(find.text('Switched to Gateway Remote Node mode'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('chat_mode_toggle')));
+      await tester.pumpAndSettle();
+
+      verify(() => mockGatewayRpcCubit.stopListening()).called(1);
+      // The mode indicator returns to Standalone (Direct LLM). The mode-switch
+      // SnackBar text is asserted by the two tests above; asserting it again
+      // here would race the still-visible first SnackBar.
+      expect(find.text('Standalone'), findsOneWidget);
+    });
+
+    testWidgets(
+        'Direct mode connection state transitions do not start RPC listening',
+        (tester) async {
+      when(() => mockGatewayClient.state)
+          .thenReturn(GatewayConnectionState.disconnected);
+
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.direct));
+      await tester.pumpAndSettle();
+
+      gatewayStateController.add(GatewayConnectionState.connecting);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      gatewayStateController.add(GatewayConnectionState.connected);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      gatewayStateController.add(GatewayConnectionState.reconnecting);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      verifyNever(() => mockGatewayRpcCubit.startListening());
+      verifyNever(() => mockGatewayRpcCubit.syncWithConnectionState(any()));
     });
   });
 

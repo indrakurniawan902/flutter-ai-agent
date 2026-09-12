@@ -130,7 +130,11 @@ class ContactLauncherTools {
       final uri = Uri.parse(urlString);
       final canLaunch = await _urlLauncherProvider.canLaunchUrl(uri);
       if (!canLaunch) {
-        return Left(ServerFailure('Cannot launch WhatsApp for $phone'));
+        return const Left(
+          ServerFailure(
+            'No app available to handle WhatsApp on this device',
+          ),
+        );
       }
       final launched = await _urlLauncherProvider.launchUrl(
         uri,
@@ -168,6 +172,32 @@ class ContactLauncherTools {
       return Right('Opened URL: $url');
     } catch (e) {
       return Left(ServerFailure('Error launching URL: $e'));
+    }
+  }
+
+  Future<Either<Failure, String>> openPhoneCall(String phone) async {
+    try {
+      final digits = phone.replaceAll(RegExp(r'[^\d]'), '');
+      if (digits.isEmpty) {
+        return const Left(ServerFailure('Invalid phone number'));
+      }
+      final uri = Uri(scheme: 'tel', path: digits);
+      final canLaunch = await _urlLauncherProvider.canLaunchUrl(uri);
+      if (!canLaunch) {
+        return const Left(
+          ServerFailure('No app available to handle phone calls on this device'),
+        );
+      }
+      final launched = await _urlLauncherProvider.launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched) {
+        return Left(ServerFailure('Failed to open the dialer for $phone'));
+      }
+      return Right('Phone dialer opened for $phone');
+    } catch (e) {
+      return Left(ServerFailure('Error opening phone dialer: $e'));
     }
   }
 }

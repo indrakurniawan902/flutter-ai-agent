@@ -9,5 +9,6 @@ abstract class LlmRepository {
     required List<Map<String, dynamic>> messages,
     List<Map<String, dynamic>>? tools,
     String? apiKey,
+    double? temperature,
   });
 }

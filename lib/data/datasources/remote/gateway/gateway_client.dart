@@ -8,6 +8,9 @@ import 'package:flutter_ai_agent/domain/entities/gateway/gateway_message.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
 
+/// Supplies the tool manifest frames advertised to the bridge.
+typedef ToolManifestProvider = List<Map<String, dynamic>> Function();
+
 /// Configuration options for [GatewayClient].
 class GatewayClientOptions {
   final Duration heartbeatInterval;
@@ -35,8 +38,13 @@ class GatewayClientOptions {
 
 /// Universal bidirectional network client connecting the Flutter app to any remote Hermes Gateway instance.
 class GatewayClient implements GatewayClientBase {
+  /// Default bridge path used only when a gateway URL carries no path.
+  static const String defaultGatewayPath = '/device/ws';
+
   final GatewaySocketFactory socketFactory;
   final GatewayClientOptions options;
+  final ToolManifestProvider? toolManifestProvider;
+  final String clientId;
 
   GatewayConnectionState _state = GatewayConnectionState.disconnected;
   final _stateController = StreamController<GatewayConnectionState>.broadcast();
@@ -63,6 +71,8 @@ class GatewayClient implements GatewayClientBase {
   GatewayClient({
     GatewaySocketFactory? socketFactory,
     this.options = const GatewayClientOptions(),
+    this.toolManifestProvider,
+    this.clientId = 'flutter_client',
   }) : socketFactory = socketFactory ?? const IoGatewaySocketFactory();
 
   /// Current connection state.
@@ -87,6 +97,11 @@ class GatewayClient implements GatewayClientBase {
       _toolCallRequestController.stream;
 
   /// Normalizes a user-provided gateway URL into a valid WebSocket [Uri].
+  ///
+  /// Only the scheme is rewritten. A URL that already carries a path is passed
+  /// through completely unchanged - no double-append, no `/ws` override and no
+  /// trailing-slash rewriting. An empty or `/` path falls back to
+  /// [defaultGatewayPath], the real bridge route.
   static Uri normalizeGatewayUri(String rawUrl) {
     var url = rawUrl.trim();
 
@@ -99,11 +114,11 @@ class GatewayClient implements GatewayClientBase {
       url = 'ws://$url';
     }
 
-    var uri = Uri.parse(url);
+    final uri = Uri.parse(url);
 
-    // If path is empty, append default '/ws' endpoint
+    // If path is empty, append the documented bridge default endpoint.
     if (uri.path.isEmpty || uri.path == '/') {
-      uri = uri.replace(path: '/ws');
+      return uri.replace(path: defaultGatewayPath);
     }
 
     return uri;
@@ -152,6 +167,7 @@ class GatewayClient implements GatewayClientBase {
       // Immediately send authentication handshake frame
       final authMessage = GatewayAuthMessage(
         token: token ?? '',
+        clientId: clientId,
       );
       send(authMessage);
 
@@ -184,6 +200,7 @@ class GatewayClient implements GatewayClientBase {
           _reconnectAttempts = 0;
           _setState(GatewayConnectionState.connected);
           _startHeartbeat();
+          _sendToolManifest();
           _messageController.add(message);
           return;
         } else if (message is GatewayAuthFailureMessage) {
@@ -206,12 +223,36 @@ class GatewayClient implements GatewayClientBase {
       } else if (message is GatewayTextDeltaMessage) {
         _textDeltaController.add(message);
       } else if (message is GatewayToolCallRequestMessage) {
-        _toolCallRequestController.add(message);
+        if (!_toolCallRequestController.hasListener) {
+          sendToolCallResponse(
+            callId: message.id,
+            error: 'Device RPC receiver is not listening',
+          );
+        } else {
+          _toolCallRequestController.add(message);
+        }
       }
 
       _messageController.add(message);
     } catch (_) {
       // Ignore unparseable frames
+    }
+  }
+
+  /// Sends the tool manifest frame right after a successful authentication.
+  ///
+  /// The manifest is advertised verbatim: whatever the injected provider
+  /// returns, unfiltered and unrenamed. When no provider is configured the
+  /// handshake proceeds without a manifest; when the provider throws, the
+  /// handshake still completes (the bridge's manifest deadline handles the
+  /// missing frame, a broken provider must never abort the socket).
+  void _sendToolManifest() {
+    final provider = toolManifestProvider;
+    if (provider == null) return;
+    try {
+      send(GatewayToolManifestMessage(deviceId: clientId, tools: provider()));
+    } catch (_) {
+      // A broken manifest provider must never abort the handshake.
     }
   }
 

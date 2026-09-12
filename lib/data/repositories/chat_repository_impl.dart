@@ -28,6 +28,7 @@ class LlmRepositoryImpl implements LlmRepository {
     required List<Map<String, dynamic>> messages,
     List<Map<String, dynamic>>? tools,
     String? apiKey,
+    double? temperature,
   }) async {
     try {
       final stream = await _datasource.streamCompletion(
@@ -36,6 +37,7 @@ class LlmRepositoryImpl implements LlmRepository {
         messages: messages,
         tools: tools,
         apiKey: apiKey,
+        temperature: temperature,
       );
       return Right(stream.map((chunk) => chunk.toDomain()));
     } on DioException catch (e) {

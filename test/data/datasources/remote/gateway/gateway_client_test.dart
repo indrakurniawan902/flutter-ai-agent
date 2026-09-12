@@ -72,16 +72,32 @@ void main() {
 
     test('normalizes http/https/ws/wss URLs correctly', () async {
       final testCases = [
-        {'input': 'http://192.168.1.50:18789', 'expected': 'ws://192.168.1.50:18789/ws'},
-        {'input': 'https://vps.example.com:18789', 'expected': 'wss://vps.example.com:18789/ws'},
+        {'input': 'http://192.168.1.50:18789', 'expected': 'ws://192.168.1.50:18789/device/ws'},
+        {'input': 'https://vps.example.com:18789', 'expected': 'wss://vps.example.com:18789/device/ws'},
         {'input': 'ws://example.com/custom', 'expected': 'ws://example.com/custom'},
         {'input': 'wss://example.com/ws', 'expected': 'wss://example.com/ws'},
-        {'input': 'example.com:18789', 'expected': 'ws://example.com:18789/ws'},
+        {'input': 'example.com:18789', 'expected': 'ws://example.com:18789/device/ws'},
       ];
 
       for (final tc in testCases) {
         final uri = GatewayClient.normalizeGatewayUri(tc['input']!);
         expect(uri.toString(), tc['expected']);
+      }
+    });
+
+    test('passes through URLs that already carry a path without double-append', () {
+      final testCases = [
+        {
+          'input': 'https://hermes.indra-developer.my.id/device/ws',
+          'expected': 'wss://hermes.indra-developer.my.id/device/ws',
+        },
+        {'input': 'ws://example.com/custom/ws', 'expected': 'ws://example.com/custom/ws'},
+      ];
+
+      for (final tc in testCases) {
+        final uri = GatewayClient.normalizeGatewayUri(tc['input']!);
+        expect(uri.toString(), tc['expected']);
+        expect(uri.path, Uri.parse(tc['expected']!).path);
       }
     });
   });
@@ -95,7 +111,7 @@ void main() {
 
       expect(client.state, GatewayConnectionState.connecting);
       verify(() => mockSocketFactory.connect(
-            Uri.parse('ws://localhost:18789/ws'),
+            Uri.parse('ws://localhost:18789/device/ws'),
             headers: any(named: 'headers'),
             timeout: any(named: 'timeout'),
           )).called(1);
@@ -121,7 +137,7 @@ void main() {
 
       expect(client.state, GatewayConnectionState.connecting);
       verify(() => mockSocketFactory.connect(
-            Uri.parse('wss://vps.example.com:18789/ws'),
+            Uri.parse('wss://vps.example.com:18789/device/ws'),
             headers: any(named: 'headers'),
             timeout: any(named: 'timeout'),
           )).called(1);
@@ -339,6 +355,40 @@ void main() {
       await sub1.cancel();
       await sub2.cancel();
     });
+
+    test(
+        'auto-responds with error when tool_call_request arrives with no toolCallRequestStream listener',
+        () async {
+      await client.connect('ws://localhost:18789/ws', token: 'token123');
+      socketStreamController.add(jsonEncode({'type': 'auth_success'}));
+      await pumpEventQueue();
+
+      // Observe the raw message stream only; leave toolCallRequestStream unlistened.
+      final messages = <GatewayMessage>[];
+      final sub = client.messageStream.listen(messages.add);
+
+      sentFrames.clear();
+
+      socketStreamController.add(jsonEncode({
+        'type': 'tool_call_request',
+        'id': 'call_orphan',
+        'tool': 'device_status',
+        'arguments': {},
+      }));
+
+      await pumpEventQueue();
+
+      expect(messages.length, 1);
+      expect(messages.first, isA<GatewayToolCallRequestMessage>());
+
+      expect(sentFrames.length, 1);
+      final frame = jsonDecode(sentFrames.first) as Map<String, dynamic>;
+      expect(frame['type'], 'tool_call_response');
+      expect(frame['id'], 'call_orphan');
+      expect(frame['error'], 'Device RPC receiver is not listening');
+
+      await sub.cancel();
+    });
   });
 
   group('GatewayClient - Outgoing Frames', () {
@@ -459,6 +509,191 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 60));
       expect(client.state, GatewayConnectionState.disconnected);
       verify(() => mockSocketFactory.connect(any(), headers: any(named: 'headers'), timeout: any(named: 'timeout'))).called(1);
+
+      await sub.cancel();
+    });
+  });
+
+  group('GatewayClient - Tool Manifest Handshake', () {
+    final fixtureTools = <Map<String, dynamic>>[
+      {
+        'type': 'function',
+        'function': {
+          'name': 'device_status',
+          'description': 'Reads the device status',
+          'parameters': {
+            'type': 'object',
+            'properties': {
+              'detail': {'type': 'boolean', 'description': 'Include detail'},
+            },
+            'required': <String>[],
+          },
+        },
+      },
+      {
+        'type': 'function',
+        'function': {
+          'name': 'read_file',
+          'description': 'Reads a file',
+          'parameters': {
+            'type': 'object',
+            'properties': <String, dynamic>{},
+            'required': <String>[],
+          },
+        },
+      },
+    ];
+
+    List<Map<String, dynamic>> sentManifests() => sentFrames
+        .map((frame) => jsonDecode(frame) as Map<String, dynamic>)
+        .where((json) => json['type'] == 'tool_manifest')
+        .toList();
+
+    test('sends tool_manifest verbatim right after auth_success', () async {
+      final manifestClient = GatewayClient(
+        socketFactory: mockSocketFactory,
+        toolManifestProvider: () => fixtureTools,
+        clientId: 'pixel-8-indra',
+        options: const GatewayClientOptions(
+          heartbeatInterval: Duration(milliseconds: 50),
+          heartbeatTimeout: Duration(milliseconds: 100),
+          authTimeout: Duration(milliseconds: 100),
+          connectTimeout: Duration(milliseconds: 100),
+          initialReconnectDelay: Duration(milliseconds: 20),
+          maxReconnectDelay: Duration(milliseconds: 50),
+          reconnectBackoffFactor: 1.5,
+        ),
+      );
+      addTearDown(manifestClient.dispose);
+
+      await manifestClient.connect('ws://localhost:18789/device/ws', token: 'token123');
+
+      // The auth frame is the only frame before auth_success.
+      final authJson = jsonDecode(sentFrames.single) as Map<String, dynamic>;
+      expect(authJson['type'], 'auth');
+      expect(authJson['client_id'], 'pixel-8-indra');
+
+      socketStreamController.add(jsonEncode({'type': 'auth_success'}));
+      await pumpEventQueue();
+
+      expect(manifestClient.state, GatewayConnectionState.connected);
+
+      final manifests = sentManifests();
+      expect(manifests.length, 1);
+
+      final manifest = manifests.single;
+      expect(manifest['type'], 'tool_manifest');
+      expect(manifest['version'], 'v1');
+      expect(manifest['device_id'], 'pixel-8-indra');
+      expect(manifest['tools'], fixtureTools);
+      // Nested function.parameters map survives verbatim.
+      final tools = manifest['tools'] as List<dynamic>;
+      final fn = (tools.first as Map<String, dynamic>)['function'] as Map<String, dynamic>;
+      expect(fn['parameters'], fixtureTools.first['function']!['parameters']);
+    });
+
+    test('re-sends tool_manifest after auto-reconnect and second auth_success', () async {
+      final manifestClient = GatewayClient(
+        socketFactory: mockSocketFactory,
+        toolManifestProvider: () => fixtureTools,
+        clientId: 'pixel-8-indra',
+        options: const GatewayClientOptions(
+          heartbeatInterval: Duration(milliseconds: 50),
+          heartbeatTimeout: Duration(milliseconds: 100),
+          authTimeout: Duration(milliseconds: 100),
+          connectTimeout: Duration(milliseconds: 100),
+          initialReconnectDelay: Duration(milliseconds: 20),
+          maxReconnectDelay: Duration(milliseconds: 50),
+          reconnectBackoffFactor: 1.5,
+        ),
+      );
+      addTearDown(manifestClient.dispose);
+
+      await manifestClient.connect('ws://localhost:18789/device/ws', token: 'token123');
+      socketStreamController.add(jsonEncode({'type': 'auth_success'}));
+      await pumpEventQueue();
+
+      expect(manifestClient.state, GatewayConnectionState.connected);
+      expect(sentManifests().length, 1);
+
+      final stateHistory = <GatewayConnectionState>[];
+      final sub = manifestClient.stateStream.listen(stateHistory.add);
+
+      // Second socket for the reconnected transport.
+      final secondStreamController = StreamController<dynamic>.broadcast();
+      final secondMockSocket = MockGatewaySocket();
+      when(() => secondMockSocket.stream).thenAnswer((_) => secondStreamController.stream);
+      when(() => secondMockSocket.send(any())).thenAnswer((invocation) {
+        final frame = invocation.positionalArguments[0] as String;
+        sentFrames.add(frame);
+      });
+      when(() => secondMockSocket.close(any(), any())).thenAnswer((_) async {
+        if (!secondStreamController.isClosed) {
+          await secondStreamController.close();
+        }
+      });
+
+      when(() => mockSocketFactory.connect(any(), headers: any(named: 'headers'), timeout: any(named: 'timeout')))
+          .thenAnswer((_) async => secondMockSocket);
+
+      // Unexpected socket drop -> auto-reconnect.
+      await socketStreamController.close();
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      verify(() => mockSocketFactory.connect(any(), headers: any(named: 'headers'), timeout: any(named: 'timeout'))).called(2);
+
+      secondStreamController.add(jsonEncode({'type': 'auth_success'}));
+      await pumpEventQueue();
+
+      expect(manifestClient.state, GatewayConnectionState.connected);
+      expect(stateHistory.contains(GatewayConnectionState.reconnecting), isTrue);
+      expect(sentManifests().length, 2);
+
+      await sub.cancel();
+
+      if (!secondStreamController.isClosed) {
+        await secondStreamController.close();
+      }
+    });
+
+    test('sends no tool_manifest when no provider is injected', () async {
+      await client.connect('ws://localhost:18789/device/ws', token: 'token123');
+      socketStreamController.add(jsonEncode({'type': 'auth_success'}));
+      await pumpEventQueue();
+
+      expect(client.state, GatewayConnectionState.connected);
+      expect(sentManifests(), isEmpty);
+    });
+
+    test('a throwing manifest provider does not abort the handshake', () async {
+      final manifestClient = GatewayClient(
+        socketFactory: mockSocketFactory,
+        toolManifestProvider: () => throw StateError('registry exploded'),
+        options: const GatewayClientOptions(
+          heartbeatInterval: Duration(milliseconds: 50),
+          heartbeatTimeout: Duration(milliseconds: 100),
+          authTimeout: Duration(milliseconds: 100),
+          connectTimeout: Duration(milliseconds: 100),
+          initialReconnectDelay: Duration(milliseconds: 20),
+          maxReconnectDelay: Duration(milliseconds: 50),
+          reconnectBackoffFactor: 1.5,
+        ),
+      );
+      addTearDown(manifestClient.dispose);
+
+      final errors = <Object>[];
+      final sub = manifestClient.messageStream.listen(
+        (_) {},
+        onError: errors.add,
+      );
+
+      await manifestClient.connect('ws://localhost:18789/device/ws', token: 'token123');
+      socketStreamController.add(jsonEncode({'type': 'auth_success'}));
+      await pumpEventQueue();
+
+      expect(manifestClient.state, GatewayConnectionState.connected);
+      expect(sentManifests(), isEmpty);
+      expect(errors, isEmpty);
 
       await sub.cancel();
     });

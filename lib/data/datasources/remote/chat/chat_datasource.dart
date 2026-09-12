@@ -13,6 +13,7 @@ abstract class ChatDatasource {
     required List<Map<String, dynamic>> messages,
     List<Map<String, dynamic>>? tools,
     String? apiKey,
+    double? temperature,
   });
 }
 
@@ -32,6 +33,7 @@ class ChatDatasourceImpl implements ChatDatasource {
     required List<Map<String, dynamic>> messages,
     List<Map<String, dynamic>>? tools,
     String? apiKey,
+    double? temperature,
   }) async {
     final response = await _dio.post<ResponseBody>(
       '$baseUrl/chat/completions',
@@ -40,6 +42,7 @@ class ChatDatasourceImpl implements ChatDatasource {
         'messages': messages,
         'stream': true,
         if (tools != null && tools.isNotEmpty) 'tools': tools,
+        'temperature': ?temperature,
       }),
       options: Options(
         responseType: ResponseType.stream,

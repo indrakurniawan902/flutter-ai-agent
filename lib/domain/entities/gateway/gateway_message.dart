@@ -57,6 +57,10 @@ abstract class GatewayMessage extends Equatable {
       case 'message':
         return GatewayChatMessage.fromJson(json);
 
+      case 'tool_manifest':
+      case 'hello':
+        return GatewayToolManifestMessage.fromJson(json);
+
       case 'error':
         return GatewayErrorMessage.fromJson(json);
 
@@ -401,4 +405,49 @@ class GatewayRawMessage extends GatewayMessage {
 
   @override
   List<Object?> get props => [type, payload];
+}
+
+/// Tool manifest frame advertising the device's OpenAI-format tool schemas.
+///
+/// The [tools] list is passed through verbatim: it is exactly the output of
+/// `ToolRegistry.getOpenAiToolDefinitions()`. No key rewriting, coercion or
+/// re-shaping is performed on either serialization or deserialization.
+class GatewayToolManifestMessage extends GatewayMessage {
+  final String version;
+  final String deviceId;
+  final List<Map<String, dynamic>> tools;
+
+  const GatewayToolManifestMessage({
+    this.version = 'v1',
+    required this.deviceId,
+    required this.tools,
+  }) : super('tool_manifest');
+
+  factory GatewayToolManifestMessage.fromJson(Map<String, dynamic> json) {
+    final rawTools = json['tools'];
+    final tools = <Map<String, dynamic>>[];
+    if (rawTools is List) {
+      for (final tool in rawTools) {
+        if (tool is Map) {
+          tools.add(Map<String, dynamic>.from(tool));
+        }
+      }
+    }
+    return GatewayToolManifestMessage(
+      version: (json['version'] ?? 'v1').toString(),
+      deviceId: (json['device_id'] ?? json['deviceId'] ?? '').toString(),
+      tools: tools,
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': type,
+        'version': version,
+        'device_id': deviceId,
+        'tools': tools,
+      };
+
+  @override
+  List<Object?> get props => [type, version, deviceId, tools];
 }

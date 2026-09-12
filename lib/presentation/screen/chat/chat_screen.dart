@@ -79,6 +79,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isSpeakerMuted = false;
   StreamSubscription<VoiceInputStatus>? _voiceStatusSub;
   StreamSubscription<String>? _voiceErrorSub;
+  StreamSubscription<String>? _voiceOutputErrorSub;
   StreamSubscription<String>? _backgroundActionSub;
   bool _isVoiceRecording = false;
   bool _isHoldToSpeak = false;
@@ -143,7 +144,14 @@ class _ChatScreenState extends State<ChatScreen> {
     _gatewayConnectionState =
         client?.state ?? GatewayConnectionState.disconnected;
 
+    if (_mode == ChatMode.gateway) {
+      _rpcCubit?.syncWithConnectionState(_gatewayConnectionState);
+    }
+
     _gatewayStateSub = client?.stateStream.listen((state) {
+      if (_mode == ChatMode.gateway) {
+        _rpcCubit?.syncWithConnectionState(state);
+      }
       if (mounted) {
         setState(() {
           _gatewayConnectionState = state;
@@ -164,6 +172,21 @@ class _ChatScreenState extends State<ChatScreen> {
     });
 
     _voiceErrorSub = _voiceService?.errorStream.listen((error) {
+      if (!mounted) return;
+      setState(() {
+        _isVoiceRecording = false;
+        _isHoldToSpeak = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    });
+
+    _voiceOutputErrorSub =
+        _voiceOutputService?.errorStream.listen((error) {
       if (!mounted) return;
       setState(() {
         _isVoiceRecording = false;
@@ -247,6 +270,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _backgroundActionSub?.cancel();
     _voiceStatusSub?.cancel();
     _voiceErrorSub?.cancel();
+    _voiceOutputErrorSub?.cancel();
     if (_isVoiceRecording) {
       _voiceService?.cancelListening();
     }
@@ -480,8 +504,16 @@ class _ChatScreenState extends State<ChatScreen> {
     final type = _resolvePermissionRationaleType(response);
     if (type == null) return;
 
-    final allowed = await PermissionRationaleModal.show(context, type);
-    if (allowed == true) {
+    final lowered = response.toLowerCase();
+    final bool isPermanent =
+        lowered.contains('permanently denied') ||
+            lowered.contains('denied permanently');
+    final allowed = await PermissionRationaleModal.show(
+      context,
+      type,
+      isPermanentlyDenied: isPermanent,
+    );
+    if (allowed == true && !isPermanent) {
       await _handlePermissionRationaleAction(type);
     }
   }
@@ -557,6 +589,7 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         _mode = ChatMode.gateway;
       });
+      _rpcCubit?.startListening();
 
       final client = _resolveGatewayClient();
       if (client != null && client.state.isDisconnected) {
@@ -575,6 +608,7 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         _mode = ChatMode.direct;
       });
+      _rpcCubit?.stopListening();
 
       final client = _resolveGatewayClient();
       if (client != null && !client.state.isDisconnected) {

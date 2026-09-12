@@ -193,6 +193,7 @@ void main() {
           messages: any(named: 'messages'),
           tools: any(named: 'tools'),
           apiKey: any(named: 'apiKey'),
+          temperature: any(named: 'temperature'),
         ),
       ).thenAnswer(
         (_) async => Right<Failure, Stream<ChatChunk>>(
@@ -225,6 +226,7 @@ void main() {
           messages: any(named: 'messages'),
           tools: any(named: 'tools'),
           apiKey: any(named: 'apiKey'),
+          temperature: any(named: 'temperature'),
         ),
       ).thenAnswer(
         (_) async => Right<Failure, Stream<ChatChunk>>(
