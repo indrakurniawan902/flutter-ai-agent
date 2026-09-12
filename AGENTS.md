@@ -123,3 +123,28 @@ Every sub-task delegated to OpenCode MUST satisfy:
 3. **Specification Adherence**: Strict negative constraints (e.g. "Do NOT use Bloc", "Do NOT use build_runner for mocks").
 4. **Verifiable Definition of Done (DoD)**: Clear CLI test/lint command that must exit 0 (`flock /tmp/flutter.lock flutter analyze`, `flock /tmp/flutter.lock flutter test`, `sh tool/check_layout.sh`).
 
+---
+
+## 7. Zero-Manual-Debug Permission & Native Hardware Standard
+
+To ensure Indra (and end users) NEVER have to manually debug runtime permission errors or deal with unresponsive UI due to unhandled permission states:
+
+1. **Manifest Completeness (`AndroidManifest.xml`)**:
+   - Every hardware/sensor/native capability must declare both `<uses-permission>` AND `<uses-feature android:name="..." android:required="false" />`.
+   - Never set `android:required="true"` unless the app cannot function without it (so non-hardware devices can still install).
+2. **Hardware Pre-flight Check**:
+   - Before requesting permission, check if hardware is present and enabled (e.g. NFC/GPS turned on in device settings).
+   - If disabled, show a direct action to open the relevant system setting (`ACTION_NFC_SETTINGS`, `ACTION_LOCATION_SOURCE_SETTINGS`).
+3. **Bulletproof 3-State Permission Flow**:
+   - **Granted**: Execute action immediately.
+   - **Denied**: Display `PermissionRationaleModal` with clear explanation.
+   - **Permanently Denied (`isPermanentlyDenied`)**: Android blocks further dialogs. ALWAYS show a modal with a one-tap `"Open App Settings"` button calling `openAppSettings()`. Never leave the user stuck.
+4. **Special System Settings Intents**:
+   - Notification Listener, Battery Optimization, and Overlay permissions cannot be requested via standard runtime dialogs. Always route them through explicit Android Settings Intents (`ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS`, `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`).
+5. **Mandatory 3-State Test Coverage in DoD**:
+   - Unit and widget tests must explicitly test:
+     1. Granted state -> successful execution.
+     2. Denied state -> rationale modal displayed.
+     3. Permanently denied state -> `openAppSettings()` CTA displayed and functional.
+
+
