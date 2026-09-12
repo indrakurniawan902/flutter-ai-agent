@@ -105,6 +105,16 @@ const List<_ToolCategory> _categories = [
 class ToolPruningServiceImpl implements ToolPruningService {
   const ToolPruningServiceImpl();
 
+  static final List<RegExp> _keywordMatchers = _categories
+      .map(
+        (category) => RegExp(
+          r'(?:^|[^a-z0-9])(?:'
+          '${category.keywords.map(RegExp.escape).join('|')}'
+          r')(?:[^a-z0-9]|$)',
+        ),
+      )
+      .toList(growable: false);
+
   static const String toolSearchName = 'tool_search';
   static const String toolDescribeName = 'tool_describe';
 
@@ -157,9 +167,9 @@ class ToolPruningServiceImpl implements ToolPruningService {
 
     final text = prompt.toLowerCase();
     final matchedNames = <String>{};
-    for (final category in _categories) {
-      if (category.keywords.any(text.contains)) {
-        matchedNames.addAll(category.toolNames);
+    for (var i = 0; i < _categories.length; i++) {
+      if (_keywordMatchers[i].hasMatch(text)) {
+        matchedNames.addAll(_categories[i].toolNames);
       }
     }
 
@@ -181,7 +191,10 @@ class ToolPruningServiceImpl implements ToolPruningService {
 
   String? _functionName(Map<String, dynamic> entry) {
     final function = entry['function'];
-    if (function is Map) return function['name'] as String?;
+    if (function is Map) {
+      final n = function['name'];
+      return n is String ? n : null;
+    }
     return null;
   }
 }

@@ -969,6 +969,19 @@ void main() {
       );
     });
 
+    test('tool_search does not enumerate tools disabled by skill policy',
+        () async {
+      registry.register(sampleTool());
+      registry.setToolEnabled('sample', false);
+
+      final result =
+          await registry.executeTool('tool_search', {'query': 'sample'});
+
+      expect(result.isRight(), isTrue);
+      // Disabled tool must not be enumerated, so its listing line is absent.
+      expect(result.getOrElse(() => ''), isNot(contains('sample tool')));
+    });
+
     test('unregister removes tool and its enabled state', () {
       registry.register(sampleTool());
       registry.setToolEnabled('sample', false);

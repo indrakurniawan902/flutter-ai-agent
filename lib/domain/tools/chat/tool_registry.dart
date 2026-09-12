@@ -129,9 +129,9 @@ class ToolRegistry {
         },
         securityTier: SecurityTier.tier1Auto,
         execute: (args) async {
-          final query = (args['query']?.toString() ?? '').toLowerCase();
+          final query = (args['query'] ?? '').toString().toLowerCase();
           final matches = <String>[];
-          for (final tool in _tools.values) {
+          for (final tool in activeTools) {
             if (matches.length >= 10) break;
             final haystack =
                 '${tool.name} ${tool.description}'.toLowerCase();

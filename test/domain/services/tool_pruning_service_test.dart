@@ -165,6 +165,72 @@ void main() {
       );
     });
 
+    test('substring "wa" inside "want" does not match comms (word boundary)',
+        () {
+      // Arrange
+      const prompt = 'i want to write a paper';
+
+      // Act
+      final result = service.prune(
+          prompt: prompt, fullToolDefinitions: fullTools, enabled: true);
+      final names = namesOf(result);
+
+      // Assert
+      expect(names, hasLength(2));
+      expect(names, containsAll([
+        ToolPruningServiceImpl.toolSearchName,
+        ToolPruningServiceImpl.toolDescribeName,
+      ]));
+      expect(names, isNot(contains('search_contacts')));
+    });
+
+    test('word-bounded "wa" still matches comms category', () {
+      // Arrange
+      const prompt = 'open wa chat with budi';
+
+      // Act
+      final result = service.prune(
+          prompt: prompt, fullToolDefinitions: fullTools, enabled: true);
+      final names = namesOf(result);
+
+      // Assert
+      expect(names, contains('search_contacts'));
+    });
+
+    test('non-String function name entries are skipped without throwing', () {
+      // Arrange
+      final mixedTools = <Map<String, dynamic>>[
+        def('device_status'),
+        {
+          'type': 'function',
+          'function': {'name': 42},
+        },
+        {
+          'type': 'function',
+          'function': {'name': null},
+        },
+        {
+          'type': 'function',
+          'function': {},
+        },
+        ToolPruningServiceImpl.toolSearchDefinition,
+        ToolPruningServiceImpl.toolDescribeDefinition,
+      ];
+
+      // Act
+      final result = service.prune(
+          prompt: 'battery', fullToolDefinitions: mixedTools, enabled: true);
+      final names = namesOf(result);
+
+      // Assert
+      expect(names, containsAll([
+        'device_status',
+        ToolPruningServiceImpl.toolSearchName,
+        ToolPruningServiceImpl.toolDescribeName,
+      ]));
+      expect(names, hasLength(3));
+    });
+
     test('meta-tool definitions keep the OpenAI function-map shape', () {
       // Act
       final search = ToolPruningServiceImpl.toolSearchDefinition;
