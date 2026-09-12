@@ -199,6 +199,35 @@ void main() {
         expect(service.isListening, false);
       },
     );
+
+    test(
+      'startListening returns ServerFailure when recognizer is unavailable despite granted permission',
+      () async {
+        when(() => mockWrapper.isAvailable).thenReturn(false);
+        when(
+          () => mockWrapper.initialize(
+            onError: any(named: 'onError'),
+            onStatus: any(named: 'onStatus'),
+          ),
+        ).thenAnswer((_) async => false);
+        when(() => mockWrapper.hasPermission()).thenAnswer((_) async => true);
+
+        final result = await service.startListening();
+
+        expect(result.isLeft(), true);
+        result.fold(
+          (failure) {
+            expect(failure, isA<ServerFailure>());
+            expect(
+              failure.message,
+              VoiceInputService.recognitionUnavailableMessage,
+            );
+          },
+          (_) => fail('Expected ServerFailure'),
+        );
+        expect(service.isListening, false);
+      },
+    );
     test('startListening transitions status to listening', () async {
       when(
         () => mockWrapper.listen(
