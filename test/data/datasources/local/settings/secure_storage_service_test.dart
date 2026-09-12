@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/data/models/server_profiles/server_profile_model.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/ambient_trigger_settings.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -438,6 +439,89 @@ void main() {
       verify(() => mockStorage.write(
             key: SecureStorageService.keyTemperature,
             value: profile2.temperature.toString(),
+          )).called(1);
+    });
+  });
+
+  group('SecureStorageService - Ambient Trigger Settings', () {
+    test(
+        'getAmbientTriggerSettings returns default const AmbientTriggerSettings() when key is null or empty',
+        () async {
+      when(() => mockStorage.read(
+              key: SecureStorageService.keyAmbientTriggerSettings))
+          .thenAnswer((_) async => null);
+
+      final resultNull = await service.getAmbientTriggerSettings();
+      expect(resultNull, const AmbientTriggerSettings());
+
+      when(() => mockStorage.read(
+              key: SecureStorageService.keyAmbientTriggerSettings))
+          .thenAnswer((_) async => '');
+
+      final resultEmpty = await service.getAmbientTriggerSettings();
+      expect(resultEmpty, const AmbientTriggerSettings());
+
+      when(() => mockStorage.read(
+              key: SecureStorageService.keyAmbientTriggerSettings))
+          .thenAnswer((_) async => '   ');
+
+      final resultWhitespace = await service.getAmbientTriggerSettings();
+      expect(resultWhitespace, const AmbientTriggerSettings());
+    });
+
+    test('getAmbientTriggerSettings returns default when JSON is malformed',
+        () async {
+      when(() => mockStorage.read(
+              key: SecureStorageService.keyAmbientTriggerSettings))
+          .thenAnswer((_) async => '{not valid json');
+
+      final result = await service.getAmbientTriggerSettings();
+      expect(result, const AmbientTriggerSettings());
+    });
+
+    test(
+        'getAmbientTriggerSettings returns parsed AmbientTriggerSettings when valid JSON is stored',
+        () async {
+      const settings = AmbientTriggerSettings(
+        geofenceEnabled: false,
+        batteryWatchdogEnabled: true,
+        notificationListenerEnabled: false,
+        heartbeatEnabled: true,
+      );
+      final jsonString = jsonEncode(settings.toJson());
+
+      when(() => mockStorage.read(
+              key: SecureStorageService.keyAmbientTriggerSettings))
+          .thenAnswer((_) async => jsonString);
+
+      final result = await service.getAmbientTriggerSettings();
+      expect(result, equals(settings));
+      expect(result.geofenceEnabled, isFalse);
+      expect(result.batteryWatchdogEnabled, isTrue);
+      expect(result.notificationListenerEnabled, isFalse);
+      expect(result.heartbeatEnabled, isTrue);
+    });
+
+    test(
+        'saveAmbientTriggerSettings serializes and writes JSON to SecureStorageService.keyAmbientTriggerSettings',
+        () async {
+      const settings = AmbientTriggerSettings(
+        geofenceEnabled: false,
+        batteryWatchdogEnabled: false,
+        notificationListenerEnabled: true,
+        heartbeatEnabled: false,
+      );
+
+      when(() => mockStorage.write(
+            key: SecureStorageService.keyAmbientTriggerSettings,
+            value: any(named: 'value'),
+          )).thenAnswer((_) async {});
+
+      await service.saveAmbientTriggerSettings(settings);
+
+      verify(() => mockStorage.write(
+            key: SecureStorageService.keyAmbientTriggerSettings,
+            value: jsonEncode(settings.toJson()),
           )).called(1);
     });
   });
