@@ -3,10 +3,18 @@ import 'package:flutter_ai_agent/features/server_profiles/domain/entities/server
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
 import 'package:flutter_ai_agent/features/settings/presentation/cubits/settings_state.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:injectable/injectable.dart';
 
 /// Manages LLM settings state, loads persisted credentials on init, and validates inputs.
+@injectable
 class SettingsCubit extends Cubit<SettingsState> {
   final SecureStorageService _storageService;
+
+  @factoryMethod
+  factory SettingsCubit.create({
+    required SecureStorageService secureStorageService,
+  }) =>
+      SettingsCubit(secureStorageService: secureStorageService);
 
   SettingsCubit({
     required SecureStorageService secureStorageService,
