@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_ai_agent/core/di/injection_container.dart';
+import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/features/pairing/data/models/pairing_payload.dart';
 import 'package:flutter_ai_agent/features/pairing/presentation/screens/qr_scanner_screen.dart';
 import 'package:flutter_ai_agent/features/server_profiles/domain/entities/server_profile.dart';

@@ -4,6 +4,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_ai_agent/features/server_profiles/data/models/server_profile_model.dart';
 import 'package:flutter_ai_agent/features/server_profiles/domain/entities/server_profile.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:injectable/injectable.dart';
 
 /// Holds a snapshot of saved LLM settings.
 class SettingsData extends Equatable {
@@ -24,6 +25,7 @@ class SettingsData extends Equatable {
 }
 
 /// Service wrapping FlutterSecureStorage to securely persist LLM endpoint configurations and server profiles.
+@lazySingleton
 class SecureStorageService {
   static const String keyBaseUrl = 'llm_base_url';
   static const String keyApiKey = 'llm_api_key';

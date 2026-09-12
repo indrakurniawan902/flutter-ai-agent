@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_ai_agent/core/di/injection_container.dart';
-import 'package:flutter_ai_agent/utils/hermes_theme.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/screens/chat_screen.dart';
+import 'package:flutter_ai_agent/common/injection/injection.dart';
+import 'package:flutter_ai_agent/core/theme/hermes_theme.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/chat_screen.dart';
 import 'package:flutter_ai_agent/features/memory_vault/presentation/screens/memory_vault_screen.dart';
 import 'package:flutter_ai_agent/features/navigation/presentation/cubits/navigation_cubit.dart';
 import 'package:flutter_ai_agent/features/navigation/presentation/screens/main_navigation_shell.dart';

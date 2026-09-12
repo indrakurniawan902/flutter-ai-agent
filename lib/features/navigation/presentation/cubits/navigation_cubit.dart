@@ -1,9 +1,14 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:injectable/injectable.dart';
 
 import 'navigation_state.dart';
 
 /// Cubit managing the active tab of [MainNavigationShell].
+@injectable
 class NavigationCubit extends Cubit<NavigationState> {
+  @factoryMethod
+  factory NavigationCubit.create() => NavigationCubit();
+
   NavigationCubit({NavigationTab initialTab = NavigationTab.chat})
       : super(NavigationState(
           currentTab: initialTab,

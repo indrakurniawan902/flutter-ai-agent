@@ -4,10 +4,10 @@ import 'package:dartz/dartz.dart';
 import 'package:flutter_ai_agent/core/errors/failures.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_chunk.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_cubit.dart';
-import 'package:flutter_ai_agent/features/chat/presentation/cubits/agent_state.dart';
-import 'package:flutter_ai_agent/features/chat/domain/tools/security_policy.dart';
-import 'package:flutter_ai_agent/features/chat/domain/tools/tool_registry.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/security_policy.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 

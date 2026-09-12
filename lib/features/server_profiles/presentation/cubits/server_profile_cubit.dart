@@ -3,10 +3,18 @@ import 'package:flutter_ai_agent/features/server_profiles/domain/entities/server
 import 'package:flutter_ai_agent/features/server_profiles/presentation/cubits/server_profile_state.dart';
 import 'package:flutter_ai_agent/features/settings/data/secure_storage_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:injectable/injectable.dart';
 
 /// Cubit managing CRUD operations and active switching for [ServerProfile]s.
+@injectable
 class ServerProfileCubit extends Cubit<ServerProfileState> {
   final SecureStorageService _secureStorageService;
+
+  @factoryMethod
+  factory ServerProfileCubit.create({
+    required SecureStorageService secureStorageService,
+  }) =>
+      ServerProfileCubit(secureStorageService: secureStorageService);
 
   ServerProfileCubit({
     required SecureStorageService secureStorageService,
