@@ -6,6 +6,12 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_ai_agent/data/datasources/remote/chat/chat_datasource.dart';
 import 'package:flutter_ai_agent/data/datasources/tools/chat/clipboard_service.dart';
+import 'package:flutter_ai_agent/data/datasources/tools/chat/voice_input_service.dart';
+import 'package:flutter_ai_agent/data/datasources/tools/chat/voice_output_service.dart';
+import 'package:flutter_ai_agent/data/datasources/tools/chat/background_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/voice_input_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
 import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/calendar_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart';
@@ -105,5 +111,23 @@ class MockServerProfileCubit extends MockCubit<ServerProfileState>
 // Navigation
 class MockNavigationCubit extends MockCubit<NavigationState>
     implements NavigationCubit {}
+
+// Voice input
+class MockSpeechToTextWrapper extends Mock implements SpeechToTextWrapper {}
+
+class MockVoiceInputService extends Mock implements VoiceInputServiceBase {}
+
+// Voice output
+class MockAudioPlayerWrapper extends Mock implements AudioPlayerWrapper {}
+
+class MockTtsClient extends Mock implements TtsClient {}
+
+class MockVoiceOutputService extends Mock implements VoiceOutputServiceBase {}
+
+// Background service
+class MockBackgroundServicePlatformWrapper extends Mock
+    implements BackgroundServicePlatformWrapper {}
+
+class MockBackgroundService extends Mock implements BackgroundServiceBase {}
 
 
