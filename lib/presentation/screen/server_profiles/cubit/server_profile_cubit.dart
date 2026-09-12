@@ -1,3 +1,4 @@
+import 'package:flutter_ai_agent/common/constant.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
@@ -66,6 +67,8 @@ class ServerProfileCubit extends Cubit<ServerProfileState> {
     required String token,
     bool makeActive = false,
     String? id,
+    String? model,
+    double? temperature,
   }) async {
     final trimmedName = name.trim();
     final trimmedUrl = gatewayUrl.trim();
@@ -125,6 +128,8 @@ class ServerProfileCubit extends Cubit<ServerProfileState> {
         gatewayUrl: trimmedUrl,
         token: trimmedToken,
         isActive: shouldBeActive,
+        model: model ?? AppConstants.defaultModel,
+        temperature: temperature ?? AppConstants.defaultTemperature,
       );
 
       await _secureStorageService.saveServerProfile(newProfile);
@@ -133,6 +138,8 @@ class ServerProfileCubit extends Cubit<ServerProfileState> {
         await Future.wait([
           _secureStorageService.saveBaseUrl(trimmedUrl),
           _secureStorageService.saveApiKey(trimmedToken),
+          _secureStorageService.saveModel(newProfile.model),
+          _secureStorageService.saveTemperature(newProfile.temperature),
         ]);
       }
 
@@ -199,6 +206,59 @@ class ServerProfileCubit extends Cubit<ServerProfileState> {
         profiles: state.profiles,
         activeProfile: state.activeProfile,
         message: 'Failed to switch server profile: $e',
+      ));
+    }
+  }
+
+  /// Updates the currently active profile's editable fields and syncs them to settings storage.
+  Future<void> updateActiveProfile({
+    String? gatewayUrl,
+    String? token,
+    String? model,
+    double? temperature,
+  }) async {
+    try {
+      final active = await _secureStorageService.getActiveServerProfile();
+      if (active == null) {
+        emit(ServerProfileError(
+          profiles: state.profiles,
+          activeProfile: state.activeProfile,
+          message: 'No active server profile to update',
+        ));
+        return;
+      }
+
+      final updated = active.copyWith(
+        gatewayUrl: gatewayUrl,
+        token: token,
+        model: model,
+        temperature: temperature,
+      );
+
+      await _secureStorageService.saveServerProfile(updated);
+      await _secureStorageService.saveSettings(
+        baseUrl: updated.gatewayUrl,
+        apiKey: updated.token,
+        model: updated.model,
+        temperature: updated.temperature,
+      );
+
+      final updatedProfiles = await _secureStorageService.getServerProfiles();
+      final activeUpdated = updatedProfiles.firstWhere(
+        (p) => p.isActive,
+        orElse: () => updated,
+      );
+
+      emit(ServerProfileOperationSuccess(
+        profiles: updatedProfiles,
+        activeProfile: activeUpdated,
+        message: 'Active profile "${activeUpdated.name}" updated',
+      ));
+    } catch (e) {
+      emit(ServerProfileError(
+        profiles: state.profiles,
+        activeProfile: state.activeProfile,
+        message: 'Failed to update active profile: $e',
       ));
     }
   }

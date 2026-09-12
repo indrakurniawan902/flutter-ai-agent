@@ -171,6 +171,10 @@ void main() {
             .thenAnswer((_) async {});
         when(() => mockStorageService.saveApiKey(any()))
             .thenAnswer((_) async {});
+        when(() => mockStorageService.saveModel(any()))
+            .thenAnswer((_) async {});
+        when(() => mockStorageService.saveTemperature(any()))
+            .thenAnswer((_) async {});
         return ServerProfileCubit(
           secureStorageService: mockStorageService,
           autoLoad: false,
@@ -211,6 +215,10 @@ void main() {
             .thenAnswer((_) async {});
         when(() => mockStorageService.saveApiKey(any()))
             .thenAnswer((_) async {});
+        when(() => mockStorageService.saveModel(any()))
+            .thenAnswer((_) async {});
+        when(() => mockStorageService.saveTemperature(any()))
+            .thenAnswer((_) async {});
         return ServerProfileCubit(
           secureStorageService: mockStorageService,
           autoLoad: false,
@@ -238,6 +246,108 @@ void main() {
       expect: () => [
         const ServerProfileLoading(),
         isA<ServerProfileOperationSuccess>(),
+      ],
+    );
+    blocTest<ServerProfileCubit, ServerProfileState>(
+      'addProfile stores custom model and temperature',
+      build: () {
+        when(() => mockStorageService.getServerProfiles())
+            .thenAnswer((_) async => []);
+        when(() => mockStorageService.saveServerProfile(any()))
+            .thenAnswer((_) async {});
+        when(() => mockStorageService.saveBaseUrl(any()))
+            .thenAnswer((_) async {});
+        when(() => mockStorageService.saveApiKey(any()))
+            .thenAnswer((_) async {});
+        when(() => mockStorageService.saveModel(any()))
+            .thenAnswer((_) async {});
+        when(() => mockStorageService.saveTemperature(any()))
+            .thenAnswer((_) async {});
+        return ServerProfileCubit(
+          secureStorageService: mockStorageService,
+          autoLoad: false,
+        );
+      },
+      act: (cubit) => cubit.addProfile(
+        name: 'Custom Server',
+        gatewayUrl: 'https://gateway.example.com',
+        token: 'token-123',
+        model: 'gpt-4o-mini',
+        temperature: 0.3,
+      ),
+      verify: (_) {
+        verify(() => mockStorageService.saveServerProfile(any(
+              that: isA<ServerProfile>()
+                  .having((p) => p.model, 'model', 'gpt-4o-mini')
+                  .having((p) => p.temperature, 'temperature', 0.3),
+            ))).called(1);
+        verify(() => mockStorageService.saveModel('gpt-4o-mini')).called(1);
+        verify(() => mockStorageService.saveTemperature(0.3)).called(1);
+      },
+      expect: () => [
+        const ServerProfileLoading(),
+        isA<ServerProfileOperationSuccess>(),
+      ],
+    );
+  });
+
+  group('ServerProfileCubit - updateActiveProfile', () {
+    blocTest<ServerProfileCubit, ServerProfileState>(
+      'updateActiveProfile updates active profile fields and settings',
+      build: () {
+        when(() => mockStorageService.getActiveServerProfile())
+            .thenAnswer((_) async => profile1);
+        when(() => mockStorageService.saveServerProfile(any()))
+            .thenAnswer((_) async {});
+        when(() => mockStorageService.saveSettings(
+              baseUrl: any(named: 'baseUrl'),
+              apiKey: any(named: 'apiKey'),
+              model: any(named: 'model'),
+              temperature: any(named: 'temperature'),
+            )).thenAnswer((_) async {});
+        when(() => mockStorageService.getServerProfiles())
+            .thenAnswer((_) async => [
+                  profile1.copyWith(model: 'm-new', temperature: 1.2),
+                  profile2,
+                ]);
+        return ServerProfileCubit(
+          secureStorageService: mockStorageService,
+          autoLoad: false,
+        );
+      },
+      act: (cubit) => cubit.updateActiveProfile(model: 'm-new', temperature: 1.2),
+      verify: (_) {
+        verify(() => mockStorageService.saveServerProfile(any(
+              that: isA<ServerProfile>()
+                  .having((p) => p.model, 'model', 'm-new')
+                  .having((p) => p.temperature, 'temperature', 1.2),
+            ))).called(1);
+        verify(() => mockStorageService.saveSettings(
+              baseUrl: 'https://indra-9router.my.id/v1',
+              apiKey: 'sk-token-1',
+              model: 'm-new',
+              temperature: 1.2,
+            )).called(1);
+      },
+      expect: () => [
+        isA<ServerProfileOperationSuccess>()
+            .having((s) => s.activeProfile?.model, 'activeProfile.model', 'm-new'),
+      ],
+    );
+
+    blocTest<ServerProfileCubit, ServerProfileState>(
+      'updateActiveProfile emits ServerProfileError when there is no active profile',
+      build: () {
+        when(() => mockStorageService.getActiveServerProfile())
+            .thenAnswer((_) async => null);
+        return ServerProfileCubit(
+          secureStorageService: mockStorageService,
+          autoLoad: false,
+        );
+      },
+      act: (cubit) => cubit.updateActiveProfile(model: 'm-new'),
+      expect: () => [
+        const ServerProfileError(message: 'No active server profile to update'),
       ],
     );
   });
