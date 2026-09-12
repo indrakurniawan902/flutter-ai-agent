@@ -20,6 +20,8 @@ import 'package:flutter_ai_agent/data/datasources/remote/chat/sse_parser.dart'
     as _i598;
 import 'package:flutter_ai_agent/data/datasources/remote/pairing/scanner_controller_wrapper.dart'
     as _i319;
+import 'package:flutter_ai_agent/data/datasources/tools/chat/background_service.dart'
+    as _i1033;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/calendar_service.dart'
     as _i1056;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/camera_vision_service.dart'
@@ -32,10 +34,16 @@ import 'package:flutter_ai_agent/data/datasources/tools/chat/location_service.da
     as _i320;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/notification_service.dart'
     as _i89;
+import 'package:flutter_ai_agent/data/datasources/tools/chat/voice_input_service.dart'
+    as _i845;
+import 'package:flutter_ai_agent/data/datasources/tools/chat/voice_output_service.dart'
+    as _i753;
 import 'package:flutter_ai_agent/data/repositories/chat_repository_impl.dart'
     as _i236;
 import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart'
     as _i192;
+import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart'
+    as _i791;
 import 'package:flutter_ai_agent/domain/tools/chat/calendar_service.dart'
     as _i1020;
 import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart'
@@ -49,6 +57,10 @@ import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart'
 import 'package:flutter_ai_agent/domain/tools/chat/notification_service.dart'
     as _i919;
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart' as _i732;
+import 'package:flutter_ai_agent/domain/tools/chat/voice_input_service.dart'
+    as _i652;
+import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart'
+    as _i45;
 import 'package:flutter_ai_agent/domain/tools/pairing/pairing_parser.dart'
     as _i301;
 import 'package:flutter_ai_agent/domain/tools/pairing/qr_scanner_controller.dart'
@@ -111,17 +123,21 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i3.DeviceContextServiceBase>(
       () => _i205.DeviceContextService.create(),
     );
+    gh.lazySingleton<_i791.BackgroundServiceBase>(
+      () => _i1033.BackgroundService.create(),
+    );
+    gh.lazySingleton<_i753.TtsClient>(
+      () => _i753.DioTtsClient.create(gh<_i361.Dio>()),
+    );
+    gh.lazySingleton<_i652.VoiceInputServiceBase>(
+      () => _i845.VoiceInputService.create(),
+    );
     gh.lazySingleton<_i348.SecureStorageService>(
       () =>
           _i348.SecureStorageService(storage: gh<_i558.FlutterSecureStorage>()),
     );
     gh.lazySingleton<_i292.LocationServiceBase>(
       () => _i320.LocationService.create(),
-    );
-    gh.lazySingleton<_i821.QrScannerControllerBase>(
-      () => _i319.MobileScannerControllerWrapper(
-        controller: gh<_i625.MobileScannerController>(),
-      ),
     );
     gh.lazySingleton<_i732.ToolRegistry>(
       () => _i732.ToolRegistry(
@@ -131,6 +147,14 @@ extension GetItInjectableX on _i174.GetIt {
         cameraVisionService: gh<_i815.CameraVisionServiceBase>(),
         calendarService: gh<_i1020.CalendarServiceBase>(),
         notificationService: gh<_i919.NotificationServiceBase>(),
+        voiceInputService: gh<_i652.VoiceInputServiceBase>(),
+        voiceOutputService: gh<_i45.VoiceOutputServiceBase>(),
+        backgroundService: gh<_i791.BackgroundServiceBase>(),
+      ),
+    );
+    gh.lazySingleton<_i821.QrScannerControllerBase>(
+      () => _i319.MobileScannerControllerWrapper(
+        controller: gh<_i625.MobileScannerController>(),
       ),
     );
     gh.factory<_i15.AgentCubit>(
@@ -145,6 +169,9 @@ extension GetItInjectableX on _i174.GetIt {
       () => _i452.SettingsCubit.create(
         secureStorageService: gh<_i348.SecureStorageService>(),
       ),
+    );
+    gh.lazySingleton<_i45.VoiceOutputServiceBase>(
+      () => _i753.VoiceOutputService.create(gh<_i753.TtsClient>()),
     );
     return this;
   }

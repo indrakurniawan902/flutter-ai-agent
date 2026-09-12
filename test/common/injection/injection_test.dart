@@ -18,6 +18,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   setUp(() async {
     await sl.reset();
   });
@@ -92,5 +94,8 @@ void main() {
     expect(registry.hasTool('calendar_create_event'), isTrue);
     expect(registry.hasTool('send_local_notification'), isTrue);
     expect(registry.hasTool('schedule_reminder'), isTrue);
+    expect(registry.hasTool('listen_voice_input'), isTrue);
+    expect(registry.hasTool('speak_text'), isTrue);
+    expect(registry.hasTool('manage_background_service'), isTrue);
   });
 }
