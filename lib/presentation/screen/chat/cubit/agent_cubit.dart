@@ -10,7 +10,9 @@ import 'package:flutter_ai_agent/domain/entities/chat/chat_chunk.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
 import 'package:flutter_ai_agent/domain/models/chat/tool_call_request.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/memory_item.dart';
 import 'package:flutter_ai_agent/domain/repositories/chat/chat_local_repository.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/local_memory_service.dart';
 import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/security_policy.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
@@ -27,6 +29,8 @@ class AgentCubit extends Cubit<AgentState> {
   final ToolRegistry _toolRegistry;
   final SecureStorageService? _secureStorageService;
   final ChatLocalRepository? _chatLocalRepository;
+  final LocalMemoryServiceBase? _localMemoryService;
+  final List<MemoryItem> _activeMemories = [];
   String activeProfileId;
   String baseUrl;
   String model;
@@ -46,6 +50,7 @@ class AgentCubit extends Cubit<AgentState> {
   factory AgentCubit.create({
     required LlmRepository llmRepository,
     ChatLocalRepository? chatLocalRepository,
+    LocalMemoryServiceBase? localMemoryService,
   }) =>
       AgentCubit(
         llmRepository: llmRepository,
@@ -59,6 +64,10 @@ class AgentCubit extends Cubit<AgentState> {
             (getIt.isRegistered<ChatLocalRepository>()
                 ? getIt<ChatLocalRepository>()
                 : null),
+        localMemoryService: localMemoryService ??
+            (getIt.isRegistered<LocalMemoryServiceBase>()
+                ? getIt<LocalMemoryServiceBase>()
+                : null),
       );
 
   AgentCubit({
@@ -66,6 +75,7 @@ class AgentCubit extends Cubit<AgentState> {
     ToolRegistry? toolRegistry,
     SecureStorageService? secureStorageService,
     ChatLocalRepository? chatLocalRepository,
+    LocalMemoryServiceBase? localMemoryService,
     this.activeProfileId = 'default',
     this.baseUrl = 'https://api.openai.com/v1',
     this.model = 'gpt-4o',
@@ -75,10 +85,14 @@ class AgentCubit extends Cubit<AgentState> {
         _toolRegistry = toolRegistry ?? ToolRegistry(),
         _secureStorageService = secureStorageService, // ignore: prefer_initializing_formals
         _chatLocalRepository = chatLocalRepository,
+        _localMemoryService = localMemoryService,
         super(const AgentIdle());
 
   /// Full conversation history.
   List<ChatMessage> get messages => List.unmodifiable(_messages);
+
+  /// Active memories queried for the prompt.
+  List<MemoryItem> get activeMemories => List.unmodifiable(_activeMemories);
 
   /// Current pending tool call awaiting approval, if any.
   ToolCallRequest? get pendingToolCall => _pendingToolCall;
@@ -157,6 +171,15 @@ class AgentCubit extends Cubit<AgentState> {
     final int generation = _runGeneration;
     _isCancelled = false;
     await refreshSettings();
+    if (_localMemoryService != null) {
+      final searchResult =
+          await _localMemoryService.searchMemories(prompt.trim(), 3);
+      searchResult.fold((_) {}, (items) {
+        _activeMemories
+          ..clear()
+          ..addAll(items);
+      });
+    }
     _messages.add(ChatMessage(role: 'user', content: prompt));
     await _persistMessages();
     await _runLoop(0, generation);
@@ -265,6 +288,7 @@ class AgentCubit extends Cubit<AgentState> {
     _streamSubscription?.cancel();
     _streamSubscription = null;
     _messages.clear();
+    _activeMemories.clear();
     _pendingToolCall = null;
     _pendingTurnToolCalls.clear();
     final repo = _chatLocalRepository;
@@ -413,6 +437,14 @@ class AgentCubit extends Cubit<AgentState> {
 
     final toolDefs = _toolRegistry.getOpenAiToolDefinitions();
     final serializedMessages = _messages.map((m) => m.toJson()).toList();
+    if (_activeMemories.isNotEmpty) {
+      final memoryPrompt =
+          'Relevant User & Device Memories:\n${_activeMemories.map((m) => '- ${m.key}: ${m.content}').join('\n')}';
+      serializedMessages.insert(0, {
+        'role': 'system',
+        'content': memoryPrompt,
+      });
+    }
 
     final responseEither = await _llmRepository.streamCompletion(
       baseUrl: baseUrl,

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dartz/dartz.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_chunk.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/memory_item.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
@@ -937,6 +938,161 @@ void main() {
       expect(llmCalls, equals(1));
       expect(cubit.state, isA<AgentIdle>());
       expect(cubit.messages, isEmpty);
+    });
+  });
+
+  group('AgentCubit Memory Integration', () {
+    test(
+        'when localMemoryService is provided, sendMessage searches memories and populates activeMemories',
+        () async {
+      final mockMemoryService = MockLocalMemoryService();
+      final memoryItem = MemoryItem(
+        id: 1,
+        key: 'user_name',
+        content: 'Alice',
+        createdAt: DateTime(2025, 1, 1),
+        updatedAt: DateTime(2025, 1, 1),
+      );
+
+      when(() => mockMemoryService.searchMemories(any(), any()))
+          .thenAnswer((_) async => Right([memoryItem]));
+
+      when(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: any(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+          )).thenAnswer((_) async => Right(Stream.fromIterable([
+            const ChatChunk(
+              contentDelta: 'Hello Alice',
+              finishReason: 'stop',
+            ),
+          ])));
+
+      final memoryCubit = AgentCubit(
+        llmRepository: mockLlmRepository,
+        toolRegistry: toolRegistry,
+        localMemoryService: mockMemoryService,
+        baseUrl: baseUrl,
+        model: model,
+        apiKey: apiKey,
+      );
+
+      await memoryCubit.sendMessage('Who am I?');
+
+      verify(() => mockMemoryService.searchMemories('Who am I?', 3)).called(1);
+      expect(memoryCubit.activeMemories, equals([memoryItem]));
+
+      await memoryCubit.close();
+    });
+
+    test(
+        'when memories exist, system message with memories is included in serialized messages passed to streamCompletion',
+        () async {
+      final mockMemoryService = MockLocalMemoryService();
+      final memoryItem1 = MemoryItem(
+        id: 1,
+        key: 'user_name',
+        content: 'Alice',
+        createdAt: DateTime(2025, 1, 1),
+        updatedAt: DateTime(2025, 1, 1),
+      );
+      final memoryItem2 = MemoryItem(
+        id: 2,
+        key: 'favorite_color',
+        content: 'Blue',
+        createdAt: DateTime(2025, 1, 1),
+        updatedAt: DateTime(2025, 1, 1),
+      );
+
+      when(() => mockMemoryService.searchMemories(any(), any()))
+          .thenAnswer((_) async => Right([memoryItem1, memoryItem2]));
+
+      List<Map<String, dynamic>>? capturedMessages;
+      when(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: any(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+          )).thenAnswer((invocation) async {
+        capturedMessages =
+            invocation.namedArguments[#messages] as List<Map<String, dynamic>>?;
+        return Right(Stream.fromIterable([
+          const ChatChunk(
+            contentDelta: 'Got it',
+            finishReason: 'stop',
+          ),
+        ]));
+      });
+
+      final memoryCubit = AgentCubit(
+        llmRepository: mockLlmRepository,
+        toolRegistry: toolRegistry,
+        localMemoryService: mockMemoryService,
+        baseUrl: baseUrl,
+        model: model,
+        apiKey: apiKey,
+      );
+
+      await memoryCubit.sendMessage('Tell me about myself');
+
+      expect(capturedMessages, isNotNull);
+      expect(capturedMessages!.first['role'], equals('system'));
+      expect(
+        capturedMessages!.first['content'],
+        equals(
+            'Relevant User & Device Memories:\n- user_name: Alice\n- favorite_color: Blue'),
+      );
+      expect(capturedMessages![1]['role'], equals('user'));
+      expect(capturedMessages![1]['content'], equals('Tell me about myself'));
+
+      await memoryCubit.close();
+    });
+
+    test('reset() clears activeMemories', () async {
+      final mockMemoryService = MockLocalMemoryService();
+      final memoryItem = MemoryItem(
+        id: 1,
+        key: 'user_name',
+        content: 'Alice',
+        createdAt: DateTime(2025, 1, 1),
+        updatedAt: DateTime(2025, 1, 1),
+      );
+
+      when(() => mockMemoryService.searchMemories(any(), any()))
+          .thenAnswer((_) async => Right([memoryItem]));
+
+      when(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: any(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+          )).thenAnswer((_) async => Right(Stream.fromIterable([
+            const ChatChunk(
+              contentDelta: 'Hello',
+              finishReason: 'stop',
+            ),
+          ])));
+
+      final memoryCubit = AgentCubit(
+        llmRepository: mockLlmRepository,
+        toolRegistry: toolRegistry,
+        localMemoryService: mockMemoryService,
+        baseUrl: baseUrl,
+        model: model,
+        apiKey: apiKey,
+      );
+
+      await memoryCubit.sendMessage('Hello');
+      expect(memoryCubit.activeMemories, isNotEmpty);
+
+      memoryCubit.reset();
+      expect(memoryCubit.activeMemories, isEmpty);
+
+      await memoryCubit.close();
     });
   });
 }

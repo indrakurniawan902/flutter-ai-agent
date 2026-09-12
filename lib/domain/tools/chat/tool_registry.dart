@@ -63,6 +63,10 @@ class ToolRegistry {
     CameraVisionServiceBase? cameraVisionService,
     CalendarServiceBase? calendarService,
     NotificationServiceBase? notificationService,
+    FileWorkspaceServiceBase? fileWorkspaceService,
+    NotificationTriageServiceBase? notificationTriageService,
+    LocalMemoryServiceBase? localMemoryService,
+    AmbientTriggerServiceBase? ambientTriggerService,
   }) {
     if (clipboardService != null) registerClipboardTools(clipboardService);
     if (locationService != null) registerLocationTools(locationService);
@@ -70,6 +74,16 @@ class ToolRegistry {
     if (cameraVisionService != null) registerCameraTools(cameraVisionService);
     if (calendarService != null) registerCalendarTools(calendarService);
     if (notificationService != null) registerNotificationTools(notificationService);
+    if (fileWorkspaceService != null) {
+      registerFileWorkspaceTools(fileWorkspaceService);
+    }
+    if (notificationTriageService != null) {
+      registerNotificationTriageTools(notificationTriageService);
+    }
+    if (localMemoryService != null) registerMemoryTools(localMemoryService);
+    if (ambientTriggerService != null) {
+      registerAmbientTriggerTools(ambientTriggerService);
+    }
   }
 
   void register(RegisteredTool tool) {
