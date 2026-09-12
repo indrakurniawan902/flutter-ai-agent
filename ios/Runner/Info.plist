@@ -80,5 +80,24 @@
 	<string>Flames requires microphone access for voice input and speech recognition.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Flames requires speech recognition to transcribe spoken words into agent prompts.</string>
+	<key>AppGroupId</key>
+	<string>group.ai.hermes.flames</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeSchemes</key>
+			<array>
+				<string>ShareMedia-group.ai.hermes.flames</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSContactsUsageDescription</key>
+	<string>Flames requires access to your contacts to look up recipients for messaging and calling tasks.</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>https</string>
+		<string>http</string>
+		<string>whatsapp</string>
+	</array>
 </dict>
 </plist>
