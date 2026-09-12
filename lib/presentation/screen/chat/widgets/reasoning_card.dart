@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_ai_agent/core/theme/hermes_theme.dart';
+import 'package:flutter_ai_agent/utils/hermes_theme.dart';
 
 /// Collapsible accordion card displaying the agent reasoning trace.
 class ReasoningCard extends StatefulWidget {

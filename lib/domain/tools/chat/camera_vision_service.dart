@@ -1,6 +1,6 @@
 import 'package:dartz/dartz.dart';
 
-import 'package:flutter_ai_agent/core/errors/failures.dart';
+import 'package:flutter_ai_agent/common/failure.dart';
 
 /// Image source selection for camera_take_photo.
 enum CameraSource { camera, gallery }

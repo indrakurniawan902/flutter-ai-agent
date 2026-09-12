@@ -3,7 +3,7 @@ import 'package:device_calendar/device_calendar.dart';
 import 'package:injectable/injectable.dart';
 import 'package:timezone/timezone.dart' as tz;
 
-import 'package:flutter_ai_agent/core/errors/failures.dart';
+import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/calendar_service.dart';
 
 @LazySingleton(as: CalendarServiceBase)

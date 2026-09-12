@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_ai_agent/common/exception.dart';
-import 'package:flutter_ai_agent/common/failures.dart';
+import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/data/models/chat/chat_remote_response.dart';
 import 'package:flutter_ai_agent/data/repositories/chat_repository_impl.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_chunk.dart';

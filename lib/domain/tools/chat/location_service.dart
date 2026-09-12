@@ -2,7 +2,7 @@ import 'package:dartz/dartz.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
-import 'package:flutter_ai_agent/core/errors/failures.dart';
+import 'package:flutter_ai_agent/common/failure.dart';
 
 abstract class LocationServiceBase {
   Future<Either<Failure, Map<String, dynamic>>> getLocation({String? accuracy});

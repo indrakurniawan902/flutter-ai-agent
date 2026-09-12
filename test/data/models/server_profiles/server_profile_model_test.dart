@@ -1,4 +1,4 @@
-import 'package:flutter_ai_agent/core/constants/constants.dart';
+import 'package:flutter_ai_agent/common/constant.dart';
 import 'package:flutter_ai_agent/data/models/server_profiles/server_profile_model.dart';
 import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
