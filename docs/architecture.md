@@ -686,3 +686,98 @@ screen's branching logic, not on pure layout.
 > before marking work complete, see [`rules.md`](./rules.md). For the exact
 > current-file → target-file moves, see
 > [`MIGRATION-PLAN.md`](./MIGRATION-PLAN.md).
+
+---
+
+## 15. Flames exceptions to the template
+
+Canonical base is `flutter-cubit-template` (layer-first `lib/{common,data,
+domain,presentation,utils}/`, Cubit-only, `get_it` + `injectable`, `dartz`
+`Either<Failure, T>`). Flames keeps that core and deliberately deviates in
+the 7 ways below. Nothing here is accidental drift — each exception exists
+for a Flames-specific requirement.
+
+### 1. Entrypoints & Flavors (dev + prod only, lib/main.dart fallback, no staging)
+
+- Entries: `lib/main_development.dart` → `bootstrap(FlavorConfig.development)`,
+  `lib/main_production.dart` → `bootstrap(FlavorConfig.production)`, plus
+  `lib/main.dart` as fallback default entry.
+- No `staging` flavor. Android product flavors mirror dev/prod only, each
+  with its own app name and `applicationIdSuffix`.
+- CI builds with `flutter build apk --flavor <name> -t lib/main_<name>.dart`.
+- Rationale: Flames needs exactly two deploy targets today; a third flavor
+  adds signing/CI cost with no consumer.
+
+### 2. Local Storage & Module DI (flutter_secure_storage + hive_ce_flutter, StorageModule)
+
+- `flutter_secure_storage` holds credentials, API keys/tokens, and server
+  profiles; `hive_ce_flutter` is the offline cache layer (see §9).
+- Registered via an injectable `@module` `StorageModule` in
+  `lib/common/injection/injection.dart`:
+  `provideSecureStorage() => const FlutterSecureStorage()`.
+- `Hive.initFlutter()` + `registerAdapter(...)` run awaited in `bootstrap()`;
+  box names / type IDs centralized in `lib/common/hive_constant.dart`.
+- Rationale: template has no secure-credential story; Flames stores secrets
+  that must never sit in plain Hive boxes.
+
+### 3. Native Device Tools layer (lib/data/datasources/tools/chat/ and lib/domain/tools/chat/)
+
+- Data side: `lib/data/datasources/tools/chat/` — device service
+  implementations (`ClipboardService`, `LocationService`,
+  `DeviceContextService`, `CameraVisionService`, `CalendarService`,
+  `NotificationService`).
+- Domain side: `lib/domain/tools/chat/` — tool contracts + `ToolRegistry` and
+  `SecurityPolicy` (Tier 1 auto / Tier 2 permission / Tier 3 HITL).
+- Backed by plugins: `battery_plus`, `connectivity_plus`, `device_info_plus`,
+  `geolocator`, `image_picker`, `device_calendar`,
+  `flutter_local_notifications`.
+- Rationale: template has no device-tool concept; the ReAct agent loop needs
+  a dedicated execution surface with a security gate.
+
+### 4. Realtime Gateway & SSE Streaming (web_socket_channel + Dio SseParser)
+
+- `web_socket_channel` provides the bidirectional universal-gateway RPC
+  transport (gateway feature).
+- Streaming chat uses `dio` with `ResponseType.stream` + custom `SseParser`
+  (`data/datasources/remote/chat/sse_parser.dart`) turning SSE lines into
+  `ChatChunk` / tool-call deltas; `LlmRepository.streamCompletion` returns
+  `Either<Failure, Stream<ChatChunk>>`.
+- `Dio` is injected directly into datasources (no `ApiClient` wrapper);
+  errors flow through shared `DioErrHandler` → `ConnectionFailure`.
+- Rationale: template assumes request/response REST; Flames is
+  streaming-first (tokens + tool-call deltas over SSE/WebSocket).
+
+### 5. Stream-driven Agent Cubit (AgentCubit models SSE tokens with cancel/stop)
+
+- `AgentCubit` (in `presentation/screen/<feature>/cubit/`, `@injectable`)
+  models the live SSE stream directly instead of the standard
+  `Loading → Success/Error` one-shot shape (see §6).
+- Tracks cancellable subscriptions (`_isCancelled`, `StreamSubscription`)
+  and exposes `stop()` so a streaming ReAct loop is interruptible.
+- Rationale: a token stream must be cancellable mid-flight; ordinary
+  data-fetching features keep the standard one-shot shape.
+
+### 6. Design System & Tokens (AppTheme, HermesColors/HermesTypography/HermesTheme, Zero Emoji in Chrome)
+
+- `lib/utils/app_theme.dart` — `AppTheme` dark slate & teal (`#0F172A` /
+  `#1E293B` / `#334155` / accent `#008080`).
+- `lib/utils/hermes_theme.dart` — `HermesColors` / `HermesTypography` /
+  `HermesTheme` terminal theme (obsidian `#0A0D14`, card `#131926`,
+  electric teal `#00F2FE`, code bg `#060612`).
+- Assistant bubbles render via `flutter_markdown`; HITL approvals via
+  `ActionApprovalSheet`, tool runs via `ToolCallCard`.
+- **Zero emoji in chrome**: `Icons.*` only across app bars, navigation,
+  cards, buttons, modals (see `design-system.md`, `rules.md` §1.7).
+- Rationale: template ships no opinionated theme; Flames is a dark
+  terminal-style workstation with a hard no-emoji chrome rule.
+
+### 7. Automated Layout Guard (tool/check_layout.sh wired into DoD)
+
+- `tool/check_layout.sh` mechanically enforces layer-first invariants:
+  no `lib/features/`, no parallel `lib/core/`, no `flutter_bloc` /
+  `package:flutter/` under `lib/domain/`, no re-export shims, required
+  paths present, no `presentation → data` imports, no DTOs in `domain/`.
+- Must print `LAYOUT OK` (exit 0); wired into Definition of Done alongside
+  `flutter analyze` (0 issues) and `flutter test` (100% green).
+- Rationale: template relies on review discipline; Flames codifies the
+  layout traps (§8) as a script so regressions fail fast on VPS/CI.

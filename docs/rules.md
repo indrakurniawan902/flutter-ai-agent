@@ -267,3 +267,40 @@ fix warnings introduced by your change.
 
 All layout constraints and layer-first architecture rules are mechanically enforced by `tool/check_layout.sh`.
 Run `sh tool/check_layout.sh` (must exit 0 and output `LAYOUT OK`).
+
+---
+
+## 16. Flames Exceptions to the Template
+
+Canonical base is `flutter-cubit-template`. Flames keeps its layer-first,
+Cubit-only, `Either<Failure, T>` core and deliberately deviates as follows.
+Details per item live in [`architecture.md §15`](./architecture.md#15-flames-exceptions-to-the-template).
+
+1. **Zero emoji in chrome.** `Icons.*` only across app bars, navigation,
+   cards, buttons, and modals. No emojis in UI icons, headers, or HITL
+   sheets (§1.7, §10).
+2. **Dev/prod flavors only.** `lib/main_development.dart` + 
+   `lib/main_production.dart` with `lib/main.dart` fallback; no `staging`
+   flavor. Android flavors mirror dev/prod with per-flavor app name and
+   `applicationIdSuffix`.
+3. **VPS lock discipline.** On the 2-vCPU VPS, serialize heavy commands
+   with `flock /tmp/flutter.lock` — never run parallel flutter compiles
+   (`flutter analyze`, `flutter test`, `build_runner build`).
+4. **`tool/check_layout.sh` is DoD.** Must exit 0 with `LAYOUT OK` before
+   committing or declaring work complete, alongside `flutter analyze`
+   (0 issues) and `flutter test` (100% green). It guards: no
+   `lib/features/`, no parallel `lib/core/`, no `flutter_bloc` in
+   `domain/`, no re-export shims, no `presentation → data` imports, no
+   DTOs in `domain/`.
+5. **Secure storage.** `flutter_secure_storage` (credentials, tokens,
+   profiles) + `hive_ce_flutter` (cache), registered via `@module`
+   `StorageModule`; Hive adapters awaited in `bootstrap()`, IDs/boxes in
+   `common/hive_constant.dart`.
+6. **Native device tools.** `lib/data/datasources/tools/chat/` (service
+   impls: clipboard, location, device context, camera vision, calendar,
+   notifications) + `lib/domain/tools/chat/` (`ToolRegistry`,
+   `SecurityPolicy` Tier 1 auto / Tier 2 permission / Tier 3 HITL).
+7. **Streaming-first networking + AgentCubit.** `web_socket_channel`
+   gateway transport; `Dio` + `ResponseType.stream` + `SseParser` for SSE
+   `ChatChunk` / tool-call deltas; `AgentCubit` models the live stream
+   with cancel/`stop()` instead of one-shot `Loading → Success/Error`.
