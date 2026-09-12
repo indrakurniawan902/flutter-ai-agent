@@ -14,6 +14,7 @@ import 'clipboard_service.dart';
 import 'contact_launcher_tools.dart';
 import 'device_context_service.dart';
 import 'file_workspace_service.dart';
+import 'intent_launcher_service.dart';
 import 'local_memory_service.dart';
 import 'location_service.dart';
 import 'notification_service.dart';
@@ -81,6 +82,7 @@ class ToolRegistry {
     VoiceOutputServiceBase? voiceOutputService,
     BackgroundServiceBase? backgroundService,
     ContactLauncherTools? contactLauncherTools,
+    IntentLauncherServiceBase? intentLauncherService,
   }) {
     if (clipboardService != null) registerClipboardTools(clipboardService);
     if (locationService != null) registerLocationTools(locationService);
@@ -107,6 +109,9 @@ class ToolRegistry {
     }
     if (contactLauncherTools != null) {
       registerContactLauncherTools(contactLauncherTools);
+    }
+    if (intentLauncherService != null) {
+      registerIntentLauncherTools(intentLauncherService);
     }
   }
 
@@ -1101,6 +1106,91 @@ class ToolRegistry {
         securityTier: SecurityTier.tier2Permission,
         execute: (args) =>
             tools.openExternalUrl(args['url']?.toString() ?? ''),
+      ),
+    );
+  }
+
+  void registerIntentLauncherTools(IntentLauncherServiceBase service) {
+    register(
+      RegisteredTool(
+        name: 'open_map_navigation',
+        description:
+            'Opens map navigation via Android geo intent with coordinates or a place query, falling back to Google Maps web.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'latitude': {
+              'type': 'number',
+              'description': 'Latitude for geo intent',
+            },
+            'longitude': {
+              'type': 'number',
+              'description': 'Longitude for geo intent',
+            },
+            'query': {
+              'type': 'string',
+              'description': 'Place name or address to search',
+            },
+          },
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (args) => service.openMapNavigation(
+          latitude: (args['latitude'] as num?)?.toDouble(),
+          longitude: (args['longitude'] as num?)?.toDouble(),
+          query: args['query'] as String?,
+        ),
+      ),
+    );
+
+    register(
+      RegisteredTool(
+        name: 'open_email_composer',
+        description:
+            'Opens the device email composer (mailto intent) with optional recipient, subject, and body.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'to': {
+              'type': 'string',
+              'description': 'Recipient email address',
+            },
+            'subject': {
+              'type': 'string',
+              'description': 'Email subject',
+            },
+            'body': {
+              'type': 'string',
+              'description': 'Email body',
+            },
+          },
+        },
+        securityTier: SecurityTier.tier2Permission,
+        execute: (args) => service.openEmailComposer(
+          to: args['to'] as String?,
+          subject: args['subject'] as String?,
+          body: args['body'] as String?,
+        ),
+      ),
+    );
+
+    register(
+      RegisteredTool(
+        name: 'launch_system_setting',
+        description:
+            'Opens a named Android system settings screen (bluetooth, wifi, battery_saver, airplane_mode, location, display, sound, apps).',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'setting_type': {
+              'type': 'string',
+              'description': 'Name of the system settings screen to open',
+            },
+          },
+          'required': ['setting_type'],
+        },
+        securityTier: SecurityTier.tier2Permission,
+        execute: (args) =>
+            service.launchSystemSetting(args['setting_type']?.toString() ?? ''),
       ),
     );
   }
