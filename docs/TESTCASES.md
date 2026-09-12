@@ -17,6 +17,8 @@
 5. [Module 5: Tier 2 Sensor & Perception Tools (Permission-Gated)](#module-5-tier-2-sensor--perception-tools-permission-gated)
 6. [Module 6: Tier 3 State-Modifying Tools & HITL Guardrails](#module-6-tier-3-state-modifying-tools--hitl-guardrails)
 7. [Module 7: Presentation, UI/UX & Edge Cases](#module-7-presentation-uiux--edge-cases)
+8. [Module 8: Hermes Nous UI, Bottom Navigation & Micro-UI (Fase 5)](#module-8-hermes-nous-ui-bottom-navigation--micro-ui-fase-5)
+9. [Module 9: Streaming Voice & Audio Interface (Fase 4)](#module-9-streaming-voice--audio-interface-fase-4)
 
 ---
 
@@ -539,6 +541,141 @@
 
 ---
 
+## Module 9: Streaming Voice & Audio Interface (Fase 4)
+
+### TC-VOICE-01: Voice Input & Real-Time Transcription (T9.1)
+- **Type**: Positive
+- **Objective**: Capture microphone audio and stream transcribed speech into text.
+- **Preconditions**: Microphone permission granted; `VoiceInputService` initialized.
+- **Steps**:
+  1. User taps mic button or holds to speak.
+  2. Waveform visualizer animates with sound level stream.
+  3. User finishes speaking; transcription is auto-dispatched to `AgentCubit.sendMessage()`.
+- **Expected Outcome**:
+  - Spoken words transcribed accurately.
+  - Message bubble appears in ChatScreen.
+
+### TC-VOICE-02: Microphone Permission Denied Handling (T9.1)
+- **Type**: Negative
+- **Objective**: Ensure graceful error handling when microphone permission is denied.
+- **Preconditions**: Microphone permission denied in system settings.
+- **Steps**:
+  1. User taps mic button.
+- **Expected Outcome**:
+  - SnackBar error displayed with permission advice.
+  - Waveform visualizer does not remain stuck; recording mode cancelled.
+
+### TC-VOICE-03: Streaming Voice Output & Audio Playback Queue (T9.2)
+- **Type**: Positive
+- **Objective**: Stream and synthesize agent responses using TTS and queue playback sequentially.
+- **Preconditions**: Speaker unmuted; `VoiceOutputService` active.
+- **Steps**:
+  1. Agent finishes response generation (`AgentSuccess`).
+  2. Text synthesized via `/audio/speech` TTS endpoint.
+  3. Audio chunks queued in `_audioQueue` and played smoothly through `audioplayers`.
+- **Expected Outcome**:
+  - Audio plays out loud clearly.
+  - Consecutive audio chunks transition seamlessly without clipping.
+
+### TC-VOICE-04: Barge-In Interruption on User Interaction (T9.2)
+- **Type**: Positive
+- **Objective**: Immediately halt speaking audio when user taps microphone to speak.
+- **Preconditions**: Agent currently speaking audio response.
+- **Steps**:
+  1. User taps mic button in input bar.
+- **Expected Outcome**:
+  - `VoiceOutputService.interrupt()` called instantly.
+  - Audio playback stops immediately; audio queue and streaming buffer cleared.
+  - Voice recording starts cleanly without audio feedback loop.
+
+### TC-VOICE-05: Speaker Mute/Unmute Toggle in ChatScreen AppBar (T9.2)
+- **Type**: Positive
+- **Objective**: Allow user to silence/enable audio output on demand.
+- **Preconditions**: ChatScreen open.
+- **Steps**:
+  1. User taps speaker toggle in AppBar (`chat_speaker_toggle`).
+  2. Icon switches from `volume_up` to `volume_off`.
+  3. Subsequent agent responses remain silent.
+  4. User taps speaker toggle again; icon switches back to `volume_up` and volume is restored.
+- **Expected Outcome**:
+  - Immediate mute toggle without restarting conversation.
+
+### TC-VOICE-06: TTS Synthesis Failure & Error Resilience (T9.2)
+- **Type**: Negative
+- **Objective**: Prevent app crash when TTS endpoint times out or returns error.
+- **Preconditions**: Network disconnected or invalid API key.
+- **Steps**:
+  1. Call `speakText()` when TTS endpoint unreachable.
+- **Expected Outcome**:
+  - Returns `Left(Failure)` (`ServerFailure` or `ConnectionFailure`).
+  - Error piped to `errorStream`; player queue safely reset to `idle`.
+
+### TC-VOICE-07: Android Quick Settings Tile 1-Tap Activation (T9.3)
+- **Type**: Positive
+- **Objective**: Verify 1-tap activation from notification drawer Quick Tile activates agent voice mode.
+- **Preconditions**: Quick Settings Tile configured in Android notification shade.
+- **Steps**:
+  1. Tap Flames Agent QS Tile.
+  2. Quick tile toggles state to active and collapses shade, launching app with `voice_input` action.
+  3. `ChatScreen` receives pending action and initiates voice listening.
+- **Expected Outcome**:
+  - `FlamesQuickTile` toggles to `active`.
+  - Pending action consumed without duplicate triggers.
+
+### TC-VOICE-08: Foreground Service Persistent Notification with Action Buttons (T9.3)
+- **Type**: Positive
+- **Objective**: Foreground service maintains persistent notification with action controls (Voice Input, Quick Status, Stop).
+- **Preconditions**: Foreground service started via `BackgroundService`.
+- **Steps**:
+  1. Start foreground service with title and content.
+  2. Emit action intent (e.g. `quick_status` or `stop`).
+- **Expected Outcome**:
+  - Notification displayed with action buttons.
+  - Action dispatched to `actionStream` or terminates foreground execution cleanly on stop.
+
+### TC-VOICE-09: Safe WakeLock & Bounded Battery Protection (T9.3)
+- **Type**: Negative / Boundary
+- **Objective**: Prevent battery drain by enforcing bounded timeout on PARTIAL_WAKE_LOCK.
+- **Preconditions**: Background operation started.
+- **Steps**:
+  1. Request WakeLock with timeout exceeding maximum threshold (e.g. 120,000ms).
+  2. Request WakeLock with negative or sub-minimum timeout.
+- **Expected Outcome**:
+  - Timeout clamped within safe bounds (1s - 60s, default 30s).
+  - WakeLock automatically released upon timeout or service destruction.
+
+### TC-VOICE-10: Service Lifecycle & Quick Tile State Toggle (T9.3)
+- **Type**: Positive
+- **Objective**: Verify `manage_background_service` tool properly reports and toggles foreground service and tile states.
+- **Preconditions**: Tool registered in `ToolRegistry`.
+- **Steps**:
+  1. Execute tool with `{"action": "status"}`.
+  2. Execute tool with `{"action": "toggle_tile"}`.
+  3. Execute tool with `{"action": "start", "title": "Custom Title"}`.
+- **Expected Outcome**:
+  - Returns structured JSON containing `is_running`, `tile_state`, and `is_wakelock_held`.
+  - Tile state toggles between active and inactive.
+
+### TC-VOICE-11: End-to-End Voice & Background Automation Pipeline (Fase 4)
+- **Type**: Positive
+- **Objective**: Verify full multi-stage hands-free pipeline: Voice Input (STT) -> Real-time Transcription Streaming -> ReAct Loop (Tool Execution: device_status & manage_background_service) -> Voice Output (TTS) & Barge-In interruption handling.
+- **Preconditions**: All Fase 4 services (VoiceInputService, VoiceOutputService, BackgroundService) registered in `ToolRegistry` and DI container (`sl`).
+- **Steps**:
+  1. User taps mic button (`chat_mic_button`) in `ChatScreen` input bar.
+  2. Voice waveform visualizer renders with sound level stream and real-time partial transcription.
+  3. User completes voice command: `"Periksa status perangkat dan aktifkan layanan background"`.
+  4. User taps send button on waveform (`voice_waveform_send_button`), dispatching transcription to `AgentCubit.sendMessage()`.
+  5. LLM generates tool call to `device_status` (Tier 1 auto), receiving device battery and connectivity context.
+  6. LLM generates secondary tool call to `manage_background_service` with action `start`, activating foreground service.
+  7. LLM streams final response: `"Status baterai 85% dan layanan background Flames telah aktif."` and emits `AgentSuccess`.
+  8. `ChatScreen` automatically passes final response to `VoiceOutputService.speakText()`, playing synthesized speech aloud.
+  9. Quick Settings Tile and Notification Action events (`voice_input`, `quick_status`) trigger voice listening and prompt execution seamlessly.
+  10. Tapping mic button during active audio playback triggers barge-in interruption via `VoiceOutputService.interrupt()`.
+- **Expected Outcome**:
+  - Complete 5-stage hands-free automation pipeline executes seamlessly with 100% green verification in `e2e_fase4_voice_test.dart`.
+
+---
+
 ## Summary Matrix
 
 | Module | Positive Cases | Negative Cases | Total Cases |
@@ -551,7 +688,8 @@
 | **Module 6: Tier 3 HITL Tools** | 2 | 3 | 5 |
 | **Module 7: Presentation & UI/UX** | 3 | 1 | 4 |
 | **Module 8: Hermes Nous UI & Micro-UI** | 6 | 1 | 7 |
-| **Grand Total** | **21** | **20** | **41** |
+| **Module 9: Streaming Voice & Audio (Fase 4)** | 8 | 3 | 11 |
+| **Grand Total** | **29** | **23** | **52** |
 
 ---
 _Standardized for Hermes Bot Team: PM Bot (`default`), Dev Bot (`dev`), Ops Bot (`ops`)._
