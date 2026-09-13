@@ -22,6 +22,9 @@ abstract class GatewayClientBase {
   /// Stream of incoming tool call requests sent from the server.
   Stream<GatewayToolCallRequestMessage> get toolCallRequestStream;
 
+  /// Stream of incoming HITL elicitation requests sent from the server.
+  Stream<GatewayElicitationRequestMessage> get elicitationRequestStream;
+
   /// Connects to the Hermes Gateway at [gatewayUrl] using [token].
   Future<void> connect(String gatewayUrl, {String? token});
 
@@ -39,6 +42,13 @@ abstract class GatewayClientBase {
     required String callId,
     Map<String, dynamic>? result,
     String? error,
+  });
+
+  /// Sends a HITL elicitation decision frame back to Hermes Gateway.
+  void sendElicitationResponse({
+    required String requestId,
+    required bool approved,
+    bool biometricVerified = false,
   });
 
   /// Sends a chat message frame across the gateway connection.
