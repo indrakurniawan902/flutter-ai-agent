@@ -140,13 +140,17 @@ class GatewayClient implements GatewayClientBase {
   /// admits normalizes here into a `ws://`/`wss://` URI with a non-empty host.
   static Uri normalizeGatewayUri(String rawUrl) {
     var url = rawUrl.trim();
+    // Schemes are case-insensitive (RFC 3986) and the shared predicate admits
+    // uppercase forms like `WSS://host`, so match lower-cased prefixes here to
+    // stay in agreement with isAcceptableGatewayUrl.
+    final lower = url.toLowerCase();
 
     // Check scheme and convert http(s) to ws(s)
-    if (url.startsWith('http://')) {
+    if (lower.startsWith('http://')) {
       url = 'ws://${url.substring(7)}';
-    } else if (url.startsWith('https://')) {
+    } else if (lower.startsWith('https://')) {
       url = 'wss://${url.substring(8)}';
-    } else if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
+    } else if (!lower.startsWith('ws://') && !lower.startsWith('wss://')) {
       url = 'ws://$url';
     }
 

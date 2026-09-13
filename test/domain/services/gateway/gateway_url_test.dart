@@ -131,5 +131,21 @@ void main() {
         'ws://example.com:18789/device/ws',
       );
     });
+
+    test('uppercase schemes are admitted and normalize correctly', () {
+      // Schemes are case-insensitive (RFC 3986), so the predicate admits them -
+      // and normalizeGatewayUri must keep agreeing instead of mis-parsing
+      // `WSS://host` into a garbage `ws://wss` authority.
+      expect(isAcceptableGatewayUrl('WSS://host'), isTrue);
+      expect(isAcceptableGatewayUrl('HTTP://192.168.1.10:8644'), isTrue);
+      expect(
+        GatewayClient.normalizeGatewayUri('WSS://host').toString(),
+        'wss://host/device/ws',
+      );
+      expect(
+        GatewayClient.normalizeGatewayUri('HTTP://192.168.1.10:8644').toString(),
+        'ws://192.168.1.10:8644/device/ws',
+      );
+    });
   });
 }
