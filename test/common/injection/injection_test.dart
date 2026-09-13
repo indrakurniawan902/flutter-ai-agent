@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
+import 'package:flutter_ai_agent/data/datasources/local/action_center/action_center_datasource.dart';
+import 'package:flutter_ai_agent/domain/repositories/action_center/action_center_repository.dart';
 import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart';
@@ -67,6 +69,16 @@ void main() {
     expect(cubit, isA<SettingsCubit>());
     expect(profileCubit, isA<ServerProfileCubit>());
     expect(parser, isA<PairingParser>());
+  });
+
+  test('initDependencies registers the Action Center graph', () async {
+    expect(sl.isRegistered<ActionCenterDatasource>(), isFalse);
+    expect(sl.isRegistered<ActionCenterRepository>(), isFalse);
+
+    await initDependencies();
+
+    expect(sl.isRegistered<ActionCenterDatasource>(), isTrue);
+    expect(sl.isRegistered<ActionCenterRepository>(), isTrue);
   });
 
   test('initDependencies registers all chat services and tools in ToolRegistry', () async {

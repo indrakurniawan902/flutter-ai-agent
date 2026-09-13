@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:equatable/equatable.dart';
 import 'tool_call_delta.dart';
+import 'chat_attachment.dart';
 import 'package:flutter_ai_agent/domain/models/chat/action_step.dart';
 import 'package:flutter_ai_agent/domain/models/chat/generative_card_data.dart';
 
@@ -14,6 +17,7 @@ class ChatMessage extends Equatable {
   final List<ActionStep>? actionSteps;
   final ActionConfirmationData? confirmationCard;
   final SummaryCardData? summaryCard;
+  final List<ChatAttachment>? attachments;
 
   const ChatMessage({
     required this.role,
@@ -25,6 +29,7 @@ class ChatMessage extends Equatable {
     this.actionSteps,
     this.confirmationCard,
     this.summaryCard,
+    this.attachments,
   });
 
   ChatMessage copyWith({
@@ -37,6 +42,7 @@ class ChatMessage extends Equatable {
     List<ActionStep>? actionSteps,
     ActionConfirmationData? confirmationCard,
     SummaryCardData? summaryCard,
+    List<ChatAttachment>? attachments,
   }) {
     return ChatMessage(
       role: role ?? this.role,
@@ -48,14 +54,16 @@ class ChatMessage extends Equatable {
       actionSteps: actionSteps ?? this.actionSteps,
       confirmationCard: confirmationCard ?? this.confirmationCard,
       summaryCard: summaryCard ?? this.summaryCard,
+      attachments: attachments ?? this.attachments,
     );
   }
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     final toolCallsList = json['tool_calls'] as List<dynamic>?;
+    final attachmentsList = json['attachments'] as List<dynamic>?;
     return ChatMessage(
       role: json['role'] as String,
-      content: json['content'] as String?,
+      content: _parseContent(json['content']),
       toolCalls: toolCallsList
           ?.map((e) => ToolCallDelta.fromJson(e as Map<String, dynamic>))
           .toList(),
@@ -63,7 +71,27 @@ class ChatMessage extends Equatable {
       name: json['name'] as String?,
       thoughtProcess: (json['thought_process'] ?? json['thoughtProcess'])
           as String?,
+      attachments: attachmentsList
+          ?.whereType<Map<String, dynamic>>()
+          .map(ChatAttachment.fromJson)
+          .toList(),
     );
+  }
+
+  static String? _parseContent(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is String) return raw;
+    if (raw is List) {
+      final buffer = StringBuffer();
+      for (final part in raw) {
+        if (part is Map && part['type'] == 'text' && part['text'] is String) {
+          if (buffer.isNotEmpty) buffer.write('\n\n');
+          buffer.write(part['text'] as String);
+        }
+      }
+      return buffer.toString();
+    }
+    return raw.toString();
   }
 
   Map<String, dynamic> toJson() {
@@ -73,6 +101,32 @@ class ChatMessage extends Equatable {
     if (content != null) {
       map['content'] = content;
     }
+    _applyStandardFields(map);
+    if (attachments != null && attachments!.isNotEmpty) {
+      map['attachments'] = attachments!.map((a) => a.toJson()).toList();
+    }
+    return map;
+  }
+
+  /// Provider-facing serialization (OpenAI-vision shape).
+  ///
+  /// Merges any staged file attachments into the `content` text part and
+  /// emits image attachments as `image_url` parts. Does NOT include the
+  /// non-standard `attachments` key; persistence uses [toJson] instead.
+  Map<String, dynamic> toWireJson() {
+    final map = <String, dynamic>{
+      'role': role,
+    };
+    if (attachments != null && attachments!.isNotEmpty) {
+      map['content'] = _buildMultipartContent();
+    } else if (content != null) {
+      map['content'] = content;
+    }
+    _applyStandardFields(map);
+    return map;
+  }
+
+  void _applyStandardFields(Map<String, dynamic> map) {
     if (toolCalls != null && toolCalls!.isNotEmpty) {
       map['tool_calls'] = toolCalls!.map((tc) {
         return {
@@ -94,7 +148,39 @@ class ChatMessage extends Equatable {
     if (thoughtProcess != null) {
       map['thought_process'] = thoughtProcess;
     }
-    return map;
+  }
+
+  List<Map<String, dynamic>> _buildMultipartContent() {
+    final textBuffer = StringBuffer(content ?? '');
+    for (final attachment in attachments!) {
+      if (attachment.type != ChatAttachmentType.file) continue;
+      textBuffer.write('\n\n[Attached file: ${attachment.filename}]\n');
+      textBuffer.write(_decodeAttachment(attachment));
+    }
+
+    final parts = <Map<String, dynamic>>[];
+    if (textBuffer.isNotEmpty) {
+      parts.add({'type': 'text', 'text': textBuffer.toString()});
+    }
+    for (final attachment in attachments!) {
+      if (attachment.type != ChatAttachmentType.image) continue;
+      parts.add({
+        'type': 'image_url',
+        'image_url': {'url': attachment.dataUrl},
+      });
+    }
+    return parts;
+  }
+
+  static String _decodeAttachment(ChatAttachment attachment) {
+    try {
+      return utf8.decode(
+        base64Decode(attachment.base64Data),
+        allowMalformed: true,
+      );
+    } catch (_) {
+      return '[undecodable attachment]';
+    }
   }
 
   @override
@@ -108,5 +194,6 @@ class ChatMessage extends Equatable {
         actionSteps,
         confirmationCard,
         summaryCard,
+        attachments,
       ];
 }

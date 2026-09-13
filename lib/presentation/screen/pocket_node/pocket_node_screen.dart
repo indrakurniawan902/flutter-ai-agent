@@ -13,6 +13,7 @@ import 'package:flutter_ai_agent/domain/tools/chat/local_memory_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
+import 'package:flutter_ai_agent/presentation/screen/action_center/action_center_screen.dart';
 import 'package:flutter_ai_agent/utils/hermes_theme.dart';
 
 class PocketNodeScreen extends StatefulWidget {
@@ -266,6 +267,18 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
         actions: [
+          IconButton(
+            key: const Key('action_center_button'),
+            tooltip: 'Action Center',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const ActionCenterScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.notifications_active_outlined),
+          ),
           Container(
             key: const Key('node_status_chip'),
             margin: const EdgeInsets.only(right: 16),

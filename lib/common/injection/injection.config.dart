@@ -12,6 +12,8 @@
 
 import 'package:dio/dio.dart' as _i361;
 import 'package:flutter_ai_agent/common/injection/modules.dart' as _i225;
+import 'package:flutter_ai_agent/data/datasources/local/action_center/action_center_datasource.dart'
+    as _i561;
 import 'package:flutter_ai_agent/data/datasources/local/chat/chat_local_datasource.dart'
     as _i613;
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart'
@@ -56,16 +58,22 @@ import 'package:flutter_ai_agent/data/datasources/tools/chat/voice_input_service
     as _i845;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/voice_output_service.dart'
     as _i753;
+import 'package:flutter_ai_agent/data/repositories/action_center_repository_impl.dart'
+    as _i634;
 import 'package:flutter_ai_agent/data/repositories/chat_local_repository_impl.dart'
     as _i92;
 import 'package:flutter_ai_agent/data/repositories/chat_repository_impl.dart'
     as _i236;
 import 'package:flutter_ai_agent/data/services/tools/tool_pruning_service_impl.dart'
     as _i641;
+import 'package:flutter_ai_agent/domain/repositories/action_center/action_center_repository.dart'
+    as _i474;
 import 'package:flutter_ai_agent/domain/repositories/chat/chat_local_repository.dart'
     as _i445;
 import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart'
     as _i192;
+import 'package:flutter_ai_agent/domain/services/action_center/proactive_watcher.dart'
+    as _i61;
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart'
     as _i27;
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_rpc_receiver.dart'
@@ -147,6 +155,7 @@ extension GetItInjectableX on _i174.GetIt {
     final storageModule = _$StorageModule();
     final toolsModule = _$ToolsModule();
     final gatewayModule = _$GatewayModule();
+    gh.factory<_i61.ZeroTokenGate>(() => const _i61.ZeroTokenGate());
     gh.factory<_i693.NavigationCubit>(() => _i693.NavigationCubit.create());
     gh.singleton<_i498.DioErrHandler>(() => const _i498.DioErrHandler());
     gh.lazySingleton<_i361.Dio>(() => networkModule.provideDio());
@@ -250,6 +259,9 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i205.ShareTargetService>(
       () => _i205.ShareTargetService(provider: gh<_i205.ShareMediaProvider>()),
     );
+    gh.lazySingletonAsync<_i561.ActionCenterDatasource>(
+      () => _i561.ActionCenterDatasourceImpl.create(),
+    );
     gh.factory<_i69.ShareTargetCubit>(
       () => _i69.ShareTargetCubit(service: gh<_i205.ShareTargetService>()),
     );
@@ -285,6 +297,11 @@ extension GetItInjectableX on _i174.GetIt {
       () => _i753.DioTtsClient.create(
         gh<_i361.Dio>(),
         gh<_i348.SecureStorageService>(),
+      ),
+    );
+    gh.lazySingletonAsync<_i474.ActionCenterRepository>(
+      () async => _i634.ActionCenterRepositoryImpl(
+        datasource: await getAsync<_i561.ActionCenterDatasource>(),
       ),
     );
     gh.lazySingleton<_i27.GatewayClientBase>(
