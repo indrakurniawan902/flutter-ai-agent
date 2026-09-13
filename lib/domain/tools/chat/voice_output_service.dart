@@ -51,6 +51,10 @@ abstract class VoiceOutputServiceBase {
   /// Engine preference persisted from Settings (default system).
   TtsEngineMode get preferredEngineMode => TtsEngineMode.system;
   void setPreferredEngineMode(TtsEngineMode mode) {}
+
+  /// Catalog voice id used when [preferredEngineMode] is piper.
+  String get piperVoiceId => 'id_ID-news_tts-medium';
+  void setPiperVoiceId(String voiceId) {}
 }
 
 enum TtsEngineMode { system, piper }

@@ -25,8 +25,13 @@ class SettingsData extends Equatable {
   });
 
   @override
-  List<Object?> get props =>
-      [baseUrl, apiKey, model, temperature, progressiveToolPruning];
+  List<Object?> get props => [
+    baseUrl,
+    apiKey,
+    model,
+    temperature,
+    progressiveToolPruning,
+  ];
 }
 
 /// Service wrapping FlutterSecureStorage to securely persist LLM endpoint configurations and server profiles.
@@ -40,11 +45,13 @@ class SecureStorageService {
   static const String keyAmbientTriggerSettings = 'ambient_trigger_settings';
   static const String keyProgressiveToolPruning = 'progressive_tool_pruning';
   static const String keyNfcPromptBindings = 'nfc_prompt_bindings';
+  static const String keyTtsEngineMode = 'tts_engine_mode';
+  static const String keyPiperVoiceId = 'piper_voice_id';
 
   final FlutterSecureStorage _storage;
 
   SecureStorageService({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+    : _storage = storage ?? const FlutterSecureStorage();
 
   Future<void> saveBaseUrl(String baseUrl) async {
     await _storage.write(key: keyBaseUrl, value: baseUrl);
@@ -68,6 +75,22 @@ class SecureStorageService {
 
   Future<String?> getModel() async {
     return _storage.read(key: keyModel);
+  }
+
+  Future<void> saveTtsEngineMode(String mode) async {
+    await _storage.write(key: keyTtsEngineMode, value: mode);
+  }
+
+  Future<String?> getTtsEngineMode() async {
+    return _storage.read(key: keyTtsEngineMode);
+  }
+
+  Future<void> savePiperVoiceId(String voiceId) async {
+    await _storage.write(key: keyPiperVoiceId, value: voiceId);
+  }
+
+  Future<String?> getPiperVoiceId() async {
+    return _storage.read(key: keyPiperVoiceId);
   }
 
   Future<void> saveTemperature(double temperature) async {
@@ -188,8 +211,9 @@ class SecureStorageService {
 
     if (!found) {
       if (profile.isActive) {
-        final deactivated =
-            updatedList.map((p) => p.copyWith(isActive: false)).toList();
+        final deactivated = updatedList
+            .map((p) => p.copyWith(isActive: false))
+            .toList();
         deactivated.add(profile);
         await saveServerProfiles(deactivated);
         return;
@@ -249,17 +273,30 @@ class SecureStorageService {
     }
   }
 
-  Future<void> saveAmbientTriggerSettings(AmbientTriggerSettings settings) async {
-    await _storage.write(key: keyAmbientTriggerSettings, value: jsonEncode(settings.toJson()));
+  Future<void> saveAmbientTriggerSettings(
+    AmbientTriggerSettings settings,
+  ) async {
+    await _storage.write(
+      key: keyAmbientTriggerSettings,
+      value: jsonEncode(settings.toJson()),
+    );
   }
 
   Future<AmbientTriggerSettings> getAmbientTriggerSettings() async {
     final raw = await _storage.read(key: keyAmbientTriggerSettings);
-    if (raw == null || raw.trim().isEmpty) return const AmbientTriggerSettings();
+    if (raw == null || raw.trim().isEmpty) {
+      return const AmbientTriggerSettings();
+    }
     try {
       final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) return AmbientTriggerSettings.fromJson(decoded);
-      if (decoded is Map) return AmbientTriggerSettings.fromJson(Map<String, dynamic>.from(decoded));
+      if (decoded is Map<String, dynamic>) {
+        return AmbientTriggerSettings.fromJson(decoded);
+      }
+      if (decoded is Map) {
+        return AmbientTriggerSettings.fromJson(
+          Map<String, dynamic>.from(decoded),
+        );
+      }
       return const AmbientTriggerSettings();
     } catch (_) {
       return const AmbientTriggerSettings();
@@ -267,14 +304,20 @@ class SecureStorageService {
   }
 
   Future<void> saveNfcPromptBindings(List<NfcTagPromptBinding> bindings) async {
-    await _storage.write(key: keyNfcPromptBindings, value: jsonEncode(bindings.map((b) => b.toJson()).toList()));
+    await _storage.write(
+      key: keyNfcPromptBindings,
+      value: jsonEncode(bindings.map((b) => b.toJson()).toList()),
+    );
   }
 
   Future<List<NfcTagPromptBinding>> getNfcPromptBindings() async {
     final raw = await _storage.read(key: keyNfcPromptBindings);
     if (raw == null || raw.trim().isEmpty) return [];
     final List<dynamic> decoded = jsonDecode(raw);
-    return decoded.whereType<Map<String, dynamic>>().map(NfcTagPromptBinding.fromJson).toList();
+    return decoded
+        .whereType<Map<String, dynamic>>()
+        .map(NfcTagPromptBinding.fromJson)
+        .toList();
   }
 
   Future<void> clearAll() async {

@@ -25,7 +25,7 @@ abstract class AudioPlayerWrapper {
 
 class DefaultAudioPlayerWrapper implements AudioPlayerWrapper {
   DefaultAudioPlayerWrapper({AudioPlayer? player})
-      : _player = _safeCreatePlayer(player);
+    : _player = _safeCreatePlayer(player);
 
   final AudioPlayer? _player;
 
@@ -178,17 +178,16 @@ class DioTtsClient implements TtsClient {
     String? baseUrl,
     String? apiKey,
     SecureStorageService? secureStorageService,
-  })  : _dio = dio,
-        _baseUrl = baseUrl ?? '',
-        _apiKey = apiKey,
-        _secureStorageService = secureStorageService;
+  }) : _dio = dio,
+       _baseUrl = baseUrl ?? '',
+       _apiKey = apiKey,
+       _secureStorageService = secureStorageService;
 
   @factoryMethod
   factory DioTtsClient.create(
     Dio dio, [
     SecureStorageService? secureStorageService,
-  ]) =>
-      DioTtsClient(dio: dio, secureStorageService: secureStorageService);
+  ]) => DioTtsClient(dio: dio, secureStorageService: secureStorageService);
 
   final Dio _dio;
   final String _baseUrl;
@@ -221,8 +220,10 @@ class DioTtsClient implements TtsClient {
     }
 
     while (effectiveBaseUrl.endsWith('/')) {
-      effectiveBaseUrl =
-          effectiveBaseUrl.substring(0, effectiveBaseUrl.length - 1);
+      effectiveBaseUrl = effectiveBaseUrl.substring(
+        0,
+        effectiveBaseUrl.length - 1,
+      );
     }
 
     final String endpoint;
@@ -255,10 +256,7 @@ class DioTtsClient implements TtsClient {
       response = await _dio.post<List<int>>(
         endpoint,
         data: payload,
-        options: Options(
-          responseType: ResponseType.bytes,
-          headers: headers,
-        ),
+        options: Options(responseType: ResponseType.bytes, headers: headers),
       );
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) {
@@ -290,9 +288,15 @@ class VoiceOutputService implements VoiceOutputServiceBase {
     required TtsClient ttsClient,
     AudioPlayerWrapper? audioPlayer,
     PlatformTtsEngine? platformTts,
-  })  : _tts = ttsClient,
-        _player = audioPlayer ?? DefaultAudioPlayerWrapper(),
-        _platformTts = platformTts ?? FlutterTtsPlatformEngine() {
+    PiperTtsEngineBase? piperTts,
+    PiperVoiceStoreBase? piperVoiceStore,
+    SecureStorageService? secureStorage,
+  }) : _tts = ttsClient,
+       _player = audioPlayer ?? DefaultAudioPlayerWrapper(),
+       _platformTts = platformTts ?? FlutterTtsPlatformEngine(),
+       _piperTts = piperTts,
+       _piperVoiceStore = piperVoiceStore,
+       _secureStorage = secureStorage {
     StreamSubscription<PlayerState> sub;
     try {
       sub = _player.onPlayerStateChanged.listen(_onPlayerState);
@@ -305,16 +309,35 @@ class VoiceOutputService implements VoiceOutputServiceBase {
   @factoryMethod
   factory VoiceOutputService.create(
     TtsClient ttsClient,
-    PlatformTtsEngine platformTts,
-  ) =>
-      VoiceOutputService(ttsClient: ttsClient, platformTts: platformTts);
+    PlatformTtsEngine platformTts, [
+    PiperTtsEngineBase? piperTts,
+    PiperVoiceStoreBase? piperVoiceStore,
+    SecureStorageService? secureStorage,
+  ]) =>
+      VoiceOutputService(
+        ttsClient: ttsClient,
+        platformTts: platformTts,
+        piperTts: piperTts,
+        piperVoiceStore: piperVoiceStore,
+        secureStorage: secureStorage,
+      );
 
   static const _streamFlushThreshold = 120;
 
   final TtsClient _tts;
   final AudioPlayerWrapper _player;
   final PlatformTtsEngine _platformTts;
+  final PiperTtsEngineBase? _piperTts;
+  final PiperVoiceStoreBase? _piperVoiceStore;
+  final SecureStorageService? _secureStorage;
   late final StreamSubscription<PlayerState> _playerStateSub;
+
+  /// Default catalog voice used when piper mode is selected.
+  static const String defaultPiperVoiceId = 'id_ID-news_tts-medium';
+
+  TtsEngineMode _engineMode = TtsEngineMode.system;
+  String _piperVoiceId = defaultPiperVoiceId;
+  bool _preferenceLoaded = false;
 
   TtsEngine? _lastEngineUsed;
 
@@ -346,10 +369,127 @@ class VoiceOutputService implements VoiceOutputServiceBase {
   TtsEngine? get lastEngineUsed => _lastEngineUsed;
 
   @override
-  TtsEngineMode get preferredEngineMode => TtsEngineMode.system;
+  TtsEngineMode get preferredEngineMode => _engineMode;
 
   @override
-  void setPreferredEngineMode(TtsEngineMode mode) {}
+  void setPreferredEngineMode(TtsEngineMode mode) {
+    _engineMode = mode;
+    try {
+      unawaited(
+        _secureStorage?.saveTtsEngineMode(
+          mode == TtsEngineMode.piper ? 'piper' : 'system',
+        ),
+      );
+    } catch (_) {}
+  }
+
+  /// Catalog voice id used when [preferredEngineMode] is piper.
+  @override
+  String get piperVoiceId => _piperVoiceId;
+
+  @override
+  void setPiperVoiceId(String voiceId) {
+    _piperVoiceId = voiceId;
+    try {
+      unawaited(_secureStorage?.savePiperVoiceId(voiceId));
+    } catch (_) {}
+    unawaited(_loadPiperVoice());
+  }
+
+  /// Loads persisted engine mode + voice id. Never throws.
+  Future<void> loadPreferences() async {
+    try {
+      String? modeStr;
+      String? voiceId;
+      try {
+        modeStr = await _secureStorage?.getTtsEngineMode();
+      } catch (_) {
+        modeStr = null;
+      }
+      try {
+        voiceId = await _secureStorage?.getPiperVoiceId();
+      } catch (_) {
+        voiceId = null;
+      }
+      _engineMode = modeStr == 'piper'
+          ? TtsEngineMode.piper
+          : TtsEngineMode.system;
+      if (voiceId != null && voiceId.trim().isNotEmpty) {
+        _piperVoiceId = voiceId.trim();
+      } else {
+        _piperVoiceId = defaultPiperVoiceId;
+      }
+      // Touch the voice store so the injected instance stays referenced.
+      try {
+        _piperVoiceStore?.modelDirFor(_piperVoiceId);
+      } catch (_) {}
+      try {
+        await _piperTts?.prepare(_piperVoiceId);
+      } catch (_) {}
+    } catch (_) {
+      // Never throw out of preference loading.
+    } finally {
+      _preferenceLoaded = true;
+    }
+  }
+
+  Future<void> _ensurePreferencesLoaded() async {
+    if (_preferenceLoaded) return;
+    await loadPreferences();
+  }
+
+  Future<void> _loadPiperVoice() async {
+    try {
+      await _piperTts?.prepare(_piperVoiceId);
+    } catch (_) {}
+  }
+
+  /// Tries offline Piper synthesis. Returns true when speech was handled.
+  /// Any failure returns false so callers fall through to the system path.
+  Future<bool> _trySpeakWithPiper(
+    String text, {
+    String? voice,
+    double? speed,
+  }) async {
+    try {
+      final piper = _piperTts;
+      if (piper == null) return false;
+      bool available = false;
+      try {
+        available = piper.isAvailable;
+      } catch (_) {
+        return false;
+      }
+      if (!available) return false;
+      bool prepared = false;
+      try {
+        prepared = await piper.prepare(_piperVoiceId);
+      } catch (_) {
+        return false;
+      }
+      if (!prepared) return false;
+      bool spoke = false;
+      try {
+        _setStatus(VoiceOutputStatus.loading);
+        _playing = true;
+        _setStatus(VoiceOutputStatus.playing);
+        spoke = await piper.speak(text, voice: voice, speed: speed);
+      } catch (_) {
+        _playing = false;
+        return false;
+      }
+      if (!spoke) {
+        _playing = false;
+        return false;
+      }
+      _lastEngineUsed = TtsEngine.piperTts;
+      _playing = false;
+      _setStatus(VoiceOutputStatus.idle);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 
   @override
   Stream<VoiceOutputStatus> get statusStream => _statusController.stream;
@@ -362,6 +502,7 @@ class VoiceOutputService implements VoiceOutputServiceBase {
     _muted = muted;
     unawaited(_player.setVolume(muted ? 0.0 : 1.0));
     unawaited(_platformTts.setVolume(muted ? 0.0 : 1.0));
+    unawaited(_piperTts?.setVolume(muted ? 0.0 : 1.0));
   }
 
   @override
@@ -376,6 +517,12 @@ class VoiceOutputService implements VoiceOutputServiceBase {
   }) async {
     if (text.trim().isEmpty) {
       return const Left(ServerFailure('Cannot speak empty text'));
+    }
+    await _ensurePreferencesLoaded();
+    if (_engineMode == TtsEngineMode.piper) {
+      if (await _trySpeakWithPiper(text, voice: voice, speed: speed)) {
+        return const Right(unit);
+      }
     }
     if (!await _tts.isRemoteConfigured()) {
       return _speakWithPlatform(text, voice: voice, speed: speed);
@@ -419,6 +566,12 @@ class VoiceOutputService implements VoiceOutputServiceBase {
   }) async {
     if (text.trim().isEmpty) {
       return const Left(ServerFailure('Cannot queue empty text'));
+    }
+    await _ensurePreferencesLoaded();
+    if (_engineMode == TtsEngineMode.piper) {
+      if (await _trySpeakWithPiper(text, voice: voice, speed: speed)) {
+        return const Right(unit);
+      }
     }
     if (!await _tts.isRemoteConfigured()) {
       // Platform speech is immediate (no byte queue); streaming flush awaits completion.
@@ -508,6 +661,9 @@ class VoiceOutputService implements VoiceOutputServiceBase {
   Future<void> stop() async {
     _platformEpoch++;
     await _platformTts.stop();
+    try {
+      await _piperTts?.stop();
+    } catch (_) {}
     await _player.stop();
     _playing = false;
     _setStatus(VoiceOutputStatus.stopped);
