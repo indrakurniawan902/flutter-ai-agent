@@ -404,11 +404,15 @@ class ToolRegistry {
             },
             'startTime': {
               'type': 'string',
-              'description': 'Event start time in ISO 8601',
+              'description':
+                  'Event start time in ISO 8601 (with or without UTC offset, or date-only). '
+                      'startDate is accepted as an alias.',
             },
             'endTime': {
               'type': 'string',
-              'description': 'Event end time in ISO 8601',
+              'description':
+                  'Event end time in ISO 8601 (with or without UTC offset, or date-only). '
+                      'endDate is accepted as an alias.',
             },
             'description': {
               'type': 'string',
@@ -419,18 +423,55 @@ class ToolRegistry {
         },
         securityTier: SecurityTier.tier3Hitl,
         execute: (args) async {
-          final start =
-              DateTime.tryParse(args['startTime']?.toString() ?? '') ??
-                  DateTime.now();
-          final end = DateTime.tryParse(args['endTime']?.toString() ?? '') ??
-              DateTime.now().add(const Duration(hours: 1));
+          final startRaw =
+              (args['startTime'] ?? args['startDate'])?.toString();
+          final endRaw = (args['endTime'] ?? args['endDate'])?.toString();
+          if (startRaw == null || startRaw.trim().isEmpty) {
+            return const Left(
+              ValidationFailure('Invalid startTime: startTime is required'),
+            );
+          }
+          if (endRaw == null || endRaw.trim().isEmpty) {
+            return const Left(
+              ValidationFailure('Invalid endTime: endTime is required'),
+            );
+          }
+          final start = DateTime.tryParse(startRaw);
+          if (start == null) {
+            return Left(
+              ValidationFailure(
+                'Invalid startTime: startTime ("$startRaw") is not a valid '
+                'ISO 8601 date',
+              ),
+            );
+          }
+          final end = DateTime.tryParse(endRaw);
+          if (end == null) {
+            return Left(
+              ValidationFailure(
+                'Invalid endTime: endTime ("$endRaw") is not a valid '
+                'ISO 8601 date',
+              ),
+            );
+          }
+          if (end.isBefore(start)) {
+            return const Left(
+              ValidationFailure(
+                'Invalid endTime: endTime must not be before startTime',
+              ),
+            );
+          }
           final res = await service.createEvent(
             title: args['title']?.toString() ?? '',
             startTime: start,
             endTime: end,
             description: args['description']?.toString(),
           );
-          return res.map((id) => 'Calendar event created with id: $id');
+          return res.map(
+            (id) => 'Calendar event created with id: $id; '
+                'start: ${start.toIso8601String()}; '
+                'end: ${end.toIso8601String()}',
+          );
         },
       ),
     );
@@ -891,6 +932,9 @@ class ToolRegistry {
               jsonEncode({
                 'status': 'spoken',
                 'text': text,
+                'engine': service.lastEngineUsed == TtsEngine.androidTts
+                    ? 'android_tts'
+                    : 'remote_tts',
               }),
             ),
           );

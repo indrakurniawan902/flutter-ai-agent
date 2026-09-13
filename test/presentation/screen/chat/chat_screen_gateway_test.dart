@@ -18,6 +18,7 @@ import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_approval_sheet.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/elicitation_approval_sheet.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/header_console_bar.dart';
 import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_link_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_rpc_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/pairing/qr_scanner_screen.dart';
@@ -214,19 +215,28 @@ void main() {
     ));
   }
 
+  Finder statusChipText(String label) => find.descendant(
+        of: find.byKey(const Key('gateway_status_chip')),
+        matching: find.text(label),
+      );
+
+  PulsingDot statusChipDot(WidgetTester tester) => tester.widget<PulsingDot>(
+        find.descendant(
+          of: find.byKey(const Key('gateway_status_chip')),
+          matching: find.byType(PulsingDot),
+        ),
+      );
+
   group('ChatScreen Gateway - Connection Status Indicator', () {
     testWidgets('renders Standalone with Grey LED dot in Direct mode',
         (tester) async {
       await tester.pumpWidget(createWidgetUnderTest(initialMode: ChatMode.direct));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('chat_connection_indicator')), findsOneWidget);
-      expect(find.text('Standalone'), findsOneWidget);
+      expect(find.byKey(const Key('gateway_status_chip')), findsOneWidget);
+      expect(statusChipText('Standalone'), findsOneWidget);
 
-      final ledDot =
-          tester.widget<Container>(find.byKey(const Key('connection_led_dot')));
-      final decoration = ledDot.decoration as BoxDecoration;
-      expect(decoration.color, const Color(0xFF94A3B8));
+      expect(statusChipDot(tester).color, const Color(0xFF94A3B8));
     });
 
     testWidgets(
@@ -239,13 +249,10 @@ void main() {
           createWidgetUnderTest(initialMode: ChatMode.gateway));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('chat_connection_indicator')), findsOneWidget);
-      expect(find.text('Connected'), findsOneWidget);
+      expect(find.byKey(const Key('gateway_status_chip')), findsOneWidget);
+      expect(statusChipText('Connected'), findsOneWidget);
 
-      final ledDot =
-          tester.widget<Container>(find.byKey(const Key('connection_led_dot')));
-      final decoration = ledDot.decoration as BoxDecoration;
-      expect(decoration.color, const Color(0xFF22C55E));
+      expect(statusChipDot(tester).color, const Color(0xFF22C55E));
     });
 
     testWidgets(
@@ -258,13 +265,10 @@ void main() {
           createWidgetUnderTest(initialMode: ChatMode.gateway));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('chat_connection_indicator')), findsOneWidget);
-      expect(find.text('Reconnecting'), findsOneWidget);
+      expect(find.byKey(const Key('gateway_status_chip')), findsOneWidget);
+      expect(statusChipText('Reconnecting'), findsOneWidget);
 
-      final ledDot =
-          tester.widget<Container>(find.byKey(const Key('connection_led_dot')));
-      final decoration = ledDot.decoration as BoxDecoration;
-      expect(decoration.color, const Color(0xFFF59E0B));
+      expect(statusChipDot(tester).color, const Color(0xFFF59E0B));
     });
 
     testWidgets(
@@ -277,13 +281,10 @@ void main() {
           createWidgetUnderTest(initialMode: ChatMode.gateway));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('chat_connection_indicator')), findsOneWidget);
-      expect(find.text('Connecting'), findsOneWidget);
+      expect(find.byKey(const Key('gateway_status_chip')), findsOneWidget);
+      expect(statusChipText('Connecting'), findsOneWidget);
 
-      final ledDot =
-          tester.widget<Container>(find.byKey(const Key('connection_led_dot')));
-      final decoration = ledDot.decoration as BoxDecoration;
-      expect(decoration.color, const Color(0xFFF59E0B));
+      expect(statusChipDot(tester).color, const Color(0xFFF59E0B));
     });
 
     testWidgets(
@@ -296,13 +297,10 @@ void main() {
           createWidgetUnderTest(initialMode: ChatMode.gateway));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('chat_connection_indicator')), findsOneWidget);
-      expect(find.text('Disconnected'), findsOneWidget);
+      expect(find.byKey(const Key('gateway_status_chip')), findsOneWidget);
+      expect(statusChipText('Disconnected'), findsOneWidget);
 
-      final ledDot =
-          tester.widget<Container>(find.byKey(const Key('connection_led_dot')));
-      final decoration = ledDot.decoration as BoxDecoration;
-      expect(decoration.color, const Color(0xFF94A3B8));
+      expect(statusChipDot(tester).color, const Color(0xFF94A3B8));
     });
 
     testWidgets('dynamically updates indicator on gateway stateStream transition',
@@ -313,22 +311,22 @@ void main() {
       await tester.pumpWidget(
           createWidgetUnderTest(initialMode: ChatMode.gateway));
       await tester.pumpAndSettle();
-      expect(find.text('Disconnected'), findsOneWidget);
+      expect(statusChipText('Disconnected'), findsOneWidget);
 
       gatewayStateController.add(GatewayConnectionState.connecting);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 10));
-      expect(find.text('Connecting'), findsOneWidget);
+      expect(statusChipText('Connecting'), findsOneWidget);
 
       gatewayStateController.add(GatewayConnectionState.connected);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 10));
-      expect(find.text('Connected'), findsOneWidget);
+      expect(statusChipText('Connected'), findsOneWidget);
 
       gatewayStateController.add(GatewayConnectionState.reconnecting);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 10));
-      expect(find.text('Reconnecting'), findsOneWidget);
+      expect(statusChipText('Reconnecting'), findsOneWidget);
     });
 
     testWidgets('tapping connection indicator displays connection details dialog',
@@ -340,7 +338,7 @@ void main() {
           createWidgetUnderTest(initialMode: ChatMode.gateway));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('chat_connection_indicator')));
+      await tester.tap(find.byKey(const Key('gateway_status_chip')));
       await tester.pumpAndSettle();
 
       expect(find.text('Connection Status'), findsOneWidget);

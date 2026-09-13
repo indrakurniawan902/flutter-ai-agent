@@ -574,4 +574,216 @@ void main() {
       expect(result.isRight(), isTrue);
     });
   });
+
+  group('FTS5 unavailability resilience', () {
+    test('degrades to LIKE fallback when FTS5 module is missing', () async {
+      final svc = LocalMemoryService(
+        databaseFactory: _NoFtsFactory(databaseFactoryFfi),
+        databasePath: inMemoryDatabasePath,
+      );
+
+      final save1 = await svc.saveMemory('needle_note', 'the needle is here');
+      expect(save1.isRight(), isTrue);
+      final save2 = await svc.saveMemory('plain_note', 'nothing special');
+      expect(save2.isRight(), isTrue);
+
+      final result = await svc.searchMemories('needle');
+      expect(result.isRight(), isTrue);
+      result.fold(
+        (_) => fail('should succeed via LIKE fallback'),
+        (matches) {
+          expect(matches.length, 1);
+          expect(matches.first.key, 'needle_note');
+        },
+      );
+
+      final json = await svc.searchMemoriesFormattedJson({'query': 'needle'});
+      expect(json.isRight(), isTrue);
+      final decoded =
+          jsonDecode(json.getOrElse(() => '')) as Map<String, dynamic>;
+      expect(decoded['search_mode'], 'like_fallback');
+      expect(decoded['count'], 1);
+
+      final svcDb = await svc.database;
+      await svcDb.close();
+    });
+
+    test('reports fts5 search mode on FTS5-capable database', () async {
+      await service.saveMemory('mode_probe', 'mode probe content');
+      final json = await service.searchMemoriesFormattedJson({
+        'query': 'probe',
+      });
+      expect(json.isRight(), isTrue);
+      final decoded =
+          jsonDecode(json.getOrElse(() => '')) as Map<String, dynamic>;
+      expect(decoded['search_mode'], 'fts5');
+    });
+
+    test(
+        'onCreateDatabase still creates base schema when FTS5 is unsupported',
+        () async {
+      final factory = _NoFtsFactory(databaseFactoryFfi);
+      final opened = await factory.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(
+          version: LocalMemoryService.currentSchemaVersion,
+          onCreate: LocalMemoryService.onCreateDatabase,
+        ),
+      );
+      final svc = LocalMemoryService(database: opened);
+      final result = await svc.saveMemory('base_only', 'base schema works');
+      expect(result.isRight(), isTrue);
+      final all = await svc.getAllMemories();
+      expect(all.getOrElse(() => []).length, 1);
+      await opened.close();
+    });
+
+    test('unavailable open surfaces structured memory_unavailable failure',
+        () async {
+      final svc = LocalMemoryService(
+        databaseFactory: _BrokenFactory(),
+        databasePath: inMemoryDatabasePath,
+      );
+
+      final saved = await svc.saveMemory('k', 'v');
+      expect(saved.isLeft(), isTrue);
+      saved.fold(
+        (failure) {
+          expect(failure, isA<StorageFailure>());
+          expect(failure.message, startsWith('memory_unavailable:'));
+        },
+        (_) => fail('expected Left'),
+      );
+
+      final listed = await svc.getAllMemories();
+      expect(listed.isLeft(), isTrue);
+      listed.fold(
+        (failure) =>
+            expect(failure.message, startsWith('memory_unavailable:')),
+        (_) => fail('expected Left'),
+      );
+
+      final json = await svc.searchMemoriesFormattedJson({'query': 'x'});
+      expect(json.isRight(), isTrue);
+      final decoded =
+          jsonDecode(json.getOrElse(() => '')) as Map<String, dynamic>;
+      expect(decoded['status'], 'memory_unavailable');
+      expect(decoded['reason'], isNotEmpty);
+    });
+  });
+}
+
+class _TestDatabaseException extends DatabaseException {
+  _TestDatabaseException(super.message);
+  @override
+  int? getResultCode() => null;
+  @override
+  Object? get result => null;
+}
+
+class _NoFtsDatabase implements Database {
+  _NoFtsDatabase(this._inner);
+
+  final Database _inner;
+
+  bool _isFtsSql(String sql) {
+    final upper = sql.toUpperCase();
+    return upper.contains('USING FTS5') || upper.contains('MEMORIES_FTS');
+  }
+
+  @override
+  Future<void> execute(String sql, [List<Object?>? arguments]) async {
+    if (_isFtsSql(sql)) {
+      throw _TestDatabaseException('no such module: fts5');
+    }
+    await _inner.execute(sql, arguments);
+  }
+
+  @override
+  Future<List<Map<String, Object?>>> query(
+    String table, {
+    bool? distinct,
+    List<String>? columns,
+    String? where,
+    List<Object?>? whereArgs,
+    String? groupBy,
+    String? having,
+    String? orderBy,
+    int? limit,
+    int? offset,
+  }) =>
+      _inner.query(
+        table,
+        distinct: distinct,
+        columns: columns,
+        where: where,
+        whereArgs: whereArgs,
+        groupBy: groupBy,
+        having: having,
+        orderBy: orderBy,
+        limit: limit,
+        offset: offset,
+      );
+
+  @override
+  Future<int> insert(String table, Map<String, Object?> values,
+          {String? nullColumnHack, ConflictAlgorithm? conflictAlgorithm}) =>
+      _inner.insert(table, values,
+          nullColumnHack: nullColumnHack,
+          conflictAlgorithm: conflictAlgorithm);
+
+  @override
+  Future<int> update(
+    String table,
+    Map<String, Object?> values, {
+    String? where,
+    List<Object?>? whereArgs,
+    ConflictAlgorithm? conflictAlgorithm,
+  }) =>
+      _inner.update(
+        table,
+        values,
+        where: where,
+        whereArgs: whereArgs,
+        conflictAlgorithm: conflictAlgorithm,
+      );
+
+  @override
+  Future<int> delete(String table,
+          {String? where, List<Object?>? whereArgs}) =>
+      _inner.delete(table, where: where, whereArgs: whereArgs);
+
+  @override
+  bool get isOpen => _inner.isOpen;
+
+  @override
+  Future<void> close() => _inner.close();
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _NoFtsFactory implements DatabaseFactory {
+  _NoFtsFactory(this._inner);
+
+  final DatabaseFactory _inner;
+
+  @override
+  Future<Database> openDatabase(String path, {OpenDatabaseOptions? options}) =>
+      _inner
+          .openDatabase(path, options: options)
+          .then((db) => _NoFtsDatabase(db));
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _BrokenFactory implements DatabaseFactory {
+  @override
+  Future<Database> openDatabase(String path, {OpenDatabaseOptions? options}) {
+    throw _TestDatabaseException('unable to open database file');
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

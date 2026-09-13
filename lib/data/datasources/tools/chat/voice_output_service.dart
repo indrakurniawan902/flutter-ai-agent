@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:dartz/dartz.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:injectable/injectable.dart';
 
 import 'package:flutter_ai_agent/common/constant.dart';
@@ -89,6 +90,66 @@ class DefaultAudioPlayerWrapper implements AudioPlayerWrapper {
   }
 }
 
+@LazySingleton(as: PlatformTtsEngine)
+class FlutterTtsPlatformEngine implements PlatformTtsEngine {
+  FlutterTtsPlatformEngine() : _engine = _safeCreateEngine();
+
+  final FlutterTts? _engine;
+  bool _configured = false;
+
+  static FlutterTts? _safeCreateEngine() {
+    try {
+      return FlutterTts();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _configure() async {
+    if (_configured || _engine == null) return;
+    try {
+      await _engine.awaitSpeakCompletion(true);
+      _configured = true;
+    } catch (_) {}
+  }
+
+  @override
+  bool get isAvailable {
+    try {
+      return _engine != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> speak(String text, {String? voice, double? speed}) async {
+    try {
+      final engine = _engine;
+      if (engine == null) return false;
+      await _configure();
+      final result = await engine.speak(text);
+      return result == 1 || result == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<void> setVolume(double volume) async {
+    try {
+      await _engine?.setVolume(volume);
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> stop() async {
+    try {
+      await _engine?.stop();
+    } catch (_) {}
+  }
+}
+
 abstract class TtsClient {
   Future<Uint8List> synthesize({
     required String text,
@@ -96,6 +157,8 @@ abstract class TtsClient {
     String? model,
     double? speed,
   });
+
+  Future<bool> isRemoteConfigured();
 }
 
 class UnsupportedEndpointException implements Exception {
@@ -131,6 +194,13 @@ class DioTtsClient implements TtsClient {
   final String _baseUrl;
   final String? _apiKey;
   final SecureStorageService? _secureStorageService;
+
+  @override
+  Future<bool> isRemoteConfigured() async {
+    if (_baseUrl.trim().isNotEmpty) return true;
+    final stored = await _secureStorageService?.getBaseUrl();
+    return stored != null && stored.trim().isNotEmpty;
+  }
 
   @override
   Future<Uint8List> synthesize({
@@ -219,8 +289,10 @@ class VoiceOutputService implements VoiceOutputServiceBase {
   VoiceOutputService({
     required TtsClient ttsClient,
     AudioPlayerWrapper? audioPlayer,
+    PlatformTtsEngine? platformTts,
   })  : _tts = ttsClient,
-        _player = audioPlayer ?? DefaultAudioPlayerWrapper() {
+        _player = audioPlayer ?? DefaultAudioPlayerWrapper(),
+        _platformTts = platformTts ?? FlutterTtsPlatformEngine() {
     StreamSubscription<PlayerState> sub;
     try {
       sub = _player.onPlayerStateChanged.listen(_onPlayerState);
@@ -231,14 +303,22 @@ class VoiceOutputService implements VoiceOutputServiceBase {
   }
 
   @factoryMethod
-  factory VoiceOutputService.create(TtsClient ttsClient) =>
-      VoiceOutputService(ttsClient: ttsClient);
+  factory VoiceOutputService.create(
+    TtsClient ttsClient,
+    PlatformTtsEngine platformTts,
+  ) =>
+      VoiceOutputService(ttsClient: ttsClient, platformTts: platformTts);
 
   static const _streamFlushThreshold = 120;
 
   final TtsClient _tts;
   final AudioPlayerWrapper _player;
+  final PlatformTtsEngine _platformTts;
   late final StreamSubscription<PlayerState> _playerStateSub;
+
+  TtsEngine? _lastEngineUsed;
+
+  int _platformEpoch = 0;
 
   final _statusController = StreamController<VoiceOutputStatus>.broadcast();
   final _errorController = StreamController<String>.broadcast();
@@ -263,6 +343,9 @@ class VoiceOutputService implements VoiceOutputServiceBase {
   int get queueLength => _queue.length;
 
   @override
+  TtsEngine? get lastEngineUsed => _lastEngineUsed;
+
+  @override
   Stream<VoiceOutputStatus> get statusStream => _statusController.stream;
 
   @override
@@ -272,6 +355,7 @@ class VoiceOutputService implements VoiceOutputServiceBase {
   void setMuted(bool muted) {
     _muted = muted;
     unawaited(_player.setVolume(muted ? 0.0 : 1.0));
+    unawaited(_platformTts.setVolume(muted ? 0.0 : 1.0));
   }
 
   @override
@@ -287,6 +371,9 @@ class VoiceOutputService implements VoiceOutputServiceBase {
     if (text.trim().isEmpty) {
       return const Left(ServerFailure('Cannot speak empty text'));
     }
+    if (!await _tts.isRemoteConfigured()) {
+      return _speakWithPlatform(text, voice: voice, speed: speed);
+    }
     try {
       _setStatus(VoiceOutputStatus.loading);
       final bytes = await _tts.synthesize(
@@ -295,12 +382,10 @@ class VoiceOutputService implements VoiceOutputServiceBase {
         model: model,
         speed: speed,
       );
+      _lastEngineUsed = TtsEngine.remoteTts;
       return await queueAudio(bytes);
     } on UnsupportedEndpointException {
-      _fail(DioTtsClient.unsupportedEndpointMessage);
-      return const Left(
-        UnsupportedEndpointFailure(DioTtsClient.unsupportedEndpointMessage),
-      );
+      return _speakWithPlatform(text, voice: voice, speed: speed);
     } catch (e) {
       _fail('Speech synthesis failed: $e');
       return Left(ServerFailure('Speech synthesis failed: $e'));
@@ -329,6 +414,10 @@ class VoiceOutputService implements VoiceOutputServiceBase {
     if (text.trim().isEmpty) {
       return const Left(ServerFailure('Cannot queue empty text'));
     }
+    if (!await _tts.isRemoteConfigured()) {
+      // Platform speech is immediate (no byte queue); streaming flush awaits completion.
+      return _speakWithPlatform(text, voice: voice, speed: speed);
+    }
     try {
       final bytes = await _tts.synthesize(
         text: text,
@@ -336,15 +425,44 @@ class VoiceOutputService implements VoiceOutputServiceBase {
         model: model,
         speed: speed,
       );
+      _lastEngineUsed = TtsEngine.remoteTts;
       return await queueAudio(bytes);
     } on UnsupportedEndpointException {
-      _fail(DioTtsClient.unsupportedEndpointMessage);
-      return const Left(
-        UnsupportedEndpointFailure(DioTtsClient.unsupportedEndpointMessage),
-      );
+      return _speakWithPlatform(text, voice: voice, speed: speed);
     } catch (e) {
       _fail('Text queue failed: $e');
       return Left(ServerFailure('Text queue failed: $e'));
+    }
+  }
+
+  Future<Either<Failure, Unit>> _speakWithPlatform(
+    String text, {
+    String? voice,
+    double? speed,
+  }) async {
+    try {
+      _setStatus(VoiceOutputStatus.loading);
+      _playing = true;
+      _setStatus(VoiceOutputStatus.playing);
+      final epoch = _platformEpoch;
+      final spoke = await _platformTts.speak(text, voice: voice, speed: speed);
+      if (_platformEpoch != epoch) {
+        // Interrupted: stop() already emitted the stopped status.
+        return const Right(unit);
+      }
+      if (!spoke) {
+        _fail('Platform TTS failed to speak the provided text');
+        return const Left(
+          ServerFailure('Platform TTS failed to speak the provided text'),
+        );
+      }
+      _lastEngineUsed = TtsEngine.androidTts;
+      _playing = false;
+      _setStatus(VoiceOutputStatus.idle);
+      return const Right(unit);
+    } catch (e) {
+      _fail('Platform TTS failed: $e');
+      return Left(ServerFailure('Platform TTS failed: $e'));
     }
   }
 
@@ -382,6 +500,8 @@ class VoiceOutputService implements VoiceOutputServiceBase {
 
   @override
   Future<void> stop() async {
+    _platformEpoch++;
+    await _platformTts.stop();
     await _player.stop();
     _playing = false;
     _setStatus(VoiceOutputStatus.stopped);
@@ -391,6 +511,7 @@ class VoiceOutputService implements VoiceOutputServiceBase {
   Future<void> interrupt() async {
     _queue.clear();
     _streamBuffer.clear();
+    _platformEpoch++;
     await stop();
   }
 

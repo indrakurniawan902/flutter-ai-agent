@@ -1,6 +1,9 @@
 import 'dart:convert';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_ai_agent/utils/app_theme.dart';
 import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
 import 'package:flutter_ai_agent/domain/tools/pairing/pairing_parser.dart';
@@ -48,15 +51,17 @@ void main() {
     void Function(PairingPayload)? onPayloadScanned,
     Widget Function(BuildContext, void Function(String))? scannerWidgetBuilder,
   }) {
-    return MaterialApp(
-      theme: AppTheme.darkTheme,
-      navigatorObservers: [mockNavObserver],
-      home: QrScannerScreen(
-        controller: mockController,
-        parser: const PairingParser(),
-        currentTime: testNow,
-        onPayloadScanned: onPayloadScanned,
-        scannerWidgetBuilder: scannerWidgetBuilder,
+    return RepaintBoundary(
+      child: MaterialApp(
+        theme: AppTheme.darkTheme,
+        navigatorObservers: [mockNavObserver],
+        home: QrScannerScreen(
+          controller: mockController,
+          parser: const PairingParser(),
+          currentTime: testNow,
+          onPayloadScanned: onPayloadScanned,
+          scannerWidgetBuilder: scannerWidgetBuilder,
+        ),
       ),
     );
   }
@@ -267,6 +272,125 @@ void main() {
 
       expect(scannedPayload, isNull);
       expect(find.textContaining('Malformed JSON'), findsOneWidget);
+    });
+  });
+
+  group('QrScannerScreen - Viewfinder Overlay Painting', () {
+    Future<({ByteData bytes, int width, int height})> captureScreenBytes(
+      WidgetTester tester,
+    ) async {
+      final RenderRepaintBoundary boundary =
+          tester.renderObject<RenderRepaintBoundary>(
+        find.byType(RepaintBoundary).first,
+      );
+      late ByteData bytes;
+      late int width;
+      late int height;
+      await tester.binding.runAsync(() async {
+        final ui.Image image = await boundary.toImage(pixelRatio: 1.0);
+        bytes = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+        width = image.width;
+        height = image.height;
+        image.dispose();
+      });
+      return (bytes: bytes, width: width, height: height);
+    }
+
+    int pixelAt(ByteData bytes, int imageWidth, double x, double y) {
+      final offset =
+          ((y.round() * imageWidth) + x.round()) * 4; // RGBA byte order
+      final r = bytes.getUint8(offset);
+      final g = bytes.getUint8(offset + 1);
+      final b = bytes.getUint8(offset + 2);
+      final a = bytes.getUint8(offset + 3);
+      return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    int redAt(ByteData bytes, int imageWidth, double x, double y) {
+      final offset = ((y.round() * imageWidth) + x.round()) * 4;
+      return bytes.getUint8(offset);
+    }
+
+    Rect overlayCutout(WidgetTester tester) {
+      final overlayRect =
+          tester.getRect(find.byKey(const Key('qr_viewfinder_overlay')));
+      final cutoutTop = overlayRect.top + (overlayRect.height - 250) / 2 - 40;
+      return Rect.fromLTWH(
+        overlayRect.left + (overlayRect.width - 250) / 2,
+        cutoutTop,
+        250,
+        250,
+      );
+    }
+
+    testWidgets('cutout center is fully opaque camera feed (no scrim tint)',
+        (tester) async {
+      await tester.pumpWidget(
+        buildTestWidget(
+          scannerWidgetBuilder: (context, onDetect) =>
+              const ColoredBox(color: Color(0xFFFF0000)),
+        ),
+      );
+      await tester.pump();
+
+      final cutout = overlayCutout(tester);
+      final captured = await captureScreenBytes(tester);
+      final centerPixel = pixelAt(
+        captured.bytes,
+        captured.width,
+        cutout.center.dx,
+        cutout.center.dy,
+      );
+
+      expect(centerPixel, 0xFFFF0000);
+    });
+
+    testWidgets('scrim darkens pixels outside the cutout frame',
+        (tester) async {
+      await tester.pumpWidget(
+        buildTestWidget(
+          scannerWidgetBuilder: (context, onDetect) =>
+              const ColoredBox(color: Color(0xFFFF0000)),
+        ),
+      );
+      await tester.pump();
+
+      final overlayRect =
+          tester.getRect(find.byKey(const Key('qr_viewfinder_overlay')));
+      final captured = await captureScreenBytes(tester);
+      final redChannel = redAt(
+        captured.bytes,
+        captured.width,
+        overlayRect.left + 15,
+        overlayRect.top + 15,
+      );
+
+      expect(redChannel, lessThan(150));
+      expect(redChannel, greaterThan(0));
+    });
+
+    testWidgets('overlay contains CustomPaint scrim painter', (tester) async {
+      await tester.pumpWidget(
+        buildTestWidget(
+          scannerWidgetBuilder: (context, onDetect) => const SizedBox(),
+        ),
+      );
+      await tester.pump();
+
+      final customPaints = tester.widgetList<CustomPaint>(
+        find.descendant(
+          of: find.byKey(const Key('qr_viewfinder_overlay')),
+          matching: find.byType(CustomPaint),
+        ),
+      );
+
+      expect(customPaints, isNotEmpty);
+      expect(
+        customPaints
+            .any((paint) => paint.painter?.runtimeType.toString() ==
+                '_ViewfinderPainter'),
+        isTrue,
+      );
     });
   });
 }

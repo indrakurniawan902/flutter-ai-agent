@@ -151,6 +151,8 @@ class MockVoiceInputService extends Mock implements VoiceInputServiceBase {}
 // Voice output
 class MockAudioPlayerWrapper extends Mock implements AudioPlayerWrapper {}
 
+class MockPlatformTtsEngine extends Mock implements PlatformTtsEngine {}
+
 class MockTtsClient extends Mock implements TtsClient {}
 
 class MockVoiceOutputService extends Mock implements VoiceOutputServiceBase {}

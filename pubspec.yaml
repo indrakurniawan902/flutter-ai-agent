@@ -66,10 +66,13 @@ dependencies:
   # Voice & audio
   speech_to_text: ^7.4.0
   audioplayers: ^6.8.1
+  flutter_tts: ^4.2.5
   permission_handler: ^13.0.2
   pdf: ^3.13.0
   archive: ^4.0.9
   path_provider: ^2.1.5
+  sqlite3_flutter_libs: ^0.6.0+eol
+  sqflite_common_ffi: ^2.4.3
 
 dev_dependencies:
   flutter_test:
@@ -79,7 +82,6 @@ dev_dependencies:
   bloc_test: ^10.0.0
   injectable_generator: ^2.4.1
   build_runner: ^2.4.13
-  sqflite_common_ffi: ^2.4.3
 
 flutter:
   uses-material-design: true

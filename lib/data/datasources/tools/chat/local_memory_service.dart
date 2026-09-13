@@ -1,8 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dartz/dartz.dart';
 import 'package:injectable/injectable.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/memory_item.dart';
@@ -14,6 +15,7 @@ class LocalMemoryService implements LocalMemoryServiceBase {
   static const String databaseFileName = 'flames_memory.db';
 
   Database? _database;
+  bool? _ftsSupported;
   final DatabaseFactory? _databaseFactory;
   final String? _databasePath;
 
@@ -33,13 +35,21 @@ class LocalMemoryService implements LocalMemoryServiceBase {
       return _database!;
     }
 
-    final factory = _databaseFactory ?? databaseFactory;
+    DatabaseFactory factory;
+    if (_databaseFactory != null) {
+      factory = _databaseFactory;
+    } else {
+      if (Platform.isAndroid) {
+        databaseFactory = databaseFactoryFfi;
+      }
+      factory = databaseFactory;
+    }
     final String path;
     final configuredPath = _databasePath;
     if (configuredPath != null) {
       path = configuredPath;
     } else {
-      final dir = await getDatabasesPath();
+      final dir = await factory.getDatabasesPath();
       path = '$dir/$databaseFileName';
     }
 
@@ -51,8 +61,25 @@ class LocalMemoryService implements LocalMemoryServiceBase {
         onUpgrade: onUpgradeDatabase,
       ),
     );
+    await _probeFtsSupport(_database!);
 
     return _database!;
+  }
+
+  Future<bool> _probeFtsSupport(Database db) async {
+    final known = _ftsSupported;
+    if (known != null) {
+      return known;
+    }
+    try {
+      await db.execute(
+          'CREATE VIRTUAL TABLE IF NOT EXISTS temp.fts5_probe USING fts5(x)');
+      await db.execute('DROP TABLE IF EXISTS temp.fts5_probe');
+      _ftsSupported = true;
+    } catch (_) {
+      _ftsSupported = false;
+    }
+    return _ftsSupported!;
   }
 
   static Future<void> onCreateDatabase(Database db, int version) async {
@@ -67,34 +94,39 @@ class LocalMemoryService implements LocalMemoryServiceBase {
       );
     ''');
 
-    await db.execute('''
-      CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
-        key,
-        content,
-        tags,
-        content='memories',
-        content_rowid='id'
-      );
-    ''');
+    try {
+      await db.execute('''
+        CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+          key,
+          content,
+          tags,
+          content='memories',
+          content_rowid='id'
+        );
+      ''');
 
-    await db.execute('''
-      CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
-        INSERT INTO memories_fts(rowid, key, content, tags) VALUES (new.id, new.key, new.content, new.tags);
-      END;
-    ''');
+      await db.execute('''
+        CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+          INSERT INTO memories_fts(rowid, key, content, tags) VALUES (new.id, new.key, new.content, new.tags);
+        END;
+      ''');
 
-    await db.execute('''
-      CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
-        INSERT INTO memories_fts(memories_fts, rowid, key, content, tags) VALUES ('delete', old.id, old.key, old.content, old.tags);
-      END;
-    ''');
+      await db.execute('''
+        CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+          INSERT INTO memories_fts(memories_fts, rowid, key, content, tags) VALUES ('delete', old.id, old.key, old.content, old.tags);
+        END;
+      ''');
 
-    await db.execute('''
-      CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
-        INSERT INTO memories_fts(memories_fts, rowid, key, content, tags) VALUES ('delete', old.id, old.key, old.content, old.tags);
-        INSERT INTO memories_fts(rowid, key, content, tags) VALUES (new.id, new.key, new.content, new.tags);
-      END;
-    ''');
+      await db.execute('''
+        CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+          INSERT INTO memories_fts(memories_fts, rowid, key, content, tags) VALUES ('delete', old.id, old.key, old.content, old.tags);
+          INSERT INTO memories_fts(rowid, key, content, tags) VALUES (new.id, new.key, new.content, new.tags);
+        END;
+      ''');
+    } catch (_) {
+      // FTS5 unavailable on this platform SQLite; skip FTS objects.
+      // Searches degrade to the LIKE fallback path.
+    }
 
     await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_memories_key ON memories(key);');
@@ -203,7 +235,7 @@ class LocalMemoryService implements LocalMemoryServiceBase {
       }
       return Right(item);
     } catch (e) {
-      return Left(StorageFailure('Failed to save memory ($key): $e'));
+      return Left(StorageFailure('memory_unavailable: ${_shortReason(e)}'));
     }
   }
 
@@ -211,32 +243,76 @@ class LocalMemoryService implements LocalMemoryServiceBase {
   Future<Either<Failure, List<MemoryItem>>> searchMemories(
     String query, [
     int limit = 5,
+  ]) {
+    return _searchMemoriesInternal(query, limit);
+  }
+
+  Future<Either<Failure, List<MemoryItem>>> _searchMemoriesInternal(
+    String query,
+    int limit, [
+    void Function(String mode)? onMode,
   ]) async {
     try {
       final db = await database;
+      final ftsSupported = await _probeFtsSupport(db);
       final sanitizedMatchQuery = _sanitizeFtsQuery(query);
 
       if (sanitizedMatchQuery.isEmpty) {
+        onMode?.call(ftsSupported ? 'fts5' : 'like_fallback');
         return const Right([]);
       }
 
-      final results = await db.rawQuery(
-        '''
-        SELECT m.id, m.key, m.content, m.tags, m.created_at, m.updated_at, bm25(memories_fts) AS rank
-        FROM memories_fts fts
-        JOIN memories m ON m.id = fts.rowid
-        WHERE memories_fts MATCH ?
-        ORDER BY rank ASC
-        LIMIT ?;
-        ''',
-        [sanitizedMatchQuery, limit <= 0 ? 5 : limit],
-      );
+      final List<Map<String, Object?>> results;
+      if (ftsSupported) {
+        onMode?.call('fts5');
+        results = await db.rawQuery(
+          '''
+          SELECT m.id, m.key, m.content, m.tags, m.created_at, m.updated_at, bm25(memories_fts) AS rank
+          FROM memories_fts fts
+          JOIN memories m ON m.id = fts.rowid
+          WHERE memories_fts MATCH ?
+          ORDER BY rank ASC
+          LIMIT ?;
+          ''',
+          [sanitizedMatchQuery, limit <= 0 ? 5 : limit],
+        );
+      } else {
+        onMode?.call('like_fallback');
+        results = await _searchWithLike(db, query, limit);
+      }
 
       final items = results.map((row) => MemoryItem.fromDbMap(row)).toList();
       return Right(items);
     } catch (e) {
-      return Left(StorageFailure('Failed to search memories: $e'));
+      return Left(StorageFailure('memory_unavailable: ${_shortReason(e)}'));
     }
+  }
+
+  Future<List<Map<String, Object?>>> _searchWithLike(
+    Database db,
+    String query,
+    int limit,
+  ) async {
+    final words = _extractWords(query);
+    if (words.isEmpty) return const [];
+
+    final conditions = <String>[];
+    final args = <Object?>[];
+    for (final word in words) {
+      conditions.add('(key LIKE ? OR content LIKE ? OR tags LIKE ?)');
+      args
+        ..add('%$word%')
+        ..add('%$word%')
+        ..add('%$word%');
+    }
+
+    return db.query(
+      'memories',
+      where: conditions.join(' OR '),
+      whereArgs: args,
+      orderBy: 'updated_at DESC',
+      limit: limit <= 0 ? 5 : limit,
+    );
   }
 
   @override
@@ -324,7 +400,7 @@ class LocalMemoryService implements LocalMemoryServiceBase {
       final items = results.map((row) => MemoryItem.fromDbMap(row)).toList();
       return Right(items);
     } catch (e) {
-      return Left(StorageFailure('Failed to list memories: $e'));
+      return Left(StorageFailure('memory_unavailable: ${_shortReason(e)}'));
     }
   }
 
@@ -356,7 +432,17 @@ class LocalMemoryService implements LocalMemoryServiceBase {
 
     final result = await saveMemory(key, content, tags);
     return result.fold(
-      Left.new,
+      (failure) {
+        if (failure.message.startsWith('memory_unavailable:')) {
+          return Right(
+            jsonEncode({
+              'status': 'memory_unavailable',
+              'reason': failure.message,
+            }),
+          );
+        }
+        return Left(failure);
+      },
       (item) => Right(
         jsonEncode({
           'status': 'saved',
@@ -377,13 +463,24 @@ class LocalMemoryService implements LocalMemoryServiceBase {
     final query = args['query']?.toString() ?? '';
     final limit = (args['limit'] as num?)?.toInt() ?? 5;
 
-    final result = await searchMemories(query, limit);
+    var modeUsed = 'fts5';
+    final result = await _searchMemoriesInternal(
+      query,
+      limit,
+      (mode) => modeUsed = mode,
+    );
     return result.fold(
-      Left.new,
+      (failure) => Right(
+        jsonEncode({
+          'status': 'memory_unavailable',
+          'reason': failure.message,
+        }),
+      ),
       (items) => Right(
         jsonEncode({
           'query': query,
           'count': items.length,
+          'search_mode': modeUsed,
           'memories': items.map((m) => m.toJson()).toList(),
         }),
       ),
@@ -402,7 +499,12 @@ class LocalMemoryService implements LocalMemoryServiceBase {
       if (id != null) {
         final result = await deleteMemory(id);
         return result.fold(
-          Left.new,
+          (failure) => Right(
+            jsonEncode({
+              'status': 'memory_unavailable',
+              'reason': failure.message,
+            }),
+          ),
           (deleted) => Right(jsonEncode({
             'status': deleted ? 'deleted' : 'not_found',
             'deleted': deleted,
@@ -415,7 +517,12 @@ class LocalMemoryService implements LocalMemoryServiceBase {
     if (keyVal != null && keyVal.trim().isNotEmpty) {
       final result = await deleteMemoryByKey(keyVal.trim());
       return result.fold(
-        Left.new,
+        (failure) => Right(
+          jsonEncode({
+            'status': 'memory_unavailable',
+            'reason': failure.message,
+          }),
+        ),
         (deleted) => Right(jsonEncode({
           'status': deleted ? 'deleted' : 'not_found',
           'deleted': deleted,
@@ -435,7 +542,12 @@ class LocalMemoryService implements LocalMemoryServiceBase {
     final limit = (args['limit'] as num?)?.toInt() ?? 50;
     final result = await getAllMemories(limit: limit);
     return result.fold(
-      Left.new,
+      (failure) => Right(
+        jsonEncode({
+          'status': 'memory_unavailable',
+          'reason': failure.message,
+        }),
+      ),
       (items) => Right(
         jsonEncode({
           'count': items.length,
@@ -445,18 +557,29 @@ class LocalMemoryService implements LocalMemoryServiceBase {
     );
   }
 
-  String _sanitizeFtsQuery(String input) {
+  List<String> _extractWords(String input) {
     final clean = input.replaceAll(RegExp(r'[^\w\s]'), ' ').trim();
-    if (clean.isEmpty) return '';
+    if (clean.isEmpty) return const [];
 
-    final words = clean
+    return clean
         .split(RegExp(r'\s+'))
         .map((w) => w.trim())
         .where((w) => w.isNotEmpty && w.length >= 2)
         .toList();
+  }
 
+  String _sanitizeFtsQuery(String input) {
+    final words = _extractWords(input);
     if (words.isEmpty) return '';
 
     return words.map((w) => '$w*').join(' OR ');
+  }
+
+  String _shortReason(Object error) {
+    final text = error.toString();
+    final match =
+        RegExp(r'DatabaseException\(([^)]*)\)').firstMatch(text);
+    final cause = (match?.group(1) ?? text).trim();
+    return cause.length > 160 ? cause.substring(0, 160) : cause;
   }
 }

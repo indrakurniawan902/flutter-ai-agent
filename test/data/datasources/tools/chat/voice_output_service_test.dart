@@ -15,6 +15,7 @@ import '../../../../helpers/mocks.dart';
 void main() {
   late MockAudioPlayerWrapper mockPlayer;
   late MockTtsClient mockTtsClient;
+  late MockPlatformTtsEngine mockPlatformTts;
   late VoiceOutputService service;
 
   late StreamController<PlayerState> playerStateController;
@@ -28,6 +29,7 @@ void main() {
   setUp(() {
     mockPlayer = MockAudioPlayerWrapper();
     mockTtsClient = MockTtsClient();
+    mockPlatformTts = MockPlatformTtsEngine();
 
     playerStateController = StreamController<PlayerState>.broadcast();
 
@@ -40,10 +42,24 @@ void main() {
     when(() => mockPlayer.pause()).thenAnswer((_) async {});
     when(() => mockPlayer.resume()).thenAnswer((_) async {});
     when(() => mockPlayer.dispose()).thenAnswer((_) async {});
+    when(() => mockPlatformTts.isAvailable).thenReturn(true);
+    when(
+      () => mockPlatformTts.speak(
+        any(),
+        voice: any(named: 'voice'),
+        speed: any(named: 'speed'),
+      ),
+    ).thenAnswer((_) async => true);
+    when(() => mockPlatformTts.setVolume(any())).thenAnswer((_) async {});
+    when(() => mockPlatformTts.stop()).thenAnswer((_) async {});
+    when(
+      () => mockTtsClient.isRemoteConfigured(),
+    ).thenAnswer((_) async => true);
 
     service = VoiceOutputService(
       ttsClient: mockTtsClient,
       audioPlayer: mockPlayer,
+      platformTts: mockPlatformTts,
     );
   });
 
@@ -518,7 +534,7 @@ void main() {
     });
   });
 
-  group('VoiceOutputService - Unsupported TTS endpoint propagation', () {
+  group('VoiceOutputService - TTS engine selection & platform fallback', () {
     void stubTtsThrowingUnsupported() {
       when(
         () => mockTtsClient.synthesize(
@@ -530,57 +546,137 @@ void main() {
       ).thenThrow(const UnsupportedEndpointException());
     }
 
-    test(
-        'speakText returns Left(UnsupportedEndpointFailure) and emits errorStream on 404',
-        () async {
-      stubTtsThrowingUnsupported();
+    void stubPlatformSpeak(bool result) {
+      when(
+        () => mockPlatformTts.speak(
+          any(),
+          voice: any(named: 'voice'),
+          speed: any(named: 'speed'),
+        ),
+      ).thenAnswer((_) async => result);
+    }
 
-      final errors = <String>[];
+    test('remote 404 falls back to platform TTS', () async {
+      stubTtsThrowingUnsupported();
+      stubPlatformSpeak(true);
+
       final statuses = <VoiceOutputStatus>[];
-      final errorSub = service.errorStream.listen(errors.add);
       final statusSub = service.statusStream.listen(statuses.add);
 
       final result = await service.speakText('Hello');
 
       await pumpEventQueue();
-      await errorSub.cancel();
       await statusSub.cancel();
 
-      result.fold(
-        (failure) {
-          expect(failure, isA<UnsupportedEndpointFailure>());
-          expect(failure.message, DioTtsClient.unsupportedEndpointMessage);
-        },
-        (_) => fail('Expected Left(UnsupportedEndpointFailure)'),
-      );
-      expect(errors, [DioTtsClient.unsupportedEndpointMessage]);
-      expect(service.currentStatus, VoiceOutputStatus.error);
-      expect(statuses, contains(VoiceOutputStatus.error));
-      verifyNever(() => mockPlayer.play(any(that: isA<BytesSource>())));
+      expect(result.isRight(), true);
+      verify(
+        () => mockPlatformTts.speak(
+          'Hello',
+          voice: any(named: 'voice'),
+          speed: any(named: 'speed'),
+        ),
+      ).called(1);
+      expect(service.lastEngineUsed, TtsEngine.androidTts);
+      expect(service.currentStatus, VoiceOutputStatus.idle);
+      expect(statuses, contains(VoiceOutputStatus.playing));
     });
 
-    test(
-        'queueText returns Left(UnsupportedEndpointFailure) and emits errorStream on 404',
-        () async {
-      stubTtsThrowingUnsupported();
+    test('no remote base URL uses platform directly', () async {
+      when(
+        () => mockTtsClient.isRemoteConfigured(),
+      ).thenAnswer((_) async => false);
+      stubPlatformSpeak(true);
 
-      final errors = <String>[];
-      final errorSub = service.errorStream.listen(errors.add);
+      final result = await service.speakText('Hello');
 
-      final result = await service.queueText('Queued text');
-
-      await pumpEventQueue();
-      await errorSub.cancel();
-
-      result.fold(
-        (failure) {
-          expect(failure, isA<UnsupportedEndpointFailure>());
-          expect(failure.message, DioTtsClient.unsupportedEndpointMessage);
-        },
-        (_) => fail('Expected Left(UnsupportedEndpointFailure)'),
+      expect(result.isRight(), true);
+      verifyNever(
+        () => mockTtsClient.synthesize(
+          text: any(named: 'text'),
+          voice: any(named: 'voice'),
+          model: any(named: 'model'),
+          speed: any(named: 'speed'),
+        ),
       );
-      expect(errors, [DioTtsClient.unsupportedEndpointMessage]);
+      verify(
+        () => mockPlatformTts.speak(
+          'Hello',
+          voice: any(named: 'voice'),
+          speed: any(named: 'speed'),
+        ),
+      ).called(1);
+      expect(service.lastEngineUsed, TtsEngine.androidTts);
+    });
+
+    test('remote success keeps byte-player path', () async {
+      final audioBytes = Uint8List.fromList([1, 2, 3]);
+      when(
+        () => mockTtsClient.synthesize(
+          text: any(named: 'text'),
+          voice: any(named: 'voice'),
+          model: any(named: 'model'),
+          speed: any(named: 'speed'),
+        ),
+      ).thenAnswer((_) async => audioBytes);
+
+      final result = await service.speakText('Hello');
+
+      expect(result.isRight(), true);
+      verify(() => mockPlayer.play(any(that: isA<BytesSource>()))).called(1);
+      verifyNever(
+        () => mockPlatformTts.speak(
+          any(),
+          voice: any(named: 'voice'),
+          speed: any(named: 'speed'),
+        ),
+      );
+      expect(service.lastEngineUsed, TtsEngine.remoteTts);
+    });
+
+    test('both paths fail -> Left', () async {
+      stubTtsThrowingUnsupported();
+      stubPlatformSpeak(false);
+
+      final result = await service.speakText('Hello');
+
+      expect(result.isLeft(), true);
+      result.fold(
+        (failure) => expect(failure, isA<ServerFailure>()),
+        (_) => fail('Expected Left(ServerFailure)'),
+      );
       expect(service.currentStatus, VoiceOutputStatus.error);
+    });
+
+    test('setMuted parity reaches platform engine', () async {
+      service.setMuted(true);
+      service.setMuted(false);
+
+      verify(() => mockPlatformTts.setVolume(0.0)).called(1);
+      verify(() => mockPlatformTts.setVolume(1.0)).called(1);
+    });
+
+    test('stop during platform speech keeps stopped status', () async {
+      stubTtsThrowingUnsupported();
+      final completer = Completer<bool>();
+      when(
+        () => mockPlatformTts.speak(
+          any(),
+          voice: any(named: 'voice'),
+          speed: any(named: 'speed'),
+        ),
+      ).thenAnswer((_) => completer.future);
+
+      final resultFuture = service.speakText('Hello');
+      await pumpEventQueue();
+
+      await service.stop();
+      completer.complete(true);
+      final result = await resultFuture;
+
+      expect(result.isRight(), true);
+      verify(() => mockPlatformTts.stop()).called(1);
+      expect(service.currentStatus, VoiceOutputStatus.stopped);
+      expect(service.lastEngineUsed, isNull);
     });
   });
 }

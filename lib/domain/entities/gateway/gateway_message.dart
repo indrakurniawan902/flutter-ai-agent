@@ -67,11 +67,14 @@ abstract class GatewayMessage extends Equatable {
       case 'hello':
         return GatewayToolManifestMessage.fromJson(json);
 
-      case 'error':
-        return GatewayErrorMessage.fromJson(json);
+case 'error':
+         return GatewayErrorMessage.fromJson(json);
 
-      default:
-        return GatewayRawMessage(type: type, payload: json);
+       case 'chat_cancel':
+         return GatewayChatCancelMessage.fromJson(json);
+
+       default:
+         return GatewayRawMessage(type: type, payload: json);
     }
   }
 
@@ -367,6 +370,21 @@ class GatewayChatMessage extends GatewayMessage {
 
   @override
   List<Object?> get props => [type, content, role, metadata];
+}
+
+/// Requests cancellation of the in-flight generation on the remote agent.
+class GatewayChatCancelMessage extends GatewayMessage {
+  const GatewayChatCancelMessage() : super('chat_cancel');
+
+  factory GatewayChatCancelMessage.fromJson(Map<String, dynamic> json) =>
+      const GatewayChatCancelMessage();
+
+  @override
+  Map<String, dynamic> toJson() => {'type': 'chat_cancel'};
+
+  // match the props/== style of GatewayChatMessage (props likely [type])
+  @override
+  List<Object?> get props => [type];
 }
 
 /// General error frame emitted by Gateway.

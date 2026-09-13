@@ -6,11 +6,21 @@ import 'package:flutter_ai_agent/common/failure.dart';
 
 enum VoiceOutputStatus { idle, loading, playing, paused, stopped, error }
 
+enum TtsEngine { remoteTts, androidTts }
+
+abstract class PlatformTtsEngine {
+  bool get isAvailable;
+  Future<bool> speak(String text, {String? voice, double? speed});
+  Future<void> setVolume(double volume);
+  Future<void> stop();
+}
+
 abstract class VoiceOutputServiceBase {
   bool get isPlaying;
   bool get isMuted;
   VoiceOutputStatus get currentStatus;
   int get queueLength;
+  TtsEngine? get lastEngineUsed;
   Stream<VoiceOutputStatus> get statusStream;
   Stream<String> get errorStream;
 

@@ -540,6 +540,20 @@ void main() {
       expect(frame['content'], 'What is my battery status?');
       expect(frame['role'], 'user');
     });
+
+    test('sendChatCancel emits chat_cancel frame', () async {
+      await client.connect('ws://localhost:18789/ws', token: 'token123');
+      socketStreamController.add(jsonEncode({'type': 'auth_success'}));
+      await pumpEventQueue();
+
+      sentFrames.clear();
+
+      client.sendChatCancel();
+
+      expect(sentFrames.length, 1);
+      final frame = jsonDecode(sentFrames.first) as Map<String, dynamic>;
+      expect(frame['type'], 'chat_cancel');
+    });
   });
 
   group('GatewayClient - Auto-Reconnect & Socket Drop', () {
