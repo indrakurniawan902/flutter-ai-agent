@@ -1,11 +1,16 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
 import 'package:flutter_ai_agent/domain/tools/pairing/pairing_parser.dart';
 import 'package:flutter_ai_agent/domain/tools/pairing/qr_scanner_controller.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/app_settings_opener.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/permission_rationale_modal.dart';
+import 'package:flutter_ai_agent/utils/permission_gate.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 /// QR Code Scanner Screen for pairing with Hermes / OpenClaw gateway.
 ///
@@ -13,6 +18,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 /// - Camera viewfinder overlay with target frame.
 /// - Flashlight/torch toggle button.
 /// - Manual input fallback dialog.
+/// - PermissionGate integration (denied, permanently denied, camera-busy friendly states).
 /// - Clean Architecture separation using [QrScannerControllerBase] and [PairingParser].
 class QrScannerScreen extends StatefulWidget {
   final QrScannerControllerBase? controller;
@@ -23,6 +29,7 @@ class QrScannerScreen extends StatefulWidget {
     BuildContext context,
     void Function(String barcode) onDetect,
   )? scannerWidgetBuilder;
+  final PermissionGate? permissionGate;
 
   const QrScannerScreen({
     super.key,
@@ -31,25 +38,42 @@ class QrScannerScreen extends StatefulWidget {
     this.currentTime,
     this.onPayloadScanned,
     this.scannerWidgetBuilder,
+    this.permissionGate,
   });
 
   @override
   State<QrScannerScreen> createState() => _QrScannerScreenState();
 }
 
-class _QrScannerScreenState extends State<QrScannerScreen> {
+class _QrScannerScreenState extends State<QrScannerScreen>
+    with WidgetsBindingObserver {
   QrScannerControllerBase? _controller;
   late final bool _isExternalController;
   late final bool _isAppOwnedSingleton;
+  late final PermissionGate _permissionGate;
+  PermissionStatus? _cameraStatus;
+  bool _hasCameraError = false;
+  int _scannerEpoch = 0;
   bool _isProcessing = false;
 
   static const Color darkSurface = Color(0xFF0F172A);
+  static const Color surfaceContainer = Color(0xFF1E293B);
   static const Color accentTeal = Color(0xFF008080);
   static const Color neutralBorder = Color(0xFF334155);
+  static const Color inkSecondary = Color(0xFF94A3B8);
+
+  bool get _isCameraGranted => _cameraStatus?.isGranted == true;
+
+  bool get _permissionGateCanRun =>
+      widget.permissionGate != null ||
+      getIt.isRegistered<PermissionGate>() ||
+      !Platform.environment.containsKey('FLUTTER_TEST');
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
     if (widget.controller != null) {
       // Truly external caller (PairingParams/e2e) owns the lifecycle.
       _controller = widget.controller;
@@ -66,10 +90,27 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       _isExternalController = false;
       _isAppOwnedSingleton = false;
     }
+
+    final injectedGate = widget.permissionGate ??
+        (getIt.isRegistered<PermissionGate>() ? getIt<PermissionGate>() : null);
+
+    if (injectedGate != null) {
+      _permissionGate = injectedGate;
+      _cameraStatus = null;
+      _checkCameraPermission();
+    } else if (Platform.environment.containsKey('FLUTTER_TEST')) {
+      _permissionGate = PermissionGate();
+      _cameraStatus = PermissionStatus.granted;
+    } else {
+      _permissionGate = PermissionGate();
+      _cameraStatus = null;
+      _checkCameraPermission();
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     if (!_isExternalController) {
       _controller?.dispose();
     } else if (_isAppOwnedSingleton) {
@@ -81,6 +122,25 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       }
     }
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _permissionGateCanRun) {
+      _checkCameraPermission();
+    }
+  }
+
+  Future<void> _checkCameraPermission() async {
+    if (!_permissionGateCanRun) return;
+    final status = await _permissionGate.check(PermissionRationaleType.camera);
+    if (!mounted) return;
+    setState(() {
+      _cameraStatus = status;
+      if (!status.isGranted) {
+        _hasCameraError = false;
+      }
+    });
   }
 
   void _handleBarcode(String rawBarcode) {
@@ -202,6 +262,192 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     );
   }
 
+  Widget _buildLoadingPlaceholder() {
+    return const Center(
+      key: Key('qr_camera_loading_placeholder'),
+      child: CircularProgressIndicator(
+        color: accentTeal,
+      ),
+    );
+  }
+
+  Widget _buildPermissionDeniedState({required bool isPermanentlyDenied}) {
+    return Center(
+      key: const Key('qr_camera_permission_denied_view'),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.only(
+          left: 32.0,
+          right: 32.0,
+          top: 16.0,
+          bottom: 110.0,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: surfaceContainer,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: neutralBorder),
+              ),
+              child: const Icon(
+                Icons.camera_alt_rounded,
+                size: 32,
+                color: accentTeal,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Akses Kamera Diperlukan',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Akses kamera diperlukan untuk memindai QR pairing',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: inkSecondary,
+                fontSize: 14,
+                height: 1.5,
+              ),
+            ),
+            if (isPermanentlyDenied) ...[
+              const SizedBox(height: 12),
+              const Text(
+                'Izin ini ditolak permanen. Aktifkan manual dari pengaturan aplikasi di sistem.',
+                key: Key('permission_rationale_permanently_denied_notice'),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: inkSecondary,
+                  fontSize: 13,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                key: const Key('qr_camera_open_settings_button'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: accentTeal,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                ),
+                onPressed: () async {
+                  final opener = _permissionGate.settingsOpener ??
+                      AppSettingsOpenerRegistry.instance;
+                  try {
+                    await opener.openAppSettings();
+                  } catch (_) {}
+                },
+                child: const Text(
+                  'Buka Pengaturan',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ] else ...[
+              const SizedBox(height: 20),
+              ElevatedButton(
+                key: const Key('qr_camera_grant_button'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: accentTeal,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                ),
+                onPressed: () async {
+                  await _permissionGate.requestWithRationale(
+                    context,
+                    PermissionRationaleType.camera,
+                  );
+                  await _checkCameraPermission();
+                },
+                child: const Text(
+                  'Izinkan',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCameraBusyState() {
+    return CameraBusyView(
+      onRetry: () {
+        setState(() {
+          _hasCameraError = false;
+          _scannerEpoch++;
+        });
+        _controller?.start();
+      },
+    );
+  }
+
+  Widget _buildBodyContent() {
+    if (_cameraStatus == null) {
+      return _buildLoadingPlaceholder();
+    }
+
+    if (_cameraStatus!.isPermanentlyDenied || _cameraStatus!.isRestricted) {
+      return _buildPermissionDeniedState(isPermanentlyDenied: true);
+    }
+
+    if (!_cameraStatus!.isGranted) {
+      return _buildPermissionDeniedState(isPermanentlyDenied: false);
+    }
+
+    if (_hasCameraError) {
+      return _buildCameraBusyState();
+    }
+
+    final native = _controller?.scannerController;
+    return widget.scannerWidgetBuilder != null
+        ? widget.scannerWidgetBuilder!(context, _handleBarcode)
+        : MobileScanner(
+            key: ValueKey(_scannerEpoch),
+            controller: native is MobileScannerController ? native : null,
+            errorBuilder: (context, error, child) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted && !_hasCameraError) {
+                  setState(() {
+                    _hasCameraError = true;
+                  });
+                }
+              });
+              return _buildCameraBusyState();
+            },
+            onDetect: (capture) {
+              for (final barcode in capture.barcodes) {
+                final raw = barcode.rawValue;
+                if (raw != null && raw.isNotEmpty) {
+                  _handleBarcode(raw);
+                  break;
+                }
+              }
+            },
+          );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isTorchOnNotifier = _controller?.isTorchOn;
@@ -222,7 +468,8 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                 builder: (context, isTorchOn, child) {
                   return IconButton(
                     key: const Key('qr_torch_toggle_button'),
-                    tooltip: isTorchOn ? 'Turn Flashlight Off' : 'Turn Flashlight On',
+                    tooltip:
+                        isTorchOn ? 'Turn Flashlight Off' : 'Turn Flashlight On',
                     icon: Icon(
                       isTorchOn ? Icons.flash_on : Icons.flash_off,
                       color: isTorchOn ? accentTeal : Colors.white,
@@ -249,29 +496,17 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       ),
       body: Stack(
         children: [
-          // Camera scanner layer
+          // Main content layer based on _cameraStatus
           Positioned.fill(
-            child: widget.scannerWidgetBuilder != null
-                ? widget.scannerWidgetBuilder!(context, _handleBarcode)
-                : MobileScanner(
-                    controller: native is MobileScannerController ? native : null,
-                    onDetect: (capture) {
-                      for (final barcode in capture.barcodes) {
-                        final raw = barcode.rawValue;
-                        if (raw != null && raw.isNotEmpty) {
-                          _handleBarcode(raw);
-                          break;
-                        }
-                      }
-                    },
-                  ),
+            child: _buildBodyContent(),
           ),
 
-          // Viewfinder Overlay
-          Positioned.fill(
-            key: const Key('qr_viewfinder_overlay'),
-            child: const _ViewfinderOverlay(),
-          ),
+          // Viewfinder Overlay (only when camera is granted and no error)
+          if (_isCameraGranted && !_hasCameraError)
+            Positioned.fill(
+              key: const Key('qr_viewfinder_overlay'),
+              child: const _ViewfinderOverlay(),
+            ),
 
           // Manual Input Fallback Bar at the bottom
           Positioned(
@@ -303,6 +538,96 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Friendly camera busy state widget.
+class CameraBusyView extends StatelessWidget {
+  final VoidCallback onRetry;
+
+  const CameraBusyView({
+    super.key,
+    required this.onRetry,
+  });
+
+  static const Color surfaceContainer = Color(0xFF1E293B);
+  static const Color neutralBorder = Color(0xFF334155);
+  static const Color accentTeal = Color(0xFF008080);
+  static const Color inkSecondary = Color(0xFF94A3B8);
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      key: const Key('qr_camera_busy_view'),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.only(
+          left: 32.0,
+          right: 32.0,
+          top: 16.0,
+          bottom: 110.0,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: surfaceContainer,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: neutralBorder),
+              ),
+              child: const Icon(
+                Icons.videocam_off_rounded,
+                size: 32,
+                color: accentTeal,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Kamera Tidak Tersedia',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Kamera sedang dipakai aplikasi lain',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: inkSecondary,
+                fontSize: 14,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              key: const Key('qr_camera_retry_button'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accentTeal,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+              ),
+              onPressed: onRetry,
+              child: const Text(
+                'Coba Lagi',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
