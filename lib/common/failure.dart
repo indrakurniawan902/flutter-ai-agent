@@ -46,3 +46,27 @@ class UnsupportedEndpointFailure extends Failure {
     super.message = 'Endpoint not supported by the active server',
   ]);
 }
+
+class CameraCancelledFailure extends Failure {
+  const CameraCancelledFailure([
+    super.message = 'camera_cancelled: User cancelled image capture',
+  ]);
+}
+
+class CameraLostResultFailure extends Failure {
+  const CameraLostResultFailure([
+    super.message = 'camera_lost_result: Camera result lost to Activity recreation',
+  ]);
+}
+
+class CameraBusyFailure extends Failure {
+  const CameraBusyFailure([
+    super.message = 'camera_busy: Image picker is already active',
+  ]);
+}
+
+class CameraTimeoutFailure extends Failure {
+  const CameraTimeoutFailure([
+    super.message = 'camera_timeout: Image capture timed out',
+  ]);
+}
