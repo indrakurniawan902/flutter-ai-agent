@@ -24,6 +24,7 @@ import 'package:flutter_ai_agent/domain/entities/gateway/gateway_connection_stat
 import 'package:flutter_ai_agent/domain/entities/gateway/gateway_message.dart';
 import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
+import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_routes.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
@@ -106,6 +107,7 @@ class _ChatScreenState extends State<ChatScreen> {
   CameraVisionServiceBase? _cameraVisionService;
   FileWorkspaceServiceBase? _fileWorkspaceService;
   ChatAttachment? _stagedAttachment;
+  bool _isNfcScanning = false;
 
   GatewayClientBase? _resolveGatewayClient() =>
       widget.gatewayClient ??
@@ -889,6 +891,92 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _scanNfcTag(BuildContext context) async {
+    if (_isNfcScanning) return;
+    _isNfcScanning = true;
+    try {
+      final dispatched = await context.read<AgentCubit>().scanNfcAndDispatchPrompt();
+      if (!mounted) return;
+      if (dispatched) {
+        _scrollToBottom();
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'No prompt bound to this NFC tag. Bind it in Settings > NFC Tag Triggers.',
+          ),
+          backgroundColor: const Color(0xFF1E293B),
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: 'Open Settings',
+            onPressed: () {
+              context.pushNamed(AppRoutes.nrSettings);
+            },
+          ),
+        ),
+      );
+    } finally {
+      _isNfcScanning = false;
+    }
+  }
+
+  Future<void> _scanNfcBalance(BuildContext context) async {
+    if (_isNfcScanning) return;
+    _isNfcScanning = true;
+    try {
+      final balance = await context.read<AgentCubit>().scanNfcEmoneyBalance();
+      if (!mounted) return;
+      if (balance != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${_emoneyBrandLabel(balance.brand)} balance: Rp ${_formatRupiah(balance.balanceRupiah)}',
+            ),
+            backgroundColor: const Color(0xFF008080),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Could not read e-Money balance. Enable NFC and tap the card, or use Settings > NFC Tag Triggers.',
+            ),
+            backgroundColor: const Color(0xFF1E293B),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      _isNfcScanning = false;
+    }
+  }
+
+  static String _emoneyBrandLabel(EmoneyCardBrand brand) {
+    switch (brand) {
+      case EmoneyCardBrand.mandiriEmoney:
+        return 'Mandiri e-Money';
+      case EmoneyCardBrand.bcaFlazz:
+        return 'BCA Flazz';
+      case EmoneyCardBrand.briBrizzi:
+        return 'BRI Brizzi';
+      case EmoneyCardBrand.bniTapCash:
+        return 'BNI TapCash';
+      case EmoneyCardBrand.unknown:
+        return 'e-Money';
+    }
+  }
+
+  static String _formatRupiah(int amount) {
+    final digits = amount.abs().toString();
+    final grouped = digits.replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (match) => '${match[1]}.',
+    );
+    return amount < 0 ? '-$grouped' : grouped;
+  }
+
   void _showConnectionDetailsDialog(BuildContext context) {
     final activeProfile = _resolveServerProfileCubit()?.state.activeProfile;
     final profileName = activeProfile?.name ?? 'No active profile';
@@ -1416,6 +1504,26 @@ class _ChatScreenState extends State<ChatScreen> {
                 icon: const Icon(Icons.qr_code_scanner),
                 tooltip: 'Scan Pairing QR',
                 onPressed: _openQrScanner,
+              ),
+              IconButton(
+                key: const Key('chat_nfc_scan_button'),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                visualDensity: VisualDensity.compact,
+                iconSize: 20,
+                icon: const Icon(Icons.nfc),
+                tooltip: 'Scan NFC Tag',
+                onPressed: () => _scanNfcTag(context),
+              ),
+              IconButton(
+                key: const Key('chat_nfc_balance_button'),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                visualDensity: VisualDensity.compact,
+                iconSize: 20,
+                icon: const Icon(Icons.account_balance_wallet_outlined),
+                tooltip: 'Read e-Money Balance',
+                onPressed: () => _scanNfcBalance(context),
               ),
               IconButton(
                 key: const Key('chat_reset_button'),
