@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:dartz/dartz.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/piper_voice.dart';
 
 enum VoiceOutputStatus { idle, loading, playing, paused, stopped, error }
 
@@ -46,4 +47,41 @@ abstract class VoiceOutputServiceBase {
   Future<void> stop();
   Future<void> interrupt();
   void dispose();
+
+  /// Engine preference persisted from Settings (default system).
+  TtsEngineMode get preferredEngineMode => TtsEngineMode.system;
+  void setPreferredEngineMode(TtsEngineMode mode) {}
+}
+
+enum TtsEngineMode { system, piper }
+
+/// Contract for the on-demand Piper voice model store
+/// (download/verify/locate).
+abstract class PiperVoiceStoreBase {
+  /// Absolute dir for the extracted model of [voiceId]
+  /// (does not imply it exists).
+  String modelDirFor(String voiceId);
+
+  /// True when `<model>.onnx` + `tokens.txt` + `espeak-ng-data/`
+  /// all exist.
+  Future<bool> isVoiceReady(String voiceId);
+
+  /// Download tarball -> MD5 verify -> extract. Returns Ready error
+  /// on mismatch.
+  /// [onProgress] gets 0..1 (fraction of expected bytes received).
+  Future<void> downloadVoice(
+    PiperVoiceDescriptor voice, {
+    void Function(double progress)? onProgress,
+  });
+  Future<void> deleteVoice(String voiceId);
+}
+
+/// Platform engine that synthesizes offline via Piper neural TTS.
+abstract class PiperTtsEngineBase implements PlatformTtsEngine {
+  /// Voice id currently loaded (null when no model ready yet).
+  String? get activeVoiceId;
+
+  /// Loads (or reloads) native engine with [voiceId]'s model. Returns
+  /// false when model files are missing. Never throws.
+  Future<bool> prepare(String voiceId);
 }

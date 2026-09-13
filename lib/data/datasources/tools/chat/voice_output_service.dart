@@ -346,6 +346,12 @@ class VoiceOutputService implements VoiceOutputServiceBase {
   TtsEngine? get lastEngineUsed => _lastEngineUsed;
 
   @override
+  TtsEngineMode get preferredEngineMode => TtsEngineMode.system;
+
+  @override
+  void setPreferredEngineMode(TtsEngineMode mode) {}
+
+  @override
   Stream<VoiceOutputStatus> get statusStream => _statusController.stream;
 
   @override
