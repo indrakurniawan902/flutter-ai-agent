@@ -11,6 +11,7 @@ import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart
 import 'package:flutter_ai_agent/presentation/screen/memory_vault/memory_vault_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/navigation/main_navigation_shell.dart';
 import 'package:flutter_ai_agent/presentation/screen/navigation/navigation_params.dart';
+import 'package:flutter_ai_agent/presentation/screen/node/geofence_management_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/pairing/pairing_params.dart';
 import 'package:flutter_ai_agent/presentation/screen/pairing/qr_scanner_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/pocket_node/pocket_node_screen.dart';
@@ -85,6 +86,11 @@ final GoRouter appRouter = GoRouter(
       path: '/node',
       name: AppRoutes.nrNode,
       builder: (context, state) => const PocketNodeScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.geofenceManagement,
+      name: AppRoutes.nrGeofenceManagement,
+      builder: (context, state) => const GeofenceManagementScreen(),
     ),
     GoRoute(
       path: '/vault',
