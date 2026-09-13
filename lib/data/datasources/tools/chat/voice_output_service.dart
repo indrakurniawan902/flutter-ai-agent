@@ -313,14 +313,13 @@ class VoiceOutputService implements VoiceOutputServiceBase {
     PiperTtsEngineBase? piperTts,
     PiperVoiceStoreBase? piperVoiceStore,
     SecureStorageService? secureStorage,
-  ]) =>
-      VoiceOutputService(
-        ttsClient: ttsClient,
-        platformTts: platformTts,
-        piperTts: piperTts,
-        piperVoiceStore: piperVoiceStore,
-        secureStorage: secureStorage,
-      );
+  ]) => VoiceOutputService(
+    ttsClient: ttsClient,
+    platformTts: platformTts,
+    piperTts: piperTts,
+    piperVoiceStore: piperVoiceStore,
+    secureStorage: secureStorage,
+  );
 
   static const _streamFlushThreshold = 120;
 
@@ -491,6 +490,66 @@ class VoiceOutputService implements VoiceOutputServiceBase {
     }
   }
 
+  /// Piper-mode chain: piper -> system TTS -> remote.
+  /// Shared by [speakText] and [queueText] so the two call sites stay
+  /// identical. [isQueueText] selects the remote error message.
+  /// Never throws: any failure degrades to the next step.
+  Future<Either<Failure, Unit>> _speakWithPiperChain(
+    String text, {
+    String? voice,
+    String? model,
+    double? speed,
+    required bool isQueueText,
+  }) async {
+    try {
+      if (await _trySpeakWithPiper(text, voice: voice, speed: speed)) {
+        return const Right(unit);
+      }
+    } catch (_) {
+      // Fall through to system TTS.
+    }
+    Either<Failure, Unit> platformResult;
+    try {
+      platformResult = await _speakWithPlatform(
+        text,
+        voice: voice,
+        speed: speed,
+      );
+    } catch (e) {
+      platformResult = Left(ServerFailure('Platform TTS failed: $e'));
+    }
+    if (platformResult.isRight()) return platformResult;
+    bool remoteConfigured = false;
+    try {
+      remoteConfigured = await _tts.isRemoteConfigured();
+    } catch (_) {
+      return platformResult;
+    }
+    if (remoteConfigured) {
+      try {
+        _setStatus(VoiceOutputStatus.loading);
+        final bytes = await _tts.synthesize(
+          text: text,
+          voice: voice,
+          model: model,
+          speed: speed,
+        );
+        _lastEngineUsed = TtsEngine.remoteTts;
+        return await queueAudio(bytes);
+      } on UnsupportedEndpointException {
+        return platformResult;
+      } catch (e) {
+        if (isQueueText) {
+          _fail('Text queue failed: $e');
+          return Left(ServerFailure('Text queue failed: $e'));
+        }
+        _fail('Speech synthesis failed: $e');
+        return Left(ServerFailure('Speech synthesis failed: $e'));
+      }
+    }
+    return platformResult;
+  }
+
   @override
   Stream<VoiceOutputStatus> get statusStream => _statusController.stream;
 
@@ -520,9 +579,13 @@ class VoiceOutputService implements VoiceOutputServiceBase {
     }
     await _ensurePreferencesLoaded();
     if (_engineMode == TtsEngineMode.piper) {
-      if (await _trySpeakWithPiper(text, voice: voice, speed: speed)) {
-        return const Right(unit);
-      }
+      return _speakWithPiperChain(
+        text,
+        voice: voice,
+        model: model,
+        speed: speed,
+        isQueueText: false,
+      );
     }
     if (!await _tts.isRemoteConfigured()) {
       return _speakWithPlatform(text, voice: voice, speed: speed);
@@ -569,9 +632,13 @@ class VoiceOutputService implements VoiceOutputServiceBase {
     }
     await _ensurePreferencesLoaded();
     if (_engineMode == TtsEngineMode.piper) {
-      if (await _trySpeakWithPiper(text, voice: voice, speed: speed)) {
-        return const Right(unit);
-      }
+      return _speakWithPiperChain(
+        text,
+        voice: voice,
+        model: model,
+        speed: speed,
+        isQueueText: true,
+      );
     }
     if (!await _tts.isRemoteConfigured()) {
       // Platform speech is immediate (no byte queue); streaming flush awaits completion.

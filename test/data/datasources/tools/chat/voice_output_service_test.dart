@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:dartz/dartz.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_ai_agent/common/exception.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
@@ -766,7 +767,7 @@ void main() {
     }
 
     test(
-      'piper mode + engine available + prepare true + speak true uses piper',
+      'piper ready + speak true uses piper, never touches platform or remote',
       () async {
         stubStoragePiperMode();
         final piperService = buildPiperService();
@@ -775,6 +776,13 @@ void main() {
 
         expect(result.isRight(), true);
         expect(piperService.lastEngineUsed, TtsEngine.piperTts);
+        verifyNever(
+          () => mockPlatformTts.speak(
+            any(),
+            voice: any(named: 'voice'),
+            speed: any(named: 'speed'),
+          ),
+        );
         verifyNever(
           () => mockTtsClient.synthesize(
             text: any(named: 'text'),
@@ -786,41 +794,49 @@ void main() {
       },
     );
 
-    test('piper mode + prepare false falls back to remote', () async {
-      stubStoragePiperMode();
-      when(() => mockPiper.prepare(any())).thenAnswer((_) async => false);
-      final audioBytes = Uint8List.fromList([1, 2, 3]);
-      when(
-        () => mockTtsClient.synthesize(
-          text: any(named: 'text'),
-          voice: any(named: 'voice'),
-          model: any(named: 'model'),
-          speed: any(named: 'speed'),
-        ),
-      ).thenAnswer((_) async => audioBytes);
-      final piperService = buildPiperService();
-
-      final result = await piperService.speakText('Hello fallback');
-
-      expect(result.isRight(), true);
-      verify(
-        () => mockTtsClient.synthesize(
-          text: any(named: 'text'),
-          voice: any(named: 'voice'),
-          model: any(named: 'model'),
-          speed: any(named: 'speed'),
-        ),
-      ).called(1);
-      expect(piperService.lastEngineUsed, TtsEngine.remoteTts);
-    });
-
     test(
-      'piper mode + prepare true + speak false falls back to remote',
+      'piper NOT ready + remote configured -> system TTS wins, remote never tried',
       () async {
         stubStoragePiperMode();
-        when(() => mockPiper.prepare(any())).thenAnswer((_) async => true);
+        when(() => mockPiper.prepare(any())).thenAnswer((_) async => false);
         when(
-          () => mockPiper.speak(
+          () => mockPlatformTts.speak(
+            any(),
+            voice: any(named: 'voice'),
+            speed: any(named: 'speed'),
+          ),
+        ).thenAnswer((_) async => true);
+        final piperService = buildPiperService();
+
+        final result = await piperService.speakText('Hello fallback');
+
+        expect(result.isRight(), true);
+        verify(
+          () => mockPlatformTts.speak(
+            any(),
+            voice: any(named: 'voice'),
+            speed: any(named: 'speed'),
+          ),
+        ).called(1);
+        expect(piperService.lastEngineUsed, TtsEngine.androidTts);
+        verifyNever(
+          () => mockTtsClient.synthesize(
+            text: any(named: 'text'),
+            voice: any(named: 'voice'),
+            model: any(named: 'model'),
+            speed: any(named: 'speed'),
+          ),
+        );
+      },
+    );
+
+    test(
+      'piper NOT ready + platform false + remote configured -> remote used',
+      () async {
+        stubStoragePiperMode();
+        when(() => mockPiper.prepare(any())).thenAnswer((_) async => false);
+        when(
+          () => mockPlatformTts.speak(
             any(),
             voice: any(named: 'voice'),
             speed: any(named: 'speed'),
@@ -837,19 +853,129 @@ void main() {
         ).thenAnswer((_) async => audioBytes);
         final piperService = buildPiperService();
 
-        final result = await piperService.speakText('Hello speak-false');
+        final result = await piperService.speakText('Hello remote-fallback');
 
         expect(result.isRight(), true);
+        verify(
+          () => mockTtsClient.synthesize(
+            text: any(named: 'text'),
+            voice: any(named: 'voice'),
+            model: any(named: 'model'),
+            speed: any(named: 'speed'),
+          ),
+        ).called(1);
         expect(piperService.lastEngineUsed, TtsEngine.remoteTts);
       },
     );
 
-    test('piper mode + no remote + prepare false uses platform', () async {
+    test(
+      'piper NOT ready + platform false + NO remote -> Left error, no crash',
+      () async {
+        stubStoragePiperMode();
+        when(() => mockPiper.prepare(any())).thenAnswer((_) async => false);
+        when(
+          () => mockPlatformTts.speak(
+            any(),
+            voice: any(named: 'voice'),
+            speed: any(named: 'speed'),
+          ),
+        ).thenAnswer((_) async => false);
+        when(
+          () => mockTtsClient.isRemoteConfigured(),
+        ).thenAnswer((_) async => false);
+        final piperService = buildPiperService();
+
+        final result = await piperService.speakText('Hello no-remote');
+
+        expect(result.isLeft(), true);
+        result.fold(
+          (failure) => expect(failure, isA<ServerFailure>()),
+          (_) => fail('Expected Left(ServerFailure)'),
+        );
+        expect(piperService.currentStatus, VoiceOutputStatus.error);
+      },
+    );
+
+    test(
+      'piper mode + platform throws -> remote still tried when configured',
+      () async {
+        stubStoragePiperMode();
+        when(() => mockPiper.prepare(any())).thenAnswer((_) async => false);
+        when(
+          () => mockPlatformTts.speak(
+            any(),
+            voice: any(named: 'voice'),
+            speed: any(named: 'speed'),
+          ),
+        ).thenThrow(Exception('platform crashed'));
+        final audioBytes = Uint8List.fromList([7, 8, 9]);
+        when(
+          () => mockTtsClient.synthesize(
+            text: any(named: 'text'),
+            voice: any(named: 'voice'),
+            model: any(named: 'model'),
+            speed: any(named: 'speed'),
+          ),
+        ).thenAnswer((_) async => audioBytes);
+        final piperService = buildPiperService();
+
+        Either<Failure, Unit>? result;
+        try {
+          result = await piperService.speakText('Hello platform-throw');
+        } catch (_) {
+          fail('speakText must never throw');
+        }
+
+        expect(result.isRight(), true);
+        verify(
+          () => mockTtsClient.synthesize(
+            text: any(named: 'text'),
+            voice: any(named: 'voice'),
+            model: any(named: 'model'),
+            speed: any(named: 'speed'),
+          ),
+        ).called(1);
+        expect(piperService.lastEngineUsed, TtsEngine.remoteTts);
+      },
+    );
+
+    test(
+      'system mode regression: remote used even when piper fully ready',
+      () async {
+        when(
+          () => mockSecureStorage.getTtsEngineMode(),
+        ).thenAnswer((_) async => 'system');
+        when(
+          () => mockSecureStorage.getPiperVoiceId(),
+        ).thenAnswer((_) async => null);
+        final audioBytes = Uint8List.fromList([1, 2, 3]);
+        when(
+          () => mockTtsClient.synthesize(
+            text: any(named: 'text'),
+            voice: any(named: 'voice'),
+            model: any(named: 'model'),
+            speed: any(named: 'speed'),
+          ),
+        ).thenAnswer((_) async => audioBytes);
+        final piperService = buildPiperService();
+
+        final result = await piperService.speakText('Hello system');
+
+        expect(result.isRight(), true);
+        expect(piperService.lastEngineUsed, TtsEngine.remoteTts);
+        verifyNever(
+          () => mockPiper.speak(
+            any(),
+            voice: any(named: 'voice'),
+            speed: any(named: 'speed'),
+          ),
+        );
+      },
+    );
+
+    test('queueText in piper mode falls back to system TTS first', () async {
       stubStoragePiperMode();
       when(() => mockPiper.prepare(any())).thenAnswer((_) async => false);
-      when(
-        () => mockTtsClient.isRemoteConfigured(),
-      ).thenAnswer((_) async => false);
       when(
         () => mockPlatformTts.speak(
           any(),
@@ -859,10 +985,18 @@ void main() {
       ).thenAnswer((_) async => true);
       final piperService = buildPiperService();
 
-      final result = await piperService.speakText('Hello platform');
+      final result = await piperService.queueText('Hello queue');
 
       expect(result.isRight(), true);
       expect(piperService.lastEngineUsed, TtsEngine.androidTts);
+      verifyNever(
+        () => mockTtsClient.synthesize(
+          text: any(named: 'text'),
+          voice: any(named: 'voice'),
+          model: any(named: 'model'),
+          speed: any(named: 'speed'),
+        ),
+      );
     });
 
     test('setPreferredEngineMode + setPiperVoiceId persists', () async {
