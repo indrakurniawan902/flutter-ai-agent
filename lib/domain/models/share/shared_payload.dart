@@ -51,6 +51,35 @@ class SharedPayload extends Equatable {
   /// Alias for [toChatPrompt] kept for API ergonomics.
   String toPrompt() => toChatPrompt();
 
+  /// Prefix tagging an injected link-context block in a chat prompt.
+  static const String linkContextPrefix = '[LINK CONTEXT]';
+
+  /// `[LINK CONTEXT] <title> :: <text>`, or an `(unavailable — …)` fallback
+  /// carrying the raw [url] when [text] is empty (fetch failed / no body).
+  static String buildLinkContextBlock({
+    required String url,
+    required String title,
+    required String text,
+  }) {
+    final header = title.trim().isEmpty ? url : title.trim();
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) {
+      return '$linkContextPrefix $header :: (unavailable — no readable text) '
+          'Shared link: $url';
+    }
+    return '$linkContextPrefix $header :: $trimmed';
+  }
+
+  /// Chat prompt for a URL share with already-fetched link content embedded.
+  String toPromptWithLinkContext({
+    required String url,
+    required String title,
+    required String text,
+  }) {
+    final block = buildLinkContextBlock(url: url, title: title, text: text);
+    return '$block\n\nSummarize this shared link: $url';
+  }
+
   /// Combines prompts for a batch of payloads into one chat input.
   static String buildSuggestedPrompt(List<SharedPayload> payloads) {
     if (payloads.isEmpty) return '';

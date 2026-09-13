@@ -8,17 +8,22 @@ import 'package:go_router/go_router.dart';
 
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
+import 'package:flutter_ai_agent/data/datasources/tools/chat/url_reader_service.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_mode.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/url_reader_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_input_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
 import 'package:flutter_ai_agent/domain/entities/gateway/gateway_connection_state.dart';
 import 'package:flutter_ai_agent/domain/entities/gateway/gateway_message.dart';
 import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
+import 'package:flutter_ai_agent/domain/models/share/shared_payload.dart';
+import 'package:flutter_ai_agent/presentation/screen/share/cubit/share_target_cubit.dart';
+import 'package:flutter_ai_agent/presentation/screen/share/cubit/share_target_state.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_routes.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
@@ -92,6 +97,7 @@ class _ChatScreenState extends State<ChatScreen> {
   StreamSubscription<GatewayMessage>? _gatewayMessageSub;
   StreamSubscription<GatewayTextDeltaMessage>? _gatewayTextDeltaSub;
   StreamSubscription<ServerProfileState>? _profileSub;
+  StreamSubscription<ShareTargetState>? _shareTargetSub;
   String _streamingGatewayDelta = '';
   GatewayRpcCubit? _rpcCubit;
   GatewayLinkCubit? _linkCubit;
@@ -254,6 +260,22 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     });
 
+    try {
+      if (sl.isRegistered<ShareTargetCubit>()) {
+        final shareCubit = sl<ShareTargetCubit>();
+        _shareTargetSub = shareCubit.stream.listen((state) {
+          if (state is ShareTargetReceived && mounted) {
+            final payloads = shareCubit.consume();
+            if (payloads.isNotEmpty) {
+              unawaited(_submitSharedPayloads(payloads));
+            }
+          }
+        });
+      }
+    } catch (_) {
+      // ShareTargetCubit unavailable in widget tests; ignore.
+    }
+
     if (widget.initialMode == ChatMode.gateway &&
         _gatewayConnectionState.isDisconnected) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -285,6 +307,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _gatewayMessageSub?.cancel();
     _gatewayTextDeltaSub?.cancel();
     _profileSub?.cancel();
+    _shareTargetSub?.cancel();
     _textController.removeListener(_onTextChanged);
     _textController.dispose();
     _scrollController.dispose();
@@ -314,6 +337,54 @@ class _ChatScreenState extends State<ChatScreen> {
       _handleBackgroundAction(pending);
       await _backgroundService?.clearPendingAction();
     }
+  }
+
+  UrlReaderServiceBase? _resolveUrlReader() {
+    try {
+      return sl.isRegistered<UrlReaderServiceBase>()
+          ? sl<UrlReaderServiceBase>()
+          : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Fetches readable text for the first URL payload and submits the enriched
+  /// prompt. On fetch failure falls back to the raw link prompt. Never throws.
+  Future<void> _submitSharedPayloads(List<SharedPayload> payloads) async {
+    if (payloads.isEmpty) return;
+    final raw = SharedPayload.buildSuggestedPrompt(payloads);
+    String prompt = raw;
+    try {
+      final reader = _resolveUrlReader();
+      final url = payloads
+          .map((p) =>
+              p.isUrl ? p.value : (UrlReaderService.extractUrl(p.value) ?? ''))
+          .firstWhere((u) => u.isNotEmpty, orElse: () => '');
+      if (reader != null && url.isNotEmpty) {
+        final result = await reader.fetchReadableText(url);
+        final linkPayload = SharedPayload(
+          kind: SharedPayloadKind.url,
+          value: url,
+        );
+        prompt = result.fold(
+          (failure) => linkPayload.toPromptWithLinkContext(
+            url: url,
+            title: '',
+            text: '(unavailable — ${failure.message})',
+          ),
+          (text) => linkPayload.toPromptWithLinkContext(
+            url: url,
+            title: '',
+            text: text,
+          ),
+        );
+      }
+    } catch (_) {
+      prompt = raw;
+    }
+    if (!mounted) return;
+    _handleSubmitted(context, prompt);
   }
 
   void _toggleSpeakerMute() {

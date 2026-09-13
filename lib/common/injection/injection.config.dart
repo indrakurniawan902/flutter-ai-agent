@@ -50,6 +50,8 @@ import 'package:flutter_ai_agent/data/datasources/tools/chat/notification_servic
     as _i89;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/notification_triage_service.dart'
     as _i447;
+import 'package:flutter_ai_agent/data/datasources/tools/chat/url_reader_service.dart'
+    as _i840;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/voice_input_service.dart'
     as _i845;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/voice_output_service.dart'
@@ -105,6 +107,8 @@ import 'package:flutter_ai_agent/domain/tools/chat/notification_service.dart'
 import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.dart'
     as _i396;
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart' as _i732;
+import 'package:flutter_ai_agent/domain/tools/chat/url_reader_service.dart'
+    as _i14;
 import 'package:flutter_ai_agent/domain/tools/chat/voice_input_service.dart'
     as _i652;
 import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart'
@@ -196,7 +200,11 @@ extension GetItInjectableX on _i174.GetIt {
         backgroundService: gh<_i791.BackgroundServiceBase>(),
         contactLauncherTools: gh<_i777.ContactLauncherTools>(),
         intentLauncherService: gh<_i173.IntentLauncherServiceBase>(),
+        urlReaderService: gh<_i14.UrlReaderServiceBase>(),
       ),
+    );
+    gh.lazySingleton<_i14.UrlReaderServiceBase>(
+      () => _i840.UrlReaderService.create(gh<_i361.Dio>()),
     );
     gh.lazySingleton<_i821.QrScannerControllerBase>(
       () => _i319.MobileScannerControllerWrapper(),
