@@ -7,6 +7,7 @@ import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/serve
 import 'package:flutter_ai_agent/presentation/screen/settings/add_profile_screen.dart';
 import 'package:flutter_ai_agent/utils/app_theme.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockServerProfileCubit extends MockCubit<ServerProfileState>
@@ -154,6 +155,275 @@ void main() {
             url: 'https://hermes.example.com/v1',
             token: 'secret-token',
           )).called(1);
+    });
+
+    testWidgets('Test Connection failure renders the red probe badge',
+        (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      await tester.enterText(
+        find.byKey(const Key('add_profile_url_field')),
+        'https://hermes.example.com/v1',
+      );
+      await tester.enterText(
+        find.byKey(const Key('add_profile_token_field')),
+        'secret-token',
+      );
+      when(() => probe.probeHermesNode(
+            url: any(named: 'url'),
+            token: any(named: 'token'),
+          )).thenAnswer(
+        (_) async => const ProbeResult(
+          isSuccess: false,
+          message: 'Connection failed: HTTP 401',
+        ),
+      );
+
+      await tester.ensureVisible(
+        find.byKey(const Key('add_profile_test_connection_button')),
+      );
+      await tester.tap(
+        find.byKey(const Key('add_profile_test_connection_button')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.byKey(const Key('add_profile_probe_error')), findsOneWidget);
+      expect(find.textContaining('Connection failed: HTTP 401'), findsOneWidget);
+    });
+
+    testWidgets('Test Connection refuses to probe when URL or token is invalid',
+        (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      await tester.enterText(
+        find.byKey(const Key('add_profile_url_field')),
+        'not a url',
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('add_profile_test_connection_button')),
+      );
+      await tester.tap(
+        find.byKey(const Key('add_profile_test_connection_button')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.byKey(const Key('add_profile_probe_error')), findsOneWidget);
+      expect(find.textContaining('Fix URL and token first'), findsOneWidget);
+      verifyNever(() => probe.probeHermesNode(
+            url: any(named: 'url'),
+            token: any(named: 'token'),
+          ));
+      verifyNever(() => probe.probeOpenAi(
+            url: any(named: 'url'),
+            apiKey: any(named: 'apiKey'),
+            model: any(named: 'model'),
+          ));
+    });
+
+    testWidgets('Test Connection in OpenAI mode calls probeOpenAi',
+        (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      await tester.tap(find.text('OpenAI LLM'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('add_profile_url_field')),
+        'https://api.openai.com/v1',
+      );
+      await tester.enterText(
+        find.byKey(const Key('add_profile_token_field')),
+        'sk-test',
+      );
+      when(() => probe.probeOpenAi(
+            url: any(named: 'url'),
+            apiKey: any(named: 'apiKey'),
+            model: any(named: 'model'),
+          )).thenAnswer(
+        (_) async => const ProbeResult(isSuccess: true, message: 'OK (10ms)'),
+      );
+
+      await tester.ensureVisible(
+        find.byKey(const Key('add_profile_test_connection_button')),
+      );
+      await tester.tap(
+        find.byKey(const Key('add_profile_test_connection_button')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      verify(() => probe.probeOpenAi(
+            url: any(named: 'url'),
+            apiKey: any(named: 'apiKey'),
+            model: any(named: 'model'),
+          )).called(1);
+      verifyNever(() => probe.probeHermesNode(
+            url: any(named: 'url'),
+            token: any(named: 'token'),
+          ));
+    });
+
+    testWidgets(
+        'Save Profile in Hermes mode forwards name/url/token with makeActive false',
+        (tester) async {
+      when(() => cubit.addProfile(
+            name: any(named: 'name'),
+            gatewayUrl: any(named: 'gatewayUrl'),
+            token: any(named: 'token'),
+            makeActive: any(named: 'makeActive'),
+            model: any(named: 'model'),
+            temperature: any(named: 'temperature'),
+          )).thenAnswer((_) async {});
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      await tester.enterText(
+        find.byKey(const Key('add_profile_url_field')),
+        'https://hermes.example.com/v1',
+      );
+      await tester.enterText(
+        find.byKey(const Key('add_profile_token_field')),
+        'secret-token',
+      );
+      await tester.enterText(
+        find.byKey(const Key('add_profile_name_field')),
+        'Ops',
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('add_profile_submit_button')),
+      );
+      await tester.tap(find.byKey(const Key('add_profile_submit_button')));
+      await tester.pump();
+
+      verify(() => cubit.addProfile(
+            name: 'Ops',
+            gatewayUrl: 'https://hermes.example.com/v1',
+            token: 'secret-token',
+            makeActive: false,
+            model: any(named: 'model'),
+            temperature: any(named: 'temperature'),
+          )).called(1);
+    });
+
+    testWidgets('Save Profile blocks submission when the form is invalid',
+        (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      await tester.ensureVisible(
+        find.byKey(const Key('add_profile_submit_button')),
+      );
+      await tester.tap(find.byKey(const Key('add_profile_submit_button')));
+      await tester.pump();
+
+      expect(
+        find.text('Enter a valid HTTP/HTTPS/WS/WSS URL'),
+        findsOneWidget,
+      );
+      expect(find.text('Token cannot be empty'), findsOneWidget);
+      expect(find.text('Name cannot be empty'), findsOneWidget);
+      verifyNever(() => cubit.addProfile(
+            name: any(named: 'name'),
+            gatewayUrl: any(named: 'gatewayUrl'),
+            token: any(named: 'token'),
+            makeActive: any(named: 'makeActive'),
+            model: any(named: 'model'),
+            temperature: any(named: 'temperature'),
+          ));
+    });
+
+    testWidgets('Save Profile in OpenAI mode forwards the entered model',
+        (tester) async {
+      when(() => cubit.addProfile(
+            name: any(named: 'name'),
+            gatewayUrl: any(named: 'gatewayUrl'),
+            token: any(named: 'token'),
+            makeActive: any(named: 'makeActive'),
+            model: any(named: 'model'),
+            temperature: any(named: 'temperature'),
+          )).thenAnswer((_) async {});
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      await tester.tap(find.text('OpenAI LLM'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('add_profile_url_field')),
+        'https://api.openai.com/v1',
+      );
+      await tester.enterText(
+        find.byKey(const Key('add_profile_token_field')),
+        'sk-test',
+      );
+      await tester.enterText(
+        find.byKey(const Key('add_profile_name_field')),
+        'OpenAI',
+      );
+      await tester.enterText(
+        find.byKey(const Key('add_profile_model_field')),
+        'gpt-4o-mini',
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('add_profile_submit_button')),
+      );
+      await tester.tap(find.byKey(const Key('add_profile_submit_button')));
+      await tester.pump();
+
+      final captured = verify(() => cubit.addProfile(
+            name: 'OpenAI',
+            gatewayUrl: 'https://api.openai.com/v1',
+            token: 'sk-test',
+            makeActive: false,
+            model: 'gpt-4o-mini',
+            temperature: captureAny(named: 'temperature'),
+          )).captured;
+      expect(captured.single, isA<double>());
+      expect(captured.single as double, inInclusiveRange(0.0, 1.0));
+    });
+
+    testWidgets(
+        'shows an error SnackBar without popping when ServerProfileError is emitted',
+        (tester) async {
+      whenListen(
+        cubit,
+        Stream.fromIterable(const [
+          ServerProfileLoaded(profiles: [], activeProfile: null),
+          ServerProfileError(message: 'Failed to save server profile'),
+        ]),
+        initialState: const ServerProfileLoaded(
+          profiles: [],
+          activeProfile: null,
+        ),
+      );
+      final router = GoRouter(
+        initialLocation: '/settings/add-profile',
+        routes: [
+          GoRoute(
+            path: '/',
+            builder: (_, _) => const Scaffold(body: SizedBox.shrink()),
+          ),
+          GoRoute(
+            path: '/settings/add-profile',
+            builder: (_, _) => AddProfileScreen(
+              serverProfileCubit: cubit,
+              probeService: probe,
+            ),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(MaterialApp.router(
+        theme: AppTheme.darkTheme,
+        routerConfig: router,
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Failed to save server profile'), findsOneWidget);
+      expect(find.byType(AddProfileScreen), findsOneWidget);
     });
   });
 }

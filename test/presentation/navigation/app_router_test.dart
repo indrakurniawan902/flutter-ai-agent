@@ -18,12 +18,12 @@ void main() {
       expect(appRouter.routerDelegate.navigatorKey, equals(AppGlobals.navigatorKey));
     });
 
-    test('has exactly 10 registered GoRoute entries', () {
+    test('has exactly 11 registered GoRoute entries', () {
       final routes = appRouter.configuration.routes
           .whereType<GoRoute>()
           .toList();
 
-      expect(routes.length, equals(10));
+      expect(routes.length, equals(11));
     });
 
     test('registers all expected route names', () {
@@ -42,6 +42,7 @@ void main() {
         AppRoutes.nrVault,
         AppRoutes.nrPairing,
         AppRoutes.nrServerProfiles,
+        AppRoutes.nrAddProfile,
         AppRoutes.nrActionCenter,
       };
 
@@ -64,6 +65,7 @@ void main() {
         AppRoutes.nrVault,
         AppRoutes.nrPairing,
         AppRoutes.nrServerProfiles,
+        AppRoutes.nrAddProfile,
         AppRoutes.nrActionCenter,
       ];
 
@@ -109,6 +111,9 @@ void main() {
 
       expect(routeByName[AppRoutes.nrActionCenter]?.path, equals('/action-center'));
       expect(routeByName[AppRoutes.nrActionCenter]?.builder, isNotNull);
+
+      expect(routeByName[AppRoutes.nrAddProfile]?.path, equals('/settings/add-profile'));
+      expect(routeByName[AppRoutes.nrAddProfile]?.builder, isNotNull);
     });
   });
 }
