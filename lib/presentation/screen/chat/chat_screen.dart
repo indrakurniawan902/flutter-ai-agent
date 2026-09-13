@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,10 +9,13 @@ import 'package:go_router/go_router.dart';
 
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/chat_attachment.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_mode.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/file_workspace_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_input_service.dart';
@@ -97,6 +101,10 @@ class _ChatScreenState extends State<ChatScreen> {
   GatewayLinkCubit? _linkCubit;
   AgentCubit? _agentCubit;
 
+  CameraVisionServiceBase? _cameraVisionService;
+  FileWorkspaceServiceBase? _fileWorkspaceService;
+  ChatAttachment? _stagedAttachment;
+
   GatewayClientBase? _resolveGatewayClient() =>
       widget.gatewayClient ??
       (sl.isRegistered<GatewayClientBase>()
@@ -145,6 +153,13 @@ class _ChatScreenState extends State<ChatScreen> {
         (sl.isRegistered<GatewayLinkCubit>() ? sl<GatewayLinkCubit>() : null);
     _agentCubit = widget.agentCubit ??
         (sl.isRegistered<AgentCubit>() ? sl<AgentCubit>() : null);
+
+    _cameraVisionService = sl.isRegistered<CameraVisionServiceBase>()
+        ? sl<CameraVisionServiceBase>()
+        : null;
+    _fileWorkspaceService = sl.isRegistered<FileWorkspaceServiceBase>()
+        ? sl<FileWorkspaceServiceBase>()
+        : null;
 
     final client = _resolveGatewayClient();
     _gatewayConnectionState =
@@ -410,6 +425,188 @@ class _ChatScreenState extends State<ChatScreen> {
       });
     }
     await _voiceService?.cancelListening();
+  }
+
+  bool get _hasAttachmentService =>
+      _cameraVisionService != null || _fileWorkspaceService != null;
+
+  static const Map<String, String> _mimeByExtension = {
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'pdf': 'application/pdf',
+    'txt': 'text/plain',
+    'md': 'text/markdown',
+    'json': 'application/json',
+    'csv': 'text/csv',
+    'log': 'text/plain',
+  };
+
+  static String _mimeForFilename(String filename) {
+    final dot = filename.lastIndexOf('.');
+    if (dot < 0 || dot == filename.length - 1) {
+      return 'application/octet-stream';
+    }
+    final ext = filename.substring(dot + 1).toLowerCase();
+    return _mimeByExtension[ext] ?? 'application/octet-stream';
+  }
+
+  static String _basename(String path) {
+    final normalized = path.replaceAll('\\', '/');
+    final idx = normalized.lastIndexOf('/');
+    return idx < 0 ? normalized : normalized.substring(idx + 1);
+  }
+
+  void _showAttachmentSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _setStagedAttachment(ChatAttachment? attachment) {
+    if (!mounted) return;
+    setState(() {
+      _stagedAttachment = attachment;
+    });
+  }
+
+  Future<void> _showAttachmentSheet() async {
+    final camera = _cameraVisionService;
+    final fileService = _fileWorkspaceService;
+    if (camera == null && fileService == null) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF0F172A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        side: BorderSide(color: Color(0xFF334155)),
+      ),
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+        return SafeArea(
+          key: const Key('chat_attachment_sheet'),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (camera != null)
+                  ListTile(
+                    key: const Key('chat_attach_camera'),
+                    leading: Icon(
+                      Icons.photo_camera_outlined,
+                      color: theme.colorScheme.primary,
+                    ),
+                    title: const Text(
+                      'Take Photo',
+                      style: TextStyle(color: Color(0xFFF8FAFC)),
+                    ),
+                    tileColor: const Color(0xFF1E293B),
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      _pickFromCamera(CameraSource.camera);
+                    },
+                  ),
+                if (camera != null)
+                  ListTile(
+                    key: const Key('chat_attach_gallery'),
+                    leading: Icon(
+                      Icons.photo_library_outlined,
+                      color: theme.colorScheme.primary,
+                    ),
+                    title: const Text(
+                      'Choose from Gallery',
+                      style: TextStyle(color: Color(0xFFF8FAFC)),
+                    ),
+                    tileColor: const Color(0xFF1E293B),
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      _pickFromCamera(CameraSource.gallery);
+                    },
+                  ),
+                if (fileService != null)
+                  ListTile(
+                    key: const Key('chat_attach_file'),
+                    leading: Icon(
+                      Icons.folder_open_outlined,
+                      color: theme.colorScheme.primary,
+                    ),
+                    title: const Text(
+                      'Browse Documents',
+                      style: TextStyle(color: Color(0xFFF8FAFC)),
+                    ),
+                    tileColor: const Color(0xFF1E293B),
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      _pickDocument();
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickFromCamera(CameraSource source) async {
+    final camera = _cameraVisionService;
+    if (camera == null) return;
+    final result = await camera.takePhoto(source: source);
+    result.fold(
+      (failure) => _showAttachmentSnackBar(failure.message),
+      (base64Data) {
+        if (base64Data.isEmpty) {
+          _showAttachmentSnackBar('No image captured');
+          return;
+        }
+        _setStagedAttachment(
+          ChatAttachment(
+            filename:
+                source == CameraSource.camera ? 'photo.jpg' : 'gallery.jpg',
+            type: ChatAttachmentType.image,
+            mimeType: 'image/jpeg',
+            base64Data: base64Data,
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickDocument() async {
+    final fileService = _fileWorkspaceService;
+    if (fileService == null) return;
+    final picked = await fileService.pickFile();
+    await picked.fold(
+      (failure) async => _showAttachmentSnackBar(failure.message),
+      (path) async {
+        if (path == null || path.isEmpty) {
+          _showAttachmentSnackBar('No file selected');
+          return;
+        }
+        final read = await fileService.readFile(path);
+        read.fold(
+          (failure) => _showAttachmentSnackBar(failure.message),
+          (content) {
+            _setStagedAttachment(
+              ChatAttachment(
+                filename: _basename(path),
+                type: ChatAttachmentType.file,
+                mimeType: _mimeForFilename(path),
+                base64Data: base64Encode(utf8.encode(content)),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   bool _isAgentBusy(AgentState state) {
@@ -859,7 +1056,13 @@ class _ChatScreenState extends State<ChatScreen> {
     _textController.clear();
 
     if (_mode == ChatMode.direct) {
-      context.read<AgentCubit>().sendMessage(prompt);
+      final attachments = _stagedAttachment == null
+          ? const <ChatAttachment>[]
+          : <ChatAttachment>[_stagedAttachment!];
+      context.read<AgentCubit>().sendMessage(prompt, attachments: attachments);
+      if (_stagedAttachment != null) {
+        setState(() => _stagedAttachment = null);
+      }
     } else {
       final client = _resolveGatewayClient();
       if (client != null && client.state.isConnected) {
@@ -895,7 +1098,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _voiceOutputService?.interrupt();
     _textController.clear();
-    _agentCubit?.sendMessage(prompt);
+    final attachments = _stagedAttachment == null
+        ? const <ChatAttachment>[]
+        : <ChatAttachment>[_stagedAttachment!];
+    _agentCubit?.sendMessage(prompt, attachments: attachments);
+    if (_stagedAttachment != null) {
+      setState(() => _stagedAttachment = null);
+    }
     _scrollToBottom();
   }
 
@@ -1817,99 +2026,174 @@ class _ChatScreenState extends State<ChatScreen> {
           top: BorderSide(color: Color(0xFF334155)),
         ),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: TextField(
-              key: const Key('chat_input_field'),
-              controller: _textController,
-              focusNode: _focusNode,
-              enabled: !isBusy,
-              textCapitalization: TextCapitalization.sentences,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: const Color(0xFFF8FAFC),
+          if (_stagedAttachment != null) ...[
+            _buildAttachmentChip(context),
+            const SizedBox(height: 8),
+          ],
+          Row(
+            children: [
+              IconButton(
+                key: const Key('chat_attach_button'),
+                icon: const Icon(Icons.attach_file),
+                color: theme.colorScheme.primary,
+                disabledColor: const Color(0xFF475569),
+                onPressed: (!isBusy && _hasAttachmentService)
+                    ? _showAttachmentSheet
+                    : null,
               ),
-              decoration: InputDecoration(
-                hintText: isBusy ? 'Agent is responding...' : 'Ask agent...',
-                hintStyle: TextStyle(
-                  color: isBusy
-                      ? const Color(0xFF64748B)
-                      : const Color(0xFF94A3B8),
-                ),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                filled: true,
-                fillColor: const Color(0xFF1E293B),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Color(0xFF334155)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Color(0xFF334155)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: theme.colorScheme.primary),
-                ),
-              ),
-              onSubmitted: (val) {
-                if (_isComposing && !isBusy) {
-                  _handleSubmitted(context, val);
-                }
-              },
-            ),
-          ),
-          const SizedBox(width: 4),
-          Tooltip(
-            message: _isVoiceRecording
-                ? 'Stop voice recording'
-                : 'Voice Input (Tap or hold to speak)',
-            child: GestureDetector(
-              key: const Key('chat_mic_button'),
-              behavior: HitTestBehavior.opaque,
-              onTap: isBusy
-                  ? null
-                  : () => _isVoiceRecording
-                      ? _stopVoiceInputAndSend()
-                      : _startVoiceInput(isHold: false),
-              onLongPressStart: isBusy || _isVoiceRecording
-                  ? null
-                  : (_) => _startVoiceInput(isHold: true),
-              onLongPressEnd: isBusy
-                  ? null
-                  : (_) {
-                      if (_isHoldToSpeak && _isVoiceRecording) {
-                        _stopVoiceInputAndSend();
-                      }
-                    },
-              onLongPressCancel:
-                  isBusy ? null : () => _cancelVoiceInput(),
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Icon(
-                  _isVoiceRecording ? Icons.mic : Icons.mic_rounded,
-                  color: isBusy
-                      ? const Color(0xFF475569)
-                      : (_isVoiceRecording
-                          ? const Color(0xFFEF4444)
-                          : theme.colorScheme.primary),
+              Expanded(
+                child: TextField(
+                  key: const Key('chat_input_field'),
+                  controller: _textController,
+                  focusNode: _focusNode,
+                  enabled: !isBusy,
+                  textCapitalization: TextCapitalization.sentences,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: const Color(0xFFF8FAFC),
+                  ),
+                  decoration: InputDecoration(
+                    hintText:
+                        isBusy ? 'Agent is responding...' : 'Ask agent...',
+                    hintStyle: TextStyle(
+                      color: isBusy
+                          ? const Color(0xFF64748B)
+                          : const Color(0xFF94A3B8),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    filled: true,
+                    fillColor: const Color(0xFF1E293B),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0xFF334155)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0xFF334155)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide:
+                          BorderSide(color: theme.colorScheme.primary),
+                    ),
+                  ),
+                  onSubmitted: (val) {
+                    if (_isComposing && !isBusy) {
+                      _handleSubmitted(context, val);
+                    }
+                  },
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          IconButton(
-            key: const Key('chat_send_button'),
-            icon: const Icon(Icons.send_rounded),
-            color: theme.colorScheme.primary,
-            disabledColor: const Color(0xFF475569),
-            onPressed: (_isComposing && !isBusy)
-                ? () => _handleSubmitted(context, _textController.text)
-                : null,
+              const SizedBox(width: 4),
+              Tooltip(
+                message: _isVoiceRecording
+                    ? 'Stop voice recording'
+                    : 'Voice Input (Tap or hold to speak)',
+                child: GestureDetector(
+                  key: const Key('chat_mic_button'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: isBusy
+                      ? null
+                      : () => _isVoiceRecording
+                          ? _stopVoiceInputAndSend()
+                          : _startVoiceInput(isHold: false),
+                  onLongPressStart: isBusy || _isVoiceRecording
+                      ? null
+                      : (_) => _startVoiceInput(isHold: true),
+                  onLongPressEnd: isBusy
+                      ? null
+                      : (_) {
+                          if (_isHoldToSpeak && _isVoiceRecording) {
+                            _stopVoiceInputAndSend();
+                          }
+                        },
+                  onLongPressCancel:
+                      isBusy ? null : () => _cancelVoiceInput(),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Icon(
+                      _isVoiceRecording ? Icons.mic : Icons.mic_rounded,
+                      color: isBusy
+                          ? const Color(0xFF475569)
+                          : (_isVoiceRecording
+                              ? const Color(0xFFEF4444)
+                              : theme.colorScheme.primary),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                key: const Key('chat_send_button'),
+                icon: const Icon(Icons.send_rounded),
+                color: theme.colorScheme.primary,
+                disabledColor: const Color(0xFF475569),
+                onPressed: (_isComposing && !isBusy)
+                    ? () => _handleSubmitted(context, _textController.text)
+                    : null,
+              ),
+            ],
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildAttachmentChip(BuildContext context) {
+    final attachment = _stagedAttachment!;
+    final isImage = attachment.type == ChatAttachmentType.image;
+    return Container(
+      key: const Key('chat_attachment_chip'),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF334155)),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 40,
+            height: 40,
+            child: isImage
+                ? Image.memory(
+                    _decodeBase64(attachment.base64Data),
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                    errorBuilder: (context, error, stack) =>
+                        const Icon(Icons.image_not_supported_outlined, size: 24),
+                  )
+                : const Icon(Icons.insert_drive_file, size: 24),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              attachment.filename,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Color(0xFFF8FAFC), fontSize: 13),
+            ),
+          ),
+          IconButton(
+            key: const Key('chat_attach_remove'),
+            icon: const Icon(Icons.close, size: 18),
+            color: const Color(0xFF94A3B8),
+            onPressed: () => _setStagedAttachment(null),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Uint8List _decodeBase64(String data) {
+    try {
+      return base64Decode(data);
+    } catch (_) {
+      return Uint8List(0);
+    }
   }
 }
