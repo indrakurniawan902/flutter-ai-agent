@@ -256,6 +256,7 @@ class MainActivity : FlutterActivity() {
                             "display" -> Settings.ACTION_DISPLAY_SETTINGS
                             "sound" -> Settings.ACTION_SOUND_SETTINGS
                             "apps" -> Settings.ACTION_MANAGE_ALL_APPLICATIONS_SETTINGS
+                            "nfc" -> Settings.ACTION_NFC_SETTINGS
                             else -> null
                         }
                         if (action == null) {

@@ -37,6 +37,7 @@ class IntentLauncherServiceImpl implements IntentLauncherServiceBase {
     'display',
     'sound',
     'apps',
+    'nfc',
   };
 
   final UrlLauncherProvider _launcher;
