@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
+import 'package:flutter_ai_agent/domain/repositories/action_center/action_center_repository.dart';
 import 'package:flutter_ai_agent/domain/services/shortcuts/quick_actions_service.dart';
 import 'package:flutter_ai_agent/domain/services/skills/skills_registry_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/contact_launcher_tools.dart';
@@ -10,6 +11,7 @@ import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/skills/cubit/skills_cubit.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hive_ce/hive.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -75,6 +77,27 @@ void main() {
       // plugin) that cannot work under a plain test binding. Its
       // historical `gh<_i625.MobileScannerController>()` bug shape is
       // covered statically by Goal 1B below.
+    }, timeout: const Timeout(Duration(seconds: 30)));
+
+    test('resolves the Action Center graph through its async Hive datasource',
+        () async {
+      final tempDir = await Directory.systemTemp.createTemp('action_center_di');
+      Hive.init(tempDir.path);
+      addTearDown(() async {
+        await Hive.deleteFromDisk();
+        if (tempDir.existsSync()) await tempDir.delete(recursive: true);
+      });
+
+      await initDependencies();
+
+      final repository = await sl.getAsync<ActionCenterRepository>();
+      expect(repository, isA<ActionCenterRepository>());
+
+      // Warm-up lets the async lazy singleton serve synchronous lookups,
+      // which is what ActionCenterScreen relies on.
+      expect(sl<ActionCenterRepository>(), same(repository));
+      final loaded = await repository.getItems();
+      expect(loaded.fold((_) => false, (items) => items.isEmpty), isTrue);
     }, timeout: const Timeout(Duration(seconds: 30)));
   });
 

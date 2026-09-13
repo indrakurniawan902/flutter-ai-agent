@@ -70,6 +70,8 @@ abstract class FileSystemWrapper {
   });
   Future<FileStat> stat(String path);
   Future<int> fileLength(String path);
+  Future<String> getDocumentsDirectory();
+  Future<void> writeFileAsBytes(String path, Uint8List bytes);
   Future<bool> checkPermission();
   Future<bool> requestPermission();
 }
@@ -80,6 +82,7 @@ abstract class FileWorkspaceServiceBase {
     int? maxLines,
     int? offset,
   });
+  Future<Either<Failure, String>> extractPdfText(String path);
   Future<Either<Failure, List<WorkspaceFileEntry>>> listFiles(
     String directoryPath, {
     bool recursive = false,

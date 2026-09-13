@@ -7,6 +7,7 @@ import 'package:injectable/injectable.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_chunk.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/chat_attachment.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
 import 'package:flutter_ai_agent/domain/models/chat/tool_call_request.dart';
@@ -482,7 +483,10 @@ class AgentCubit extends Cubit<AgentState> {
   }
 
   /// Sends a user message and starts the ReAct loop.
-  Future<void> sendMessage(String prompt) async {
+  Future<void> sendMessage(
+    String prompt, {
+    List<ChatAttachment> attachments = const [],
+  }) async {
     if (prompt.trim().isEmpty) return;
     _runGeneration++;
     final int generation = _runGeneration;
@@ -504,7 +508,11 @@ class AgentCubit extends Cubit<AgentState> {
           ..addAll(items);
       });
     }
-    _messages.add(ChatMessage(role: 'user', content: prompt));
+    _messages.add(ChatMessage(
+      role: 'user',
+      content: prompt,
+      attachments: attachments.isEmpty ? null : List.unmodifiable(attachments),
+    ));
     await _persistMessages();
     await _maybeAutoTitle(prompt);
     await _runLoop(0, generation);
@@ -808,7 +816,7 @@ class AgentCubit extends Cubit<AgentState> {
         enabled: progressiveToolPruning,
       );
     }
-    final serializedMessages = _messages.map((m) => m.toJson()).toList();
+    final serializedMessages = _messages.map((m) => m.toWireJson()).toList();
     if (_activeMemories.isNotEmpty) {
       final memoryPrompt =
           'Relevant User & Device Memories:\n${_activeMemories.map((m) => '- ${m.key}: ${m.content}').join('\n')}';

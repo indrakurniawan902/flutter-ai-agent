@@ -374,4 +374,18 @@ Break tasks down into chunks.
           isTrue);
     });
   });
+
+  group('SkillsRegistryService - Bundled Skills', () {
+    test('includes the doc_builder skill with its export tool', () {
+      final bundled = SkillsRegistryService();
+
+      final ids = bundled.getAllSkills().map((s) => s.id).toList();
+      expect(ids, contains('doc_builder'));
+
+      final skill = bundled.getSkill('doc_builder');
+      expect(skill, isNotNull);
+      expect(skill!.isEnabled, isTrue);
+      expect(skill.tools, contains('export_document_pdf'));
+    });
+  });
 }

@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dartz/dartz.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/chat_attachment.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_chunk.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
@@ -1168,6 +1170,97 @@ void main() {
           )).called(1);
 
       await syncCubit.close();
+    });
+  });
+
+  group('AgentCubit staged attachments', () {
+    void stubStream() {
+      when(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: any(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
+          )).thenAnswer((_) async => Right(Stream.fromIterable([
+            const ChatChunk(contentDelta: 'ok', finishReason: 'stop'),
+          ])));
+    }
+
+    List<Map<String, dynamic>> capturedUserMessage() {
+      final captured = verify(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: captureAny(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
+          )).captured;
+      final messages = captured.first as List<Map<String, dynamic>>;
+      return messages
+          .where((m) => m['role'] == 'user')
+          .toList();
+    }
+
+    test('image attachment sends multipart content with image_url part',
+        () async {
+      stubStream();
+      final attachment = ChatAttachment(
+        filename: 'photo.jpg',
+        type: ChatAttachmentType.image,
+        mimeType: 'image/jpeg',
+        base64Data: base64Encode(utf8.encode('imgbytes')),
+      );
+
+      await cubit.sendMessage('hi', attachments: [attachment]);
+
+      final user = capturedUserMessage().last;
+      expect(user['content'], isA<List>());
+      final parts = user['content'] as List;
+      expect(
+        parts.first,
+        equals({'type': 'text', 'text': 'hi'}),
+      );
+      final imagePart = parts.firstWhere(
+        (p) => (p as Map)['type'] == 'image_url',
+      ) as Map;
+      final url =
+          ((imagePart)['image_url'] as Map)['url'] as String;
+      expect(url, startsWith('data:image/jpeg;base64,'));
+    });
+
+    test('no attachment keeps content as plain string', () async {
+      stubStream();
+
+      await cubit.sendMessage('hi');
+
+      final user = capturedUserMessage().last;
+      expect(user['content'], equals('hi'));
+    });
+
+    test('file attachment appends decoded text and has no image_url part',
+        () async {
+      stubStream();
+      final attachment = ChatAttachment(
+        filename: 'notes.txt',
+        type: ChatAttachmentType.file,
+        mimeType: 'text/plain',
+        base64Data: base64Encode(utf8.encode('hello file contents')),
+      );
+
+      await cubit.sendMessage('hi', attachments: [attachment]);
+
+      final user = capturedUserMessage().last;
+      final parts = user['content'] as List;
+      final text =
+          parts.firstWhere((p) => (p as Map)['type'] == 'text')['text']
+              as String;
+      expect(text, contains('[Attached file: notes.txt]'));
+      expect(text, contains('hello file contents'));
+      expect(
+        parts.any((p) => (p as Map)['type'] == 'image_url'),
+        isFalse,
+      );
     });
   });
 }

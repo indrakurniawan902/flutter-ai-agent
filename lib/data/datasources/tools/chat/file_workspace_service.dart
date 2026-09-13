@@ -5,9 +5,11 @@ import 'dart:typed_data';
 import 'package:dartz/dartz.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:injectable/injectable.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/data/datasources/tools/chat/pdf_text_parser.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/file_workspace_service.dart';
 
 class DefaultFilePickerWrapper implements FilePickerWrapper {
@@ -57,6 +59,19 @@ class DefaultFileSystemWrapper implements FileSystemWrapper {
 
   @override
   Future<int> fileLength(String path) => File(path).length();
+
+  @override
+  Future<String> getDocumentsDirectory() async {
+    final dir = await getApplicationDocumentsDirectory();
+    return dir.path;
+  }
+
+  @override
+  Future<void> writeFileAsBytes(String path, Uint8List bytes) async {
+    final file = File(path);
+    await file.parent.create(recursive: true);
+    await file.writeAsBytes(bytes);
+  }
 
   @override
   Future<bool> checkPermission() async => true;
@@ -141,27 +156,50 @@ class FileWorkspaceService implements FileWorkspaceServiceBase {
         return Left(CacheFailure('File not found: $path'));
       }
       final ext = _extensionOf(path).toLowerCase();
-      final bytes = await _fileSystem.readFileAsBytes(path);
-
       if (ext == 'pdf') {
-        try {
-          final document = PdfDocument(inputBytes: bytes);
-          final text = PdfTextExtractor(document).extractText();
-          document.dispose();
-          return Right(_paginate(text, maxLines: maxLines, offset: offset));
-        } catch (e) {
-          return Left(CacheFailure('Failed to extract PDF text: $e'));
-        }
+        final result = await extractPdfText(path);
+        return result.map((text) => _paginate(text, maxLines: maxLines, offset: offset));
       }
-
+      final bytes = await _fileSystem.readFileAsBytes(path);
       if (_binaryExtensions.contains(ext) || _containsNullByte(bytes)) {
         return Left(CacheFailure('Binary file not readable: $path'));
       }
-
       final content = await _fileSystem.readFileAsString(path);
       return Right(_paginate(content, maxLines: maxLines, offset: offset));
     } catch (e) {
       return Left(CacheFailure('Failed to read file: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, String>> extractPdfText(String path) async {
+    try {
+      final exists = await _fileSystem.fileExists(path);
+      if (!exists) {
+        return Left(CacheFailure('File not found: $path'));
+      }
+      final bytes = await _fileSystem.readFileAsBytes(path);
+      try {
+        final document = PdfDocument(inputBytes: bytes);
+        final text = PdfTextExtractor(document).extractText();
+        document.dispose();
+        if (text.trim().isNotEmpty) return Right(text);
+      } catch (_) {
+        // Syncfusion failed, fall through to parser.
+      }
+      final parsed = const PdfTextParser().parse(bytes);
+      if (parsed == null) {
+        return Left(CacheFailure('Not a readable PDF: $path'));
+      }
+      if (parsed.isEncrypted && !parsed.hasText) {
+        return Left(CacheFailure('PDF is encrypted: $path'));
+      }
+      if (!parsed.hasText) {
+        return Left(CacheFailure('No extractable text layer: $path'));
+      }
+      return Right(parsed.text);
+    } catch (e) {
+      return Left(CacheFailure('Failed to extract PDF text: $e'));
     }
   }
 
