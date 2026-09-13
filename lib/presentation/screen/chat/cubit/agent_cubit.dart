@@ -49,6 +49,7 @@ class AgentCubit extends Cubit<AgentState> {
 
   int? activeSessionId;
   final List<Session> _sessions = [];
+  Future<void>? _ensureSessionFuture;
 
   final List<ChatMessage> _messages = [];
   final List<ToolCallDelta> _pendingTurnToolCalls = [];
@@ -226,25 +227,37 @@ class AgentCubit extends Cubit<AgentState> {
   /// [activeSessionId] null on repo failure so persistence falls back to the
   /// profile key.
   Future<void> _ensureSession(String profileId) async {
-    final repo = _chatLocalRepository;
-    if (repo == null) return;
-    final fetched = await _fetchSessions(repo, profileId);
-    if (fetched == null) {
-      activeSessionId = null;
+    final pending = _ensureSessionFuture;
+    if (pending != null) {
+      await pending;
       return;
     }
-    _replaceSessions(fetched);
-    if (fetched.isEmpty) {
-      await _migrateOrSeed(repo, profileId);
-      final again = await _fetchSessions(repo, profileId);
-      if (again != null && again.isNotEmpty) _replaceSessions(again);
-    }
-    activeSessionId = _sessions.isNotEmpty ? _sessions.first.id : null;
-    // Migration / seeding above only touches storage. Pull the newly-active
-    // session back into memory so the next _persistMessages() cannot clobber
-    // migrated history. Guarded on isEmpty to never stomp an in-flight chat.
-    if (_messages.isEmpty && activeSessionId != null) {
-      await _loadSessionMessages(_persistKey);
+    final completer = Completer<void>();
+    _ensureSessionFuture = completer.future;
+    try {
+      final repo = _chatLocalRepository;
+      if (repo == null) return;
+      final fetched = await _fetchSessions(repo, profileId);
+      if (fetched == null) {
+        activeSessionId = null;
+        return;
+      }
+      _replaceSessions(fetched);
+      if (fetched.isEmpty) {
+        await _migrateOrSeed(repo, profileId);
+        final again = await _fetchSessions(repo, profileId);
+        if (again != null && again.isNotEmpty) _replaceSessions(again);
+      }
+      activeSessionId = _sessions.isNotEmpty ? _sessions.first.id : null;
+      // Migration / seeding above only touches storage. Pull the newly-active
+      // session back into memory so the next _persistMessages() cannot clobber
+      // migrated history. Guarded on isEmpty to never stomp an in-flight chat.
+      if (_messages.isEmpty && activeSessionId != null) {
+        await _loadSessionMessages(_persistKey);
+      }
+    } finally {
+      _ensureSessionFuture = null;
+      completer.complete();
     }
   }
 
@@ -274,12 +287,20 @@ class AgentCubit extends Cubit<AgentState> {
       );
       if (created != null) {
         _sessions.insert(0, created);
+        var copied = false;
         try {
-          await repo.saveMessages(created.id.toString(), legacy);
-        } catch (_) {/* ignore */}
-        try {
-          await repo.clearMessages(profileId);
-        } catch (_) {/* ignore */}
+          final saved = await repo.saveMessages(created.id.toString(), legacy);
+          copied = saved.isRight();
+        } catch (_) {
+          copied = false;
+        }
+        // Only drop the legacy profile-keyed thread once the copy definitely
+        // landed. A Left or a throw must preserve history for a later retry.
+        if (copied) {
+          try {
+            await repo.clearMessages(profileId);
+          } catch (_) {/* ignore */}
+        }
       }
     } else {
       final created = await _createSessionRepo(repo, profileId);
@@ -321,6 +342,7 @@ class AgentCubit extends Cubit<AgentState> {
   Future<void> newChat() async {
     final repo = _chatLocalRepository;
     if (repo == null) return;
+    _cancelActiveRun();
     final created = await _createSessionRepo(repo, activeProfileId);
     if (created == null) return;
     _sessions.insert(0, created);
@@ -334,15 +356,24 @@ class AgentCubit extends Cubit<AgentState> {
     final repo = _chatLocalRepository;
     if (repo == null) return;
     if (sessionId == activeSessionId) return;
+    _cancelActiveRun();
+    activeSessionId = sessionId;
+    await _loadSessionMessages(sessionId.toString());
+  }
+
+  /// Tears down any in-flight ReAct run so it cannot stream into, or persist
+  /// to, the session that is about to become active. Single source of truth
+  /// for cancellation, shared by newChat / switchSession / deleteSession.
+  void _cancelActiveRun() {
     _runGeneration++;
     _isCancelled = true;
     if (_streamCompleter != null && !_streamCompleter!.isCompleted) {
       _streamCompleter!.complete();
     }
+    _streamSubscription?.cancel();
+    _streamSubscription = null;
     _pendingTurnToolCalls.clear();
     _pendingToolCall = null;
-    activeSessionId = sessionId;
-    await _loadSessionMessages(sessionId.toString());
   }
 
   /// Emits a fresh [AgentIdle] carrying an incremented [sessionEpoch] so that
@@ -390,6 +421,7 @@ class AgentCubit extends Cubit<AgentState> {
     }
     _sessions.removeWhere((s) => s.id == sessionId);
     if (sessionId == activeSessionId) {
+      _cancelActiveRun();
       if (_sessions.isNotEmpty) {
         activeSessionId = _sessions.first.id;
         await _loadSessionMessages(activeSessionId!.toString());

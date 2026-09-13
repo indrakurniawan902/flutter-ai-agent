@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dartz/dartz.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_chunk.dart';
@@ -119,6 +121,40 @@ void main() {
         ),
       ).called(1);
       verify(() => repo.clearMessages(profileId)).called(1);
+      await cubit.close();
+    });
+
+    test('migration does not clear legacy when copy fails', () async {
+      final legacy = [msg('user', 'precious'), msg('assistant', 'keep me')];
+      when(() => repo.getSessions(any<String>())).thenAnswer(
+        (_) async => const Right<Failure, List<Session>>([]),
+      );
+      when(() => repo.getMessages(profileId)).thenAnswer(
+        (_) async => Right<Failure, List<ChatMessage>>(legacy),
+      );
+      when(() => repo.createSession(any<String>(), any<String?>()))
+          .thenAnswer((_) async => Right<Failure, Session>(session(42)));
+      when(() => repo.saveMessages('42', any<List<ChatMessage>>())).thenAnswer(
+        (_) async => Left<Failure, void>(const CacheFailure('copy boom')),
+      );
+
+      final cubit = buildCubit();
+      await cubit.loadChatHistory();
+
+      verifyNever(() => repo.clearMessages(profileId));
+      expect(cubit.activeSessionId, 42);
+      await cubit.close();
+    });
+
+    test('concurrent bootstrap creates a single session', () async {
+      final cubit = buildCubit();
+      await Future.wait([
+        cubit.loadChatHistory(),
+        cubit.refreshSessions(),
+      ]);
+
+      verify(() => repo.createSession(any<String>(), any<String?>())).called(1);
+      expect(cubit.activeSessionId, isNotNull);
       await cubit.close();
     });
 
@@ -252,6 +288,68 @@ void main() {
       expect(cubit.activeSessionId, 50);
       expect(cubit.messages, isEmpty);
       expect(cubit.state, isA<AgentIdle>());
+      await cubit.close();
+    });
+
+    test('newChat cancels an in-flight run', () async {
+      final controller = StreamController<ChatChunk>();
+      final writes = <String, List<List<ChatMessage>>>{};
+      var nextId = 50;
+
+      when(() => repo.createSession(any<String>(), any<String?>()))
+          .thenAnswer((_) async => Right<Failure, Session>(session(nextId++)));
+      when(() => repo.saveMessages(any<String>(), any<List<ChatMessage>>()))
+          .thenAnswer((inv) async {
+        final key = inv.positionalArguments.first as String;
+        final list = inv.positionalArguments.last as List<ChatMessage>;
+        (writes[key] ??= <List<ChatMessage>>[]).add(List.of(list));
+        return const Right<Failure, void>(null);
+      });
+      when(
+        () => mockLlmRepository.streamCompletion(
+          baseUrl: any(named: 'baseUrl'),
+          model: any(named: 'model'),
+          messages: any(named: 'messages'),
+          tools: any(named: 'tools'),
+          apiKey: any(named: 'apiKey'),
+          temperature: any(named: 'temperature'),
+        ),
+      ).thenAnswer(
+        (_) async => Right<Failure, Stream<ChatChunk>>(controller.stream),
+      );
+
+      final cubit = buildCubit();
+      final sendFuture = cubit.sendMessage('prompt');
+      await pumpEventQueue();
+      expect(cubit.activeSessionId, 50);
+
+      controller.add(ChatChunk(contentDelta: 'early'));
+      await pumpEventQueue();
+
+      await cubit.newChat();
+      expect(cubit.activeSessionId, 51);
+
+      // A late chunk trickles in after the swap, then the old stream finishes.
+      // Without cancellation the abandoned run would resume and persist this
+      // content into the newly active session (51).
+      controller.add(ChatChunk(contentDelta: 'LATE'));
+      await pumpEventQueue();
+      await controller.close();
+      await pumpEventQueue();
+      await pumpEventQueue();
+
+      expect(
+        cubit.messages.any((m) => (m.content ?? '').contains('LATE')),
+        isFalse,
+      );
+      for (final snapshot in (writes['51'] ?? const <List<ChatMessage>>[])) {
+        expect(
+          snapshot.any((m) => (m.content ?? '').contains('LATE')),
+          isFalse,
+        );
+      }
+
+      await sendFuture;
       await cubit.close();
     });
   });
