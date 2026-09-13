@@ -25,6 +25,7 @@ import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_approval_sheet.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_confirmation_card.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/elicitation_approval_sheet.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/header_console_bar.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/live_action_stepper_card.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/permission_rationale_modal.dart';
@@ -93,6 +94,7 @@ class _ChatScreenState extends State<ChatScreen> {
   StreamSubscription<GatewayTextDeltaMessage>? _gatewayTextDeltaSub;
   StreamSubscription<ServerProfileState>? _profileSub;
   String _streamingGatewayDelta = '';
+  String? _elicitationSheetRequestId;
   GatewayRpcCubit? _rpcCubit;
   GatewayLinkCubit? _linkCubit;
   AgentCubit? _agentCubit;
@@ -1056,6 +1058,32 @@ class _ChatScreenState extends State<ChatScreen> {
                 rpcCubit.rejectAction(rpcState.request.id);
               },
             );
+          } else if (rpcState is GatewayRpcElicitationPending) {
+            _elicitationSheetRequestId = rpcState.requestId;
+            ElicitationApprovalSheet.show(
+              context,
+              request: rpcState,
+              onApprove: (pending) {
+                _elicitationSheetRequestId = null;
+                Navigator.of(context).pop();
+                rpcCubit.approveElicitation(pending.requestId);
+              },
+              onReject: (pending) {
+                _elicitationSheetRequestId = null;
+                Navigator.of(context).pop();
+                rpcCubit.rejectElicitation(pending.requestId);
+              },
+            );
+          } else if (rpcState is GatewayRpcElicitationResolved) {
+            if (_elicitationSheetRequestId == rpcState.requestId) {
+              _elicitationSheetRequestId = null;
+              if (mounted) {
+                final navigator = Navigator.of(context);
+                if (navigator.canPop()) {
+                  navigator.pop();
+                }
+              }
+            }
           } else if (rpcState is GatewayRpcError) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(

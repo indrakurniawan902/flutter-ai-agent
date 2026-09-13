@@ -73,6 +73,8 @@ class GatewayClient implements GatewayClientBase {
   final _messageController = StreamController<GatewayMessage>.broadcast();
   final _textDeltaController = StreamController<GatewayTextDeltaMessage>.broadcast();
   final _toolCallRequestController = StreamController<GatewayToolCallRequestMessage>.broadcast();
+  final _elicitationRequestController =
+      StreamController<GatewayElicitationRequestMessage>.broadcast();
 
   GatewaySocket? _socket;
   StreamSubscription<dynamic>? _socketSubscription;
@@ -116,6 +118,11 @@ class GatewayClient implements GatewayClientBase {
   @override
   Stream<GatewayToolCallRequestMessage> get toolCallRequestStream =>
       _toolCallRequestController.stream;
+
+  /// Stream of incoming HITL elicitation requests sent from the server.
+  @override
+  Stream<GatewayElicitationRequestMessage> get elicitationRequestStream =>
+      _elicitationRequestController.stream;
 
   /// Normalizes a user-provided gateway URL into a valid WebSocket [Uri].
   ///
@@ -256,6 +263,12 @@ class GatewayClient implements GatewayClientBase {
         } else {
           _toolCallRequestController.add(message);
         }
+      } else if (message is GatewayElicitationRequestMessage) {
+        if (!_elicitationRequestController.hasListener) {
+          sendElicitationResponse(requestId: message.requestId, approved: false);
+        } else {
+          _elicitationRequestController.add(message);
+        }
       }
 
       _messageController.add(message);
@@ -383,6 +396,20 @@ class GatewayClient implements GatewayClientBase {
     ));
   }
 
+  /// Sends a HITL elicitation decision frame back to Hermes Gateway.
+  @override
+  void sendElicitationResponse({
+    required String requestId,
+    required bool approved,
+    bool biometricVerified = false,
+  }) {
+    send(GatewayElicitationResponseMessage(
+      requestId: requestId,
+      status: approved ? 'approved' : 'rejected',
+      biometricVerified: biometricVerified,
+    ));
+  }
+
   /// Sends a chat message frame across the gateway connection.
   @override
   void sendChatMessage(
@@ -468,5 +495,6 @@ class GatewayClient implements GatewayClientBase {
     await _messageController.close();
     await _textDeltaController.close();
     await _toolCallRequestController.close();
+    await _elicitationRequestController.close();
   }
 }

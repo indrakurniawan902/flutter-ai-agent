@@ -17,6 +17,8 @@ void main() {
   late MockGatewayClient mockGatewayClient;
   late MockToolRegistry mockToolRegistry;
   late StreamController<GatewayToolCallRequestMessage> toolRequestController;
+  late StreamController<GatewayElicitationRequestMessage>
+      elicitationController;
   late GatewayRpcCubit cubit;
 
   setUpAll(() {
@@ -33,20 +35,30 @@ void main() {
     mockToolRegistry = MockToolRegistry();
     toolRequestController =
         StreamController<GatewayToolCallRequestMessage>.broadcast();
+    elicitationController =
+        StreamController<GatewayElicitationRequestMessage>.broadcast();
 
     when(() => mockGatewayClient.toolCallRequestStream)
         .thenAnswer((_) => toolRequestController.stream);
+    when(() => mockGatewayClient.elicitationRequestStream)
+        .thenAnswer((_) => elicitationController.stream);
 
     when(() => mockGatewayClient.sendToolCallResponse(
           callId: any(named: 'callId'),
           result: any(named: 'result'),
           error: any(named: 'error'),
         )).thenReturn(null);
+    when(() => mockGatewayClient.sendElicitationResponse(
+          requestId: any(named: 'requestId'),
+          approved: any(named: 'approved'),
+          biometricVerified: any(named: 'biometricVerified'),
+        )).thenReturn(null);
   });
 
   tearDown(() async {
     await cubit.close();
     await toolRequestController.close();
+    await elicitationController.close();
   });
 
   group('GatewayRpcCubit - Initialization & Lifecycle', () {
@@ -601,6 +613,162 @@ void main() {
       }
 
       await approvalSub.cancel();
+    });
+  });
+
+  group('GatewayRpcCubit - Remote HITL Elicitation', () {
+    void createCubit({Duration? timeout}) {
+      cubit = GatewayRpcCubit(
+        gatewayClient: mockGatewayClient,
+        toolRegistry: mockToolRegistry,
+        autoStart: true,
+        elicitationTimeout: timeout ?? const Duration(seconds: 120),
+      );
+    }
+
+    void addElicitation(String id, {String risk = 'high'}) {
+      elicitationController.add(GatewayElicitationRequestMessage(
+        requestId: id,
+        title: 'Fund transfer',
+        description: 'Send 500 USDT to 0xdead',
+        riskLevel: risk,
+        fields: const [
+          {'name': 'amount', 'value': '500'},
+        ],
+      ));
+    }
+
+    test('incoming elicitation_request emits GatewayRpcElicitationPending',
+        () async {
+      createCubit();
+
+      addElicitation('elicit-1', risk: 'medium');
+      await pumpEventQueue();
+
+      final state = cubit.state;
+      expect(state, isA<GatewayRpcElicitationPending>());
+      final pending = state as GatewayRpcElicitationPending;
+      expect(pending.requestId, 'elicit-1');
+      expect(pending.title, 'Fund transfer');
+      expect(pending.description, 'Send 500 USDT to 0xdead');
+      expect(pending.riskLevel, 'medium');
+      expect(pending.expiresAfter, const Duration(seconds: 120));
+    });
+
+    test('approveElicitation dispatches approved frame with biometric flag',
+        () async {
+      createCubit();
+      addElicitation('elicit-2');
+      await pumpEventQueue();
+
+      await cubit.approveElicitation('elicit-2', biometricVerified: true);
+
+      verify(() => mockGatewayClient.sendElicitationResponse(
+            requestId: 'elicit-2',
+            approved: true,
+            biometricVerified: true,
+          )).called(1);
+      final state = cubit.state;
+      expect(state, isA<GatewayRpcElicitationResolved>());
+      expect((state as GatewayRpcElicitationResolved).approved, isTrue);
+    });
+
+    test('rejectElicitation dispatches rejected frame', () async {
+      createCubit();
+      addElicitation('elicit-3');
+      await pumpEventQueue();
+
+      await cubit.rejectElicitation('elicit-3');
+
+      verify(() => mockGatewayClient.sendElicitationResponse(
+            requestId: 'elicit-3',
+            approved: false,
+            biometricVerified: false,
+          )).called(1);
+      expect(cubit.state, isA<GatewayRpcElicitationResolved>());
+    });
+
+    test('resolving twice dispatches only one frame', () async {
+      createCubit();
+      addElicitation('elicit-dup');
+      await pumpEventQueue();
+
+      await cubit.approveElicitation('elicit-dup');
+      await cubit.rejectElicitation('elicit-dup');
+
+      verify(() => mockGatewayClient.sendElicitationResponse(
+            requestId: 'elicit-dup',
+            approved: any(named: 'approved'),
+            biometricVerified: any(named: 'biometricVerified'),
+          )).called(1);
+    });
+
+    test('timeout expiry auto-rejects and dispatches response frame',
+        () async {
+      createCubit(timeout: const Duration(milliseconds: 40));
+      addElicitation('elicit-to');
+      await pumpEventQueue();
+      expect(cubit.state, isA<GatewayRpcElicitationPending>());
+
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+
+      verify(() => mockGatewayClient.sendElicitationResponse(
+            requestId: 'elicit-to',
+            approved: false,
+            biometricVerified: false,
+          )).called(1);
+      final state = cubit.state;
+      expect(state, isA<GatewayRpcElicitationResolved>());
+      expect((state as GatewayRpcElicitationResolved).approved, isFalse);
+    });
+
+    test('close resolves pending elicitations as rejected without frames',
+        () async {
+      createCubit();
+      addElicitation('elicit-close');
+      await pumpEventQueue();
+
+      await cubit.close();
+
+      verifyNever(() => mockGatewayClient.sendElicitationResponse(
+            requestId: any(named: 'requestId'),
+            approved: any(named: 'approved'),
+            biometricVerified: any(named: 'biometricVerified'),
+          ));
+      expect(cubit.isClosed, isTrue);
+    });
+
+    test('a dead socket never throws while dispatching a decision', () async {
+      createCubit();
+      when(() => mockGatewayClient.sendElicitationResponse(
+            requestId: any(named: 'requestId'),
+            approved: any(named: 'approved'),
+            biometricVerified: any(named: 'biometricVerified'),
+          )).thenThrow(StateError('socket closed'));
+      addElicitation('elicit-dead');
+      await pumpEventQueue();
+
+      await cubit.rejectElicitation('elicit-dead');
+
+      expect(cubit.state, isA<GatewayRpcElicitationResolved>());
+    });
+
+    test('disconnect rejects pending elicitations and sends frames',
+        () async {
+      createCubit();
+      addElicitation('elicit-disc');
+      await pumpEventQueue();
+
+      cubit.syncWithConnectionState(GatewayConnectionState.disconnected);
+      await pumpEventQueue();
+
+      verify(() => mockGatewayClient.sendElicitationResponse(
+            requestId: 'elicit-disc',
+            approved: false,
+            biometricVerified: false,
+          )).called(1);
+      expect(cubit.state, isA<GatewayRpcElicitationResolved>());
+      expect(cubit.isListening, isFalse);
     });
   });
 }
