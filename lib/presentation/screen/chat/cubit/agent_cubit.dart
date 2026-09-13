@@ -126,6 +126,14 @@ class AgentCubit extends Cubit<AgentState> {
   /// Chat sessions for the active profile, newest-first as returned by repo.
   List<Session> get sessions => List.unmodifiable(_sessions);
 
+  /// Cached title of the active session, or 'New chat' when none.
+  String get activeSessionTitle {
+    final id = activeSessionId;
+    if (id == null) return _untitledSessionTitle;
+    final idx = _sessions.indexWhere((s) => s.id == id);
+    return idx == -1 ? _untitledSessionTitle : _sessions[idx].title;
+  }
+
   /// Current pending tool call awaiting approval, if any.
   ToolCallRequest? get pendingToolCall => _pendingToolCall;
 

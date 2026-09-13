@@ -40,6 +40,14 @@ void main() {
     stateController = StreamController<AgentState>.broadcast();
 
     when(() => mockAgentCubit.state).thenReturn(const AgentIdle());
+    when(() => mockAgentCubit.sessions).thenReturn(const []);
+    when(() => mockAgentCubit.activeSessionId).thenReturn(null);
+    when(() => mockAgentCubit.activeSessionTitle).thenReturn('New chat');
+    when(() => mockAgentCubit.refreshSessions()).thenAnswer((_) async {});
+    when(() => mockAgentCubit.newChat()).thenAnswer((_) async {});
+    when(() => mockAgentCubit.switchSession(any())).thenAnswer((_) async {});
+    when(() => mockAgentCubit.renameSession(any(), any())).thenAnswer((_) async {});
+    when(() => mockAgentCubit.deleteSession(any())).thenAnswer((_) async {});
     when(() => mockAgentCubit.messages).thenReturn([]);
     when(() => mockAgentCubit.stream).thenAnswer((_) => stateController.stream);
     when(() => mockAgentCubit.stop()).thenAnswer((_) async {});

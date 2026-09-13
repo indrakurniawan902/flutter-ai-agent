@@ -30,7 +30,9 @@ import 'package:flutter_ai_agent/presentation/screen/chat/widgets/live_action_st
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/permission_rationale_modal.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/reasoning_card.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/summary_card.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/session_drawer.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/voice_waveform_widget.dart';
+import 'package:flutter_ai_agent/utils/hermes_theme.dart';
 import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_link_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_rpc_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/pairing/qr_scanner_screen.dart';
@@ -74,6 +76,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _isComposing = false;
 
   VoiceInputServiceBase? _voiceService;
@@ -1073,15 +1076,26 @@ class _ChatScreenState extends State<ChatScreen> {
     final scaffold = Builder(
       builder: (context) {
         return Scaffold(
+          key: _scaffoldKey,
+          drawer: const SessionDrawer(),
           appBar: AppBar(
             toolbarHeight: 60,
             titleSpacing: 8.0,
+            leading: IconButton(
+              key: const Key('chat_sessions_button'),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              visualDensity: VisualDensity.compact,
+              iconSize: 22,
+              icon: const Icon(Icons.chat_bubble_outline),
+              tooltip: 'Chats',
+              onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+            ),
             title: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(6),
@@ -1102,7 +1116,28 @@ class _ChatScreenState extends State<ChatScreen> {
                       child: Text(
                         'Flames',
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 17),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 17,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: BlocBuilder<AgentCubit, AgentState>(
+                        builder: (context, _) {
+                          final title =
+                              context.read<AgentCubit>().activeSessionTitle;
+                          return Text(
+                            '· $title',
+                            key: const Key('chat_active_session_title'),
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: HermesColors.inkMuted,
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ],
