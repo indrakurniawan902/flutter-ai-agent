@@ -49,6 +49,8 @@ void main() {
     when(() => mockAgentCubit.renameSession(any(), any()))
         .thenAnswer((_) async {});
     when(() => mockAgentCubit.deleteSession(any())).thenAnswer((_) async {});
+    when(() => mockCameraService.recoverLostCapture())
+        .thenAnswer((_) async => const Right(null));
 
     when(() => mockSettingsCubit.state).thenReturn(
       const SettingsLoaded(
@@ -273,6 +275,21 @@ void main() {
             attachments: any(named: 'attachments'),
           ),
         );
+      },
+    );
+
+    testWidgets(
+      'surfaces recovered lost-data file as staged attachment on init',
+      (tester) async {
+        when(() => mockCameraService.recoverLostCapture())
+            .thenAnswer((_) async => Right(galleryBase64));
+
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('chat_attachment_chip')), findsOneWidget);
+        expect(find.text('photo.jpg'), findsOneWidget);
+        verify(() => mockCameraService.recoverLostCapture()).called(1);
       },
     );
   });

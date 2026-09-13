@@ -161,6 +161,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _cameraVisionService = sl.isRegistered<CameraVisionServiceBase>()
         ? sl<CameraVisionServiceBase>()
         : null;
+    _recoverLostCameraCapture();
     _fileWorkspaceService = sl.isRegistered<FileWorkspaceServiceBase>()
         ? sl<FileWorkspaceServiceBase>()
         : null;
@@ -504,6 +505,29 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() {
       _stagedAttachment = attachment;
     });
+  }
+
+  Future<void> _recoverLostCameraCapture() async {
+    final camera = _cameraVisionService;
+    if (camera == null) return;
+    try {
+      final result = await camera.recoverLostCapture();
+      result.fold(
+        (_) => null,
+        (base64Data) {
+          if (base64Data != null && base64Data.isNotEmpty && mounted) {
+            _setStagedAttachment(
+              ChatAttachment(
+                filename: 'photo.jpg',
+                type: ChatAttachmentType.image,
+                mimeType: 'image/jpeg',
+                base64Data: base64Data,
+              ),
+            );
+          }
+        },
+      );
+    } catch (_) {}
   }
 
   Future<void> _showAttachmentSheet() async {
