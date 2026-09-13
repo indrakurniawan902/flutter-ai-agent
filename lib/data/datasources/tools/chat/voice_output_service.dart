@@ -396,6 +396,7 @@ class VoiceOutputService implements VoiceOutputServiceBase {
   }
 
   /// Loads persisted engine mode + voice id. Never throws.
+  @override
   Future<void> loadPreferences() async {
     try {
       String? modeStr;

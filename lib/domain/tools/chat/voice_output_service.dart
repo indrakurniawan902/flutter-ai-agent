@@ -55,6 +55,9 @@ abstract class VoiceOutputServiceBase {
   /// Catalog voice id used when [preferredEngineMode] is piper.
   String get piperVoiceId => 'id_ID-news_tts-medium';
   void setPiperVoiceId(String voiceId) {}
+
+  /// Reloads persisted engine/voice preference. Never throws.
+  Future<void> loadPreferences() async {}
 }
 
 enum TtsEngineMode { system, piper }
