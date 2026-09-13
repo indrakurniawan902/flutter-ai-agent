@@ -1,11 +1,9 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_rpc_cubit.dart';
 
 /// Modal bottom sheet for remote HITL elicitation requests from Hermes.
 ///
-/// Displays the server-supplied title, description and risk badge, plus the
+/// Displays the server-supplied title, description, risk badge and the
 /// formatted request fields. The user taps Approve to let the gated action
 /// proceed, or Reject (or back) to decline.
 class ElicitationApprovalSheet extends StatelessWidget {
@@ -15,6 +13,9 @@ class ElicitationApprovalSheet extends StatelessWidget {
     required this.onApprove,
     required this.onReject,
   });
+
+  static const int _maxVisibleFields = 10;
+  static const int _maxFieldValueLength = 200;
 
   final GatewayRpcElicitationPending request;
   final void Function(GatewayRpcElicitationPending) onApprove;
@@ -60,6 +61,71 @@ class ElicitationApprovalSheet extends StatelessWidget {
       default:
         return '${request.riskLevel.toUpperCase()} RISK';
     }
+  }
+
+  String _fieldName(Map<String, dynamic> entry) {
+    final name = entry['name'];
+    if (name != null && name.toString().trim().isNotEmpty) {
+      return name.toString();
+    }
+    for (final key in entry.keys) {
+      if (key != 'value') return key;
+    }
+    return 'field';
+  }
+
+  String _fieldValue(Map<String, dynamic> entry) {
+    final value = (entry['value'] ?? entry.toString()).toString();
+    if (value.length <= _maxFieldValueLength) return value;
+    return '${value.substring(0, _maxFieldValueLength)}…';
+  }
+
+  List<Widget> _buildFields(ThemeData theme) {
+    if (request.fields.isEmpty) return const [];
+    final visible = request.fields.take(_maxVisibleFields).toList();
+    return [
+      const SizedBox(height: 12),
+      Text(
+        'Request Fields',
+        key: const Key('elicitation_fields_header'),
+        style: theme.textTheme.labelMedium?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+          letterSpacing: 1,
+        ),
+      ),
+      const SizedBox(height: 8),
+      for (var i = 0; i < visible.length; i++)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Text.rich(
+            key: Key('elicitation_field_row_$i'),
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: '${_fieldName(visible[i])}: ',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                TextSpan(
+                  text: _fieldValue(visible[i]),
+                  style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+            style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+          ),
+        ),
+      if (request.fields.length > visible.length)
+        Text(
+          '+${request.fields.length - visible.length} more',
+          key: const Key('elicitation_fields_overflow'),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+    ];
   }
 
   @override
@@ -125,6 +191,8 @@ class ElicitationApprovalSheet extends StatelessWidget {
                       const SizedBox(height: 16),
                       Text(
                         request.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleMedium?.copyWith(
                           color: theme.colorScheme.primary,
                         ),
@@ -132,32 +200,13 @@ class ElicitationApprovalSheet extends StatelessWidget {
                       const SizedBox(height: 8),
                       Text(
                         request.description,
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surface,
-                          border: Border.all(
-                            color: theme.colorScheme.outlineVariant,
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          const JsonEncoder.withIndent('  ').convert({
-                            'request_id': request.requestId,
-                            'risk_level': request.riskLevel,
-                            'expires_after': request.expiresAfter.toString(),
-                          }),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontFamily: 'monospace',
-                            color: theme.colorScheme.onSurface,
-                          ),
-                        ),
-                      ),
+                      ..._buildFields(theme),
                     ],
                   ),
                 ),

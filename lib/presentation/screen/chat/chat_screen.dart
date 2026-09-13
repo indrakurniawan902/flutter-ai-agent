@@ -94,7 +94,7 @@ class _ChatScreenState extends State<ChatScreen> {
   StreamSubscription<GatewayTextDeltaMessage>? _gatewayTextDeltaSub;
   StreamSubscription<ServerProfileState>? _profileSub;
   String _streamingGatewayDelta = '';
-  String? _elicitationSheetRequestId;
+  final List<String> _openElicitationSheets = [];
   GatewayRpcCubit? _rpcCubit;
   GatewayLinkCubit? _linkCubit;
   AgentCubit? _agentCubit;
@@ -287,6 +287,14 @@ class _ChatScreenState extends State<ChatScreen> {
     _gatewayMessageSub?.cancel();
     _gatewayTextDeltaSub?.cancel();
     _profileSub?.cancel();
+    for (final requestId in _openElicitationSheets) {
+      try {
+        _rpcCubit?.rejectElicitation(requestId);
+      } catch (_) {
+        // Closing the screen must never throw because of a dead gateway link.
+      }
+    }
+    _openElicitationSheets.clear();
     _textController.removeListener(_onTextChanged);
     _textController.dispose();
     _scrollController.dispose();
@@ -1059,25 +1067,32 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             );
           } else if (rpcState is GatewayRpcElicitationPending) {
-            _elicitationSheetRequestId = rpcState.requestId;
+            if (!_openElicitationSheets.contains(rpcState.requestId)) {
+              _openElicitationSheets.add(rpcState.requestId);
+            }
             ElicitationApprovalSheet.show(
               context,
               request: rpcState,
               onApprove: (pending) {
-                _elicitationSheetRequestId = null;
+                _openElicitationSheets.remove(pending.requestId);
                 Navigator.of(context).pop();
                 rpcCubit.approveElicitation(pending.requestId);
               },
               onReject: (pending) {
-                _elicitationSheetRequestId = null;
+                _openElicitationSheets.remove(pending.requestId);
                 Navigator.of(context).pop();
                 rpcCubit.rejectElicitation(pending.requestId);
               },
             );
           } else if (rpcState is GatewayRpcElicitationResolved) {
-            if (_elicitationSheetRequestId == rpcState.requestId) {
-              _elicitationSheetRequestId = null;
-              if (mounted) {
+            final index =
+                _openElicitationSheets.lastIndexOf(rpcState.requestId);
+            if (index != -1) {
+              _openElicitationSheets.removeAt(index);
+              // Only the topmost sheet may be auto-popped; popping anything
+              // else would dismiss an unrelated pending request.
+              final isTopmost = index == _openElicitationSheets.length;
+              if (isTopmost && mounted) {
                 final navigator = Navigator.of(context);
                 if (navigator.canPop()) {
                   navigator.pop();

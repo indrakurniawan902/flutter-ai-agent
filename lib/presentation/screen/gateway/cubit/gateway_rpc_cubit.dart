@@ -106,6 +106,11 @@ class GatewayRpcCubit extends Cubit<GatewayRpcState> {
   /// Aligns the RPC listener with the gateway connection lifecycle: listening
   /// whenever the link is live (connected/connecting/reconnecting) and stopped
   /// only when it is fully disconnected.
+  ///
+  /// On disconnect every pending elicitation is rejected locally and a rejection
+  /// frame is *attempted*. The socket is already gone by then, so delivery is
+  /// best effort only: the server still relies on its own timeout if the frame
+  /// never lands.
   void syncWithConnectionState(GatewayConnectionState state) {
     if (state.isDisconnected) {
       stopListening();
@@ -181,15 +186,26 @@ class GatewayRpcCubit extends Cubit<GatewayRpcState> {
   /// Handles incoming remote HITL elicitation request frame from gateway.
   void _handleIncomingElicitation(GatewayElicitationRequestMessage request) {
     if (isClosed) return;
-    _pendingElicitations[request.requestId] = Completer<ElicitationDecision>();
-    _elicitationTimers[request.requestId] =
-        Timer(_elicitationTimeout, () => rejectElicitation(request.requestId));
+    final requestId = request.requestId.trim();
+    // No id means no way to address the response frame back: drop the request.
+    if (requestId.isEmpty) return;
+
+    if (_pendingElicitations.containsKey(requestId)) {
+      // Server reused a live id. Resolve the old request first so its
+      // Completer and Timer are never silently overwritten.
+      _resolveElicitation(requestId, outcome: ElicitationOutcome.rejected);
+    }
+
+    _pendingElicitations[requestId] = Completer<ElicitationDecision>();
+    _elicitationTimers[requestId] =
+        Timer(_elicitationTimeout, () => rejectElicitation(requestId));
 
     emit(GatewayRpcElicitationPending(
-      requestId: request.requestId,
+      requestId: requestId,
       title: request.title,
       description: request.description,
       riskLevel: request.riskLevel,
+      fields: request.fields,
       expiresAfter: _elicitationTimeout,
     ));
   }
