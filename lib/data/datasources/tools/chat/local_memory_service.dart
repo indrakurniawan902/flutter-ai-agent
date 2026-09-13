@@ -3,7 +3,10 @@ import 'dart:io';
 
 import 'package:dartz/dartz.dart';
 import 'package:injectable/injectable.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart'
+    show databaseFactoryFfi, sqfliteFfiInit;
 
 import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/memory_item.dart';
@@ -31,15 +34,20 @@ class LocalMemoryService implements LocalMemoryServiceBase {
   factory LocalMemoryService.create() => LocalMemoryService();
 
   Future<Database> get database async {
-    if (_database != null && _database!.isOpen) {
-      return _database!;
+    final existing = _database;
+    if (existing != null) {
+      if (!existing.isOpen) {
+        throw StateError('database is closed');
+      }
+      return existing;
     }
 
     DatabaseFactory factory;
     if (_databaseFactory != null) {
       factory = _databaseFactory;
     } else {
-      if (Platform.isAndroid) {
+      if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
+        sqfliteFfiInit();
         databaseFactory = databaseFactoryFfi;
       }
       factory = databaseFactory;
@@ -49,8 +57,15 @@ class LocalMemoryService implements LocalMemoryServiceBase {
     if (configuredPath != null) {
       path = configuredPath;
     } else {
-      final dir = await factory.getDatabasesPath();
+      final dir = await _resolveDatabaseDirectory(factory);
       path = '$dir/$databaseFileName';
+    }
+
+    if (path != inMemoryDatabasePath && path != ':memory:') {
+      final parent = Directory(File(path).parent.path);
+      if (parent.path.isNotEmpty && !await parent.exists()) {
+        await parent.create(recursive: true);
+      }
     }
 
     _database = await factory.openDatabase(
@@ -64,6 +79,35 @@ class LocalMemoryService implements LocalMemoryServiceBase {
     await _probeFtsSupport(_database!);
 
     return _database!;
+  }
+
+  static Future<String> _resolveDatabaseDirectory(
+      DatabaseFactory factory) async {
+    String dir;
+    if (Platform.isAndroid) {
+      try {
+        dir = await databaseFactorySqflitePlugin.getDatabasesPath();
+      } catch (_) {
+        try {
+          dir = (await getApplicationDocumentsDirectory()).path;
+        } catch (_) {
+          dir = await factory.getDatabasesPath();
+        }
+      }
+    } else if (Platform.isIOS || Platform.isMacOS) {
+      try {
+        dir = (await getApplicationDocumentsDirectory()).path;
+      } catch (_) {
+        dir = await factory.getDatabasesPath();
+      }
+    } else {
+      dir = await factory.getDatabasesPath();
+    }
+    final dirObj = Directory(dir);
+    if (!await dirObj.exists()) {
+      await dirObj.create(recursive: true);
+    }
+    return dir;
   }
 
   Future<bool> _probeFtsSupport(Database db) async {
@@ -124,8 +168,6 @@ class LocalMemoryService implements LocalMemoryServiceBase {
         END;
       ''');
     } catch (_) {
-      // FTS5 unavailable on this platform SQLite; skip FTS objects.
-      // Searches degrade to the LIKE fallback path.
     }
 
     await db.execute(

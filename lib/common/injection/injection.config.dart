@@ -11,8 +11,6 @@
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 
 import 'package:dio/dio.dart' as _i361;
-import 'package:flutter_ai_agent/data/datasources/skills/doc_builder_skill.dart'
-    as _i701;
 import 'package:flutter_ai_agent/common/injection/modules.dart' as _i225;
 import 'package:flutter_ai_agent/data/datasources/local/action_center/action_center_datasource.dart'
     as _i561;
@@ -28,6 +26,8 @@ import 'package:flutter_ai_agent/data/datasources/remote/gateway/gateway_client.
     as _i122;
 import 'package:flutter_ai_agent/data/datasources/remote/pairing/scanner_controller_wrapper.dart'
     as _i319;
+import 'package:flutter_ai_agent/data/datasources/skills/doc_builder_skill.dart'
+    as _i701;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/ambient_trigger_service.dart'
     as _i315;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/background_service.dart'
