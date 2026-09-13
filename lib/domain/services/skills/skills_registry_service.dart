@@ -1,6 +1,7 @@
 import 'package:injectable/injectable.dart';
 import 'package:yaml/yaml.dart';
 
+import 'package:flutter_ai_agent/domain/entities/skills/doc_builder_skill_descriptor.dart';
 import 'package:flutter_ai_agent/domain/entities/skills/skill.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 
@@ -521,5 +522,7 @@ class SkillsRegistryService {
       instructions:
           'Search contacts by name, format phone numbers with country code before launching chats, and validate URLs before opening.',
     ));
+
+    registerSkill(docBuilderSkillDescriptor);
   }
 }

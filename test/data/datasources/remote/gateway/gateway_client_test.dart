@@ -409,6 +409,80 @@ void main() {
 
       await sub.cancel();
     });
+
+    test('routes elicitation_request to elicitationRequestStream when listener present',
+        () async {
+      await client.connect('ws://localhost:18789/ws', token: 'token123');
+      socketStreamController.add(jsonEncode({'type': 'auth_success'}));
+      await pumpEventQueue();
+
+      final messages = <GatewayMessage>[];
+      final elicitations = <GatewayElicitationRequestMessage>[];
+
+      final sub1 = client.messageStream.listen(messages.add);
+      final sub2 = client.elicitationRequestStream.listen(elicitations.add);
+
+      sentFrames.clear();
+
+      socketStreamController.add(jsonEncode({
+        'type': 'elicitation_request',
+        'request_id': 'elicit_live',
+        'title': 'Approve?',
+        'risk_level': 'medium',
+        'fields': [
+          {'name': 'ok'},
+        ],
+      }));
+
+      await pumpEventQueue();
+
+      expect(elicitations.length, 1);
+      expect(elicitations.first.requestId, 'elicit_live');
+      expect(elicitations.first.riskLevel, 'medium');
+
+      expect(messages.length, 1);
+      expect(messages.first, isA<GatewayElicitationRequestMessage>());
+
+      // Listener present: no auto-response emitted.
+      expect(sentFrames, isEmpty);
+
+      await sub1.cancel();
+      await sub2.cancel();
+    });
+
+    test(
+        'auto-rejects elicitation_request when elicitationRequestStream has no listener',
+        () async {
+      await client.connect('ws://localhost:18789/ws', token: 'token123');
+      socketStreamController.add(jsonEncode({'type': 'auth_success'}));
+      await pumpEventQueue();
+
+      // Observe the raw message stream only; leave elicitationRequestStream unlistened.
+      final messages = <GatewayMessage>[];
+      final sub = client.messageStream.listen(messages.add);
+
+      sentFrames.clear();
+
+      socketStreamController.add(jsonEncode({
+        'type': 'elicitation_request',
+        'request_id': 'elicit_orphan',
+        'title': 'Approve?',
+      }));
+
+      await pumpEventQueue();
+
+      expect(messages.length, 1);
+      expect(messages.first, isA<GatewayElicitationRequestMessage>());
+
+      expect(sentFrames.length, 1);
+      final frame = jsonDecode(sentFrames.first) as Map<String, dynamic>;
+      expect(frame['type'], 'elicitation_response');
+      expect(frame['request_id'], 'elicit_orphan');
+      expect(frame['status'], 'rejected');
+      expect(frame['biometric_verified'], false);
+
+      await sub.cancel();
+    });
   });
 
   group('GatewayClient - Outgoing Frames', () {

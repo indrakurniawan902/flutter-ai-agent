@@ -53,6 +53,12 @@ abstract class GatewayMessage extends Equatable {
       case 'tool_result':
         return GatewayToolCallResponseMessage.fromJson(json);
 
+      case 'elicitation_request':
+        return GatewayElicitationRequestMessage.fromJson(json);
+
+      case 'elicitation_response':
+        return GatewayElicitationResponseMessage.fromJson(json);
+
       case 'chat_message':
       case 'message':
         return GatewayChatMessage.fromJson(json);
@@ -450,4 +456,100 @@ class GatewayToolManifestMessage extends GatewayMessage {
 
   @override
   List<Object?> get props => [type, version, deviceId, tools];
+}
+
+/// Remote HITL elicitation request sent by Hermes to gate a risky action.
+///
+/// [riskLevel] is normalized to lowercase. A missing/null value falls back to
+/// `'high'`; unknown values are preserved as-is. [fields] is parsed
+/// defensively, skipping non-Map entries, mirroring
+/// [GatewayToolManifestMessage.tools].
+class GatewayElicitationRequestMessage extends GatewayMessage {
+  final String requestId;
+  final String title;
+  final String description;
+  final String riskLevel;
+  final List<Map<String, dynamic>> fields;
+
+  const GatewayElicitationRequestMessage({
+    required this.requestId,
+    this.title = '',
+    this.description = '',
+    this.riskLevel = 'high',
+    this.fields = const [],
+  }) : super('elicitation_request');
+
+  factory GatewayElicitationRequestMessage.fromJson(Map<String, dynamic> json) {
+    final requestId =
+        (json['request_id'] ?? json['requestId'] ?? json['id'] ?? '').toString();
+    final rawRisk = json['risk_level'] ?? json['riskLevel'];
+    final rawFields = json['fields'];
+    final fields = <Map<String, dynamic>>[];
+    if (rawFields is List) {
+      for (final field in rawFields) {
+        if (field is Map) {
+          fields.add(Map<String, dynamic>.from(field));
+        }
+      }
+    }
+    return GatewayElicitationRequestMessage(
+      requestId: requestId,
+      title: (json['title'] ?? '').toString(),
+      description: (json['description'] ?? '').toString(),
+      riskLevel: rawRisk == null ? 'high' : rawRisk.toString().toLowerCase(),
+      fields: fields,
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': type,
+        'request_id': requestId,
+        'title': title,
+        'description': description,
+        'risk_level': riskLevel,
+        'fields': fields,
+      };
+
+  @override
+  List<Object?> get props =>
+      [type, requestId, title, description, riskLevel, fields];
+}
+
+/// Client reply to a [GatewayElicitationRequestMessage], carrying the HITL
+/// decision back to Hermes.
+class GatewayElicitationResponseMessage extends GatewayMessage {
+  final String requestId;
+  final String status;
+  final bool biometricVerified;
+
+  const GatewayElicitationResponseMessage({
+    required this.requestId,
+    required this.status,
+    this.biometricVerified = false,
+  }) : super('elicitation_response');
+
+  factory GatewayElicitationResponseMessage.fromJson(Map<String, dynamic> json) {
+    final requestId =
+        (json['request_id'] ?? json['requestId'] ?? json['id'] ?? '').toString();
+    return GatewayElicitationResponseMessage(
+      requestId: requestId,
+      status: (json['status'] ?? '').toString(),
+      biometricVerified: (json['biometric_verified'] ??
+              json['biometricVerified'] ??
+              false)
+          as bool,
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': type,
+        'request_id': requestId,
+        'status': status,
+        'biometric_verified': biometricVerified,
+      };
+
+  @override
+  List<Object?> get props => [type, requestId, status, biometricVerified];
 }
