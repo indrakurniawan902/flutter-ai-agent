@@ -263,6 +263,7 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       if (sl.isRegistered<ShareTargetCubit>()) {
         final shareCubit = sl<ShareTargetCubit>();
+        unawaited(shareCubit.init().catchError((_) {}));
         _shareTargetSub = shareCubit.stream.listen((state) {
           if (state is ShareTargetReceived && mounted) {
             final payloads = shareCubit.consume();
