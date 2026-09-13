@@ -11,11 +11,13 @@ class FakeFileSystemWrapper implements FileSystemWrapper {
   final Map<String, Uint8List> files = {};
   final Set<String> directories = {};
   final Map<String, List<String>> children = {};
+  final Map<String, Uint8List> written = {};
   bool permission = true;
   bool throwOnList = false;
   bool throwOnReadBytes = false;
   bool throwOnStat = false;
   bool recursiveSeen = false;
+  String documentsDirectory = '/fake/docs';
 
   void addTextFile(String path, String content) {
     files[path] = Uint8List.fromList(utf8.encode(content));
@@ -97,6 +99,15 @@ class FakeFileSystemWrapper implements FileSystemWrapper {
   }
 
   @override
+  Future<String> getDocumentsDirectory() async => documentsDirectory;
+
+  @override
+  Future<void> writeFileAsBytes(String path, Uint8List bytes) async {
+    written[path] = bytes;
+    files[path] = bytes;
+  }
+
+  @override
   Future<bool> checkPermission() async => permission;
 
   @override
@@ -128,6 +139,62 @@ FilePickerResult singleFileResult(String path, {String name = 'a.txt'}) {
   return FilePickerResult([
     PlatformFile(name: name, size: 4, path: path),
   ]);
+}
+
+Uint8List _plainPdfBytes() {
+  const text = '''
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 33 >>
+stream
+BT /F1 12 Tf (Hello PDF) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+trailer
+<< /Size 6 /Root 1 0 R >>
+%%EOF
+''';
+  return Uint8List.fromList(latin1.encode(text));
+}
+
+Uint8List _encryptedPdfBytes() {
+  const text = '''
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /Encrypt 10 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 5 >>
+stream
+BT ET
+endstream
+endobj
+10 0 obj
+<< /Filter /Standard /V 1 >>
+endobj
+trailer
+<< /Size 11 /Root 1 0 R /Encrypt 10 0 R >>
+%%EOF
+''';
+  return Uint8List.fromList(latin1.encode(text));
 }
 
 void main() {
@@ -206,6 +273,41 @@ void main() {
       fileSystem.addBytesFile('/docs/bad.pdf', [1, 2, 3, 4, 5]);
       final result = await service.readFile('/docs/bad.pdf');
       expect(result.isLeft(), isTrue);
+    });
+  });
+
+  group('extractPdfText', () {
+    test('extracts text from a deflate-free PDF via fallback parser', () async {
+      fileSystem.addBytesFile('/docs/ok.pdf', _plainPdfBytes());
+      final result = await service.extractPdfText('/docs/ok.pdf');
+      // Syncfusion either succeeds or the fallback parser does; both must
+      // return the encoded text.
+      expect(result.isRight(), isTrue);
+      expect(result.getOrElse(() => ''), contains('Hello PDF'));
+    });
+
+    test('encrypted PDF without text returns Left', () async {
+      fileSystem.addBytesFile('/docs/secret.pdf', _encryptedPdfBytes());
+      final result = await service.extractPdfText('/docs/secret.pdf');
+      expect(result.isLeft(), isTrue);
+    });
+
+    test('missing file returns Left', () async {
+      final result = await service.extractPdfText('/docs/missing.pdf');
+      expect(result.isLeft(), isTrue);
+    });
+
+    test('non-PDF bytes return Left', () async {
+      fileSystem.addBytesFile('/docs/notpdf.pdf', [1, 2, 3, 4, 5]);
+      final result = await service.extractPdfText('/docs/notpdf.pdf');
+      expect(result.isLeft(), isTrue);
+    });
+
+    test('readFile(pdf) routes through extraction', () async {
+      fileSystem.addBytesFile('/docs/ok.pdf', _plainPdfBytes());
+      final result = await service.readFile('/docs/ok.pdf');
+      expect(result.isRight(), isTrue);
+      expect(result.getOrElse(() => ''), contains('Hello PDF'));
     });
   });
 

@@ -52,8 +52,19 @@ const List<_ToolCategory> _categories = [
     ],
   ),
   _ToolCategory(
-    ['file', 'document', 'directory', 'folder', 'download'],
-    ['list_device_files', 'read_device_file'],
+    [
+      'file',
+      'document',
+      'directory',
+      'folder',
+      'download',
+      'pdf',
+      'export',
+      'markdown',
+      'report',
+      'doc',
+    ],
+    ['list_device_files', 'read_device_file', 'export_document_pdf'],
   ),
   _ToolCategory(
     ['remember', 'recall', 'memory', 'memorize', 'forget'],
