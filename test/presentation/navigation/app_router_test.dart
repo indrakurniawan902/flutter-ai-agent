@@ -42,6 +42,7 @@ void main() {
         AppRoutes.nrVault,
         AppRoutes.nrPairing,
         AppRoutes.nrServerProfiles,
+        AppRoutes.nrAddProfile,
         AppRoutes.nrActionCenter,
         AppRoutes.nrGeofenceManagement,
       };
@@ -65,6 +66,7 @@ void main() {
         AppRoutes.nrVault,
         AppRoutes.nrPairing,
         AppRoutes.nrServerProfiles,
+        AppRoutes.nrAddProfile,
         AppRoutes.nrActionCenter,
       ];
 
@@ -110,6 +112,9 @@ void main() {
 
       expect(routeByName[AppRoutes.nrActionCenter]?.path, equals('/action-center'));
       expect(routeByName[AppRoutes.nrActionCenter]?.builder, isNotNull);
+
+      expect(routeByName[AppRoutes.nrAddProfile]?.path, equals('/settings/add-profile'));
+      expect(routeByName[AppRoutes.nrAddProfile]?.builder, isNotNull);
     });
   });
 }

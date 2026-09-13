@@ -4,7 +4,7 @@ import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-import 'package:flutter_ai_agent/domain/models/share/shared_payload.dart';
+import 'package:flutter_ai_agent/domain/entities/share/shared_payload.dart';
 import 'package:flutter_ai_agent/domain/services/share/share_target_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/share/cubit/share_target_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/share/cubit/share_target_state.dart';

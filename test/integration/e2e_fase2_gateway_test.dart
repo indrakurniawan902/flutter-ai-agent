@@ -512,7 +512,8 @@ void main() {
         );
         await tester.pump();
         await tester.tap(find.byKey(const Key('chat_send_button')));
-        await tester.pumpAndSettle();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
 
         expect(
             find.text('Check system health and battery status'), findsOneWidget);
