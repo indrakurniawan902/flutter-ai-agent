@@ -50,6 +50,7 @@ void main() {
 
     when(() => mockAgentCubit.state).thenReturn(const AgentIdle());
     when(() => mockAgentCubit.messages).thenReturn([]);
+    when(() => mockAgentCubit.activeSessionTitle).thenReturn('New chat');
     when(() => mockAgentCubit.stream).thenAnswer((_) => const Stream.empty());
     when(() => mockAgentCubit.stop()).thenAnswer((_) async {});
     when(() => mockAgentCubit.sendMessage(any())).thenAnswer((_) async {});

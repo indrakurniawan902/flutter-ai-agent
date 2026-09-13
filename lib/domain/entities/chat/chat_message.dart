@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:equatable/equatable.dart';
 import 'tool_call_delta.dart';
 import 'chat_attachment.dart';
-import 'package:flutter_ai_agent/domain/models/chat/action_step.dart';
-import 'package:flutter_ai_agent/domain/models/chat/generative_card_data.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/action_step.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/generative_card_data.dart';
 
 /// A message in the chat conversation.
 class ChatMessage extends Equatable {
