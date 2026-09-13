@@ -198,29 +198,35 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
         elevation: 0,
         actions: [
           if (isTorchOnNotifier != null)
-            ValueListenableBuilder<bool>(
-              valueListenable: isTorchOnNotifier,
-              builder: (context, isTorchOn, child) {
-                return IconButton(
-                  key: const Key('qr_torch_toggle_button'),
-                  tooltip: isTorchOn ? 'Turn Flashlight Off' : 'Turn Flashlight On',
-                  icon: Icon(
-                    isTorchOn ? Icons.flash_on : Icons.flash_off,
-                    color: isTorchOn ? accentTeal : Colors.white,
-                  ),
-                  onPressed: () => _controller?.toggleTorch(),
-                );
-              },
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ValueListenableBuilder<bool>(
+                valueListenable: isTorchOnNotifier,
+                builder: (context, isTorchOn, child) {
+                  return IconButton(
+                    key: const Key('qr_torch_toggle_button'),
+                    tooltip: isTorchOn ? 'Turn Flashlight Off' : 'Turn Flashlight On',
+                    icon: Icon(
+                      isTorchOn ? Icons.flash_on : Icons.flash_off,
+                      color: isTorchOn ? accentTeal : Colors.white,
+                    ),
+                    onPressed: () => _controller?.toggleTorch(),
+                  );
+                },
+              ),
             )
           else
-            IconButton(
-              key: const Key('qr_torch_toggle_button'),
-              tooltip: 'Turn Flashlight On',
-              icon: const Icon(
-                Icons.flash_off,
-                color: Colors.white,
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: IconButton(
+                key: const Key('qr_torch_toggle_button'),
+                tooltip: 'Turn Flashlight On',
+                icon: const Icon(
+                  Icons.flash_off,
+                  color: Colors.white,
+                ),
+                onPressed: () => _controller?.toggleTorch(),
               ),
-              onPressed: () => _controller?.toggleTorch(),
             ),
         ],
       ),
@@ -289,7 +295,6 @@ class _ViewfinderOverlay extends StatelessWidget {
   const _ViewfinderOverlay();
 
   static const double boxSize = 250.0;
-  static const Color accentTeal = Color(0xFF008080);
 
   @override
   Widget build(BuildContext context) {
@@ -302,47 +307,11 @@ class _ViewfinderOverlay extends StatelessWidget {
 
         return Stack(
           children: [
-            // Darkened backdrop around cutout
-            ColorFiltered(
-              colorFilter: ColorFilter.mode(
-                Colors.black.withValues(alpha: 0.65),
-                BlendMode.srcOut,
-              ),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Container(
-                    decoration: const BoxDecoration(
-                      color: Colors.black,
-                      backgroundBlendMode: BlendMode.dstOut,
-                    ),
-                  ),
-                  Positioned(
-                    left: left,
-                    top: top,
-                    width: boxSize,
-                    height: boxSize,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Viewfinder Border and Corner Accents
-            Positioned(
-              left: left,
-              top: top,
-              width: boxSize,
-              height: boxSize,
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: accentTeal, width: 2.0),
+            // Scrim with punched-out cutout, border, and corner brackets.
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _ViewfinderPainter(
+                  cutout: Rect.fromLTWH(left, top, boxSize, boxSize),
                 ),
               ),
             ),
@@ -352,14 +321,23 @@ class _ViewfinderOverlay extends StatelessWidget {
               left: 20,
               right: 20,
               top: top + boxSize + 24,
-              child: const Text(
-                'Align QR code within the frame',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 0.3,
+              child: Center(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: const Text(
+                    'Align QR code within the frame',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -368,4 +346,86 @@ class _ViewfinderOverlay extends StatelessWidget {
       },
     );
   }
+}
+
+/// Paints the dark scrim (with cutout), teal frame border, and corner brackets.
+class _ViewfinderPainter extends CustomPainter {
+  const _ViewfinderPainter({required this.cutout});
+
+  final Rect cutout;
+
+  static const double _cornerRadius = 16.0;
+  static const double _bracketLeg = 24.0;
+  static const double _bracketStroke = 3.0;
+  static const Color accentTeal = Color(0xFF008080);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final outer = Path()..addRect(Offset.zero & size);
+    final cutoutRRect =
+        RRect.fromRectAndRadius(cutout, const Radius.circular(_cornerRadius));
+    final scrim = Path.combine(
+      PathOperation.difference,
+      outer,
+      Path()..addRRect(cutoutRRect),
+    );
+    canvas.drawPath(
+      scrim,
+      Paint()..color = Colors.black.withValues(alpha: 0.65),
+    );
+
+    canvas.drawRRect(
+      cutoutRRect,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0
+        ..color = accentTeal,
+    );
+
+    final brackets = Path()
+      // Top-left
+      ..moveTo(cutout.left, cutout.top + _bracketLeg)
+      ..lineTo(cutout.left, cutout.top + _cornerRadius)
+      ..arcToPoint(
+        Offset(cutout.left + _cornerRadius, cutout.top),
+        radius: const Radius.circular(_cornerRadius),
+      )
+      ..lineTo(cutout.left + _bracketLeg, cutout.top)
+      // Top-right
+      ..moveTo(cutout.right - _bracketLeg, cutout.top)
+      ..lineTo(cutout.right - _cornerRadius, cutout.top)
+      ..arcToPoint(
+        Offset(cutout.right, cutout.top + _cornerRadius),
+        radius: const Radius.circular(_cornerRadius),
+      )
+      ..lineTo(cutout.right, cutout.top + _bracketLeg)
+      // Bottom-right
+      ..moveTo(cutout.right, cutout.bottom - _bracketLeg)
+      ..lineTo(cutout.right, cutout.bottom - _cornerRadius)
+      ..arcToPoint(
+        Offset(cutout.right - _cornerRadius, cutout.bottom),
+        radius: const Radius.circular(_cornerRadius),
+      )
+      ..lineTo(cutout.right - _bracketLeg, cutout.bottom)
+      // Bottom-left
+      ..moveTo(cutout.left + _bracketLeg, cutout.bottom)
+      ..lineTo(cutout.left + _cornerRadius, cutout.bottom)
+      ..arcToPoint(
+        Offset(cutout.left, cutout.bottom - _cornerRadius),
+        radius: const Radius.circular(_cornerRadius),
+      )
+      ..lineTo(cutout.left, cutout.bottom - _bracketLeg);
+    canvas.drawPath(
+      brackets,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _bracketStroke
+        ..strokeCap = StrokeCap.round
+        ..color = accentTeal,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ViewfinderPainter oldDelegate) =>
+      oldDelegate.cutout != cutout;
 }
