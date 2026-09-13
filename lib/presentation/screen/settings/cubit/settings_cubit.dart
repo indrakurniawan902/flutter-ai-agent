@@ -1,6 +1,8 @@
 import 'package:flutter_ai_agent/common/constant.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/nfc_tag_prompt_binding.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
+import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_state.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:injectable/injectable.dart';
@@ -9,6 +11,7 @@ import 'package:injectable/injectable.dart';
 @injectable
 class SettingsCubit extends Cubit<SettingsState> {
   final SecureStorageService _storageService;
+  final NfcServiceBase? _nfcService;
 
   @factoryMethod
   factory SettingsCubit.create({
@@ -18,8 +21,10 @@ class SettingsCubit extends Cubit<SettingsState> {
 
   SettingsCubit({
     required SecureStorageService secureStorageService,
+    NfcServiceBase? nfcService,
     bool autoLoad = true,
   })  : _storageService = secureStorageService,
+        _nfcService = nfcService,
         super(const SettingsInitial()) {
     if (autoLoad) {
       loadSettings();
@@ -42,6 +47,12 @@ class SettingsCubit extends Cubit<SettingsState> {
       final model = await _storageService.getModel() ?? AppConstants.defaultModel;
       final temperature = await _storageService.getTemperature() ?? AppConstants.defaultTemperature;
       final progressiveToolPruning = await _storageService.getProgressiveToolPruning();
+      List<NfcTagPromptBinding> nfcPromptBindings = const [];
+      try {
+        nfcPromptBindings = await _storageService.getNfcPromptBindings();
+      } catch (_) {
+        nfcPromptBindings = const [];
+      }
 
       emit(SettingsLoaded(
         baseUrl: baseUrl,
@@ -49,6 +60,8 @@ class SettingsCubit extends Cubit<SettingsState> {
         model: model,
         temperature: temperature,
         progressiveToolPruning: progressiveToolPruning,
+        nfcPromptBindings: nfcPromptBindings,
+        nfcAvailable: _nfcService != null,
       ));
     } catch (e) {
       emit(SettingsError(
@@ -181,6 +194,93 @@ class SettingsCubit extends Cubit<SettingsState> {
       model: profile.model,
       temperature: profile.temperature,
       progressiveToolPruning: state.progressiveToolPruning,
+    ));
+  }
+
+  /// Persists [bindings] and mirrors them into the loaded state.
+  Future<void> saveNfcPromptBindings(List<NfcTagPromptBinding> bindings) async {
+    await _storageService.saveNfcPromptBindings(bindings);
+    final current = state;
+    if (current is SettingsLoaded) {
+      emit(current.copyWith(nfcPromptBindings: bindings));
+    } else {
+      emit(SettingsLoaded(
+        baseUrl: current.baseUrl,
+        apiKey: current.apiKey,
+        model: current.model,
+        temperature: current.temperature,
+        progressiveToolPruning: current.progressiveToolPruning,
+        nfcPromptBindings: bindings,
+        nfcAvailable: _nfcService != null,
+      ));
+    }
+  }
+
+  /// Adds [binding], replacing any existing binding for the same card UID.
+  Future<void> addNfcPromptBinding(NfcTagPromptBinding binding) async {
+    final state = this.state;
+    final current = List<NfcTagPromptBinding>.from(
+      state is SettingsLoaded ? state.nfcPromptBindings : const [],
+    );
+    final existing = current.indexWhere((b) => b.cardUid == binding.cardUid);
+    if (existing >= 0) {
+      current[existing] = binding;
+    } else {
+      current.add(binding);
+    }
+    await saveNfcPromptBindings(current);
+  }
+
+  /// Removes the binding for [cardUid], if any.
+  Future<void> removeNfcPromptBinding(String cardUid) async {
+    final state = this.state;
+    final current = (state is SettingsLoaded ? state.nfcPromptBindings : const <NfcTagPromptBinding>[])
+        .where((b) => b.cardUid != cardUid)
+        .toList();
+    await saveNfcPromptBindings(current);
+  }
+
+  /// Reads the NFC card UID and emits [SettingsNfcScanResult] so the UI can
+  /// prompt for the prompt/label pair, confirmed via [confirmNfcPromptBinding].
+  Future<void> scanAndBindNfcTag() async {
+    final nfc = _nfcService;
+    if (nfc == null) {
+      _emitNfcScanFailure('NFC service unavailable');
+      return;
+    }
+    final result = await nfc.readCardUid();
+    result.fold(
+      (failure) => _emitNfcScanFailure(failure.message),
+      (uid) => emit(SettingsNfcScanResult(uid: uid)),
+    );
+  }
+
+  /// Confirms a scanned UID by persisting the prompt/label pair.
+  Future<void> confirmNfcPromptBinding(
+    String uid,
+    String prompt, {
+    String? label,
+  }) async {
+    final trimmedLabel = label?.trim();
+    await addNfcPromptBinding(NfcTagPromptBinding(
+      cardUid: uid.trim().toLowerCase(),
+      prompt: prompt.trim(),
+      label: (trimmedLabel == null || trimmedLabel.isEmpty)
+          ? null
+          : trimmedLabel,
+      createdAt: DateTime.now(),
+    ));
+  }
+
+  void _emitNfcScanFailure(String message) {
+    final current = state;
+    emit(SettingsError(
+      baseUrl: current.baseUrl,
+      apiKey: current.apiKey,
+      model: current.model,
+      temperature: current.temperature,
+      progressiveToolPruning: current.progressiveToolPruning,
+      message: message,
     ));
   }
 }
