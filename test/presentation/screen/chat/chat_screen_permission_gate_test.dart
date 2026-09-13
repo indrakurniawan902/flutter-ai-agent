@@ -54,7 +54,6 @@ void main() {
     when(() => mockAgentCubit.stream).thenAnswer((_) => const Stream.empty());
     when(() => mockAgentCubit.stop()).thenAnswer((_) async {});
     when(() => mockAgentCubit.sendMessage(any())).thenAnswer((_) async {});
-    when(() => mockAgentCubit.activeSessionTitle).thenReturn('New chat');
 
     when(() => mockVoiceService.transcriptionStream)
         .thenAnswer((_) => const Stream.empty());
