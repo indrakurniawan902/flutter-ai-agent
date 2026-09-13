@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/common/constant.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/nfc_tag_prompt_binding.dart';
 import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_url.dart';
@@ -567,6 +568,14 @@ class _SettingsViewState extends State<_SettingsView> {
                               ),
                       ),
                     ),
+                    if (state is SettingsLoaded) ...[
+                      const SizedBox(height: 24),
+                      _buildNfcSection(
+                        context,
+                        state.nfcPromptBindings,
+                        state.nfcAvailable,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -689,6 +698,353 @@ class _SettingsViewState extends State<_SettingsView> {
                   ],
                 ),
             ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildNfcSection(
+    BuildContext context,
+    List<NfcTagPromptBinding> bindings,
+    bool nfcAvailable,
+  ) {
+    const tealAccent = Color(0xFF008080);
+
+    return Container(
+      key: const Key('settings_nfc_section'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF334155)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.nfc, color: tealAccent, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'NFC Tag Triggers',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (bindings.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8.0),
+              child: Text(
+                'No NFC triggers yet',
+                style: TextStyle(color: Colors.white60, fontSize: 13),
+              ),
+            )
+          else
+            ...bindings.map(
+              (binding) => Row(
+                key: Key('nfc_binding_row_${binding.cardUid}'),
+                children: [
+                  Expanded(
+                    child: Text(
+                      binding.label ?? _truncateUid(binding.cardUid),
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                    ),
+                  ),
+                  IconButton(
+                    key: Key('nfc_delete_${binding.cardUid}'),
+                    tooltip: 'Delete NFC trigger',
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.redAccent,
+                      size: 20,
+                    ),
+                    onPressed: () => _confirmRemoveNfcBinding(context, binding),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            key: const Key('nfc_add_trigger_button'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: tealAccent,
+              side: const BorderSide(color: tealAccent),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            icon: const Icon(Icons.nfc),
+            label: const Text('Add NFC Trigger'),
+            onPressed: nfcAvailable ? () => _showNfcScanSheet(context) : null,
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _truncateUid(String uid) => nfcTruncateUid(uid);
+
+  Future<void> _confirmRemoveNfcBinding(
+    BuildContext context,
+    NfcTagPromptBinding binding,
+  ) async {
+    final cubit = context.read<SettingsCubit>();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          title: const Text(
+            'Delete NFC Trigger',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: Text(
+            'Remove "${binding.label ?? _truncateUid(binding.cardUid)}"?',
+            style: const TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              key: const Key('nfc_confirm_delete_button'),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text(
+                'Delete',
+                style: TextStyle(color: Colors.redAccent),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed == true) {
+      await cubit.removeNfcPromptBinding(binding.cardUid);
+    }
+  }
+
+  void _showNfcScanSheet(BuildContext context) {
+    final cubit = context.read<SettingsCubit>();
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) {
+        return BlocProvider<SettingsCubit>.value(
+          value: cubit,
+          child: const _NfcScanSheet(),
+        );
+      },
+    );
+  }
+}
+
+String nfcTruncateUid(String uid) {
+  if (uid.length <= 10) return uid;
+  return '${uid.substring(0, 8)}…';
+}
+
+class _NfcScanSheet extends StatefulWidget {
+  const _NfcScanSheet();
+
+  @override
+  State<_NfcScanSheet> createState() => _NfcScanSheetState();
+}
+
+class _NfcScanSheetState extends State<_NfcScanSheet> {
+  final _promptController = TextEditingController();
+  final _labelController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<SettingsCubit>().scanAndBindNfcTag();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _promptController.dispose();
+    _labelController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _onSave(String uid) async {
+    final cubit = context.read<SettingsCubit>();
+    final navigator = Navigator.of(context);
+    final label = _labelController.text.trim();
+    await cubit.confirmNfcPromptBinding(
+      uid,
+      _promptController.text.trim(),
+      label: label.isEmpty ? null : label,
+    );
+    if (mounted) {
+      navigator.pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const tealAccent = Color(0xFF008080);
+
+    return BlocBuilder<SettingsCubit, SettingsState>(
+      builder: (context, state) {
+        return ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Bind NFC Trigger',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (state is SettingsNfcScanResult) ...[
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Card UID: ${nfcTruncateUid(state.uid)}',
+                            key: const Key('nfc_scan_uid'),
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            key: const Key('nfc_prompt_field'),
+                            controller: _promptController,
+                            autofocus: true,
+                            maxLines: 3,
+                            style: const TextStyle(color: Colors.white),
+                            onChanged: (_) => setState(() {}),
+                            decoration: const InputDecoration(
+                              labelText: 'Prompt to send',
+                              hintText: 'What should the agent do?',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            key: const Key('nfc_label_field'),
+                            controller: _labelController,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: const InputDecoration(
+                              labelText: 'Label (optional)',
+                              hintText: 'e.g. Gate Opener',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 48,
+                    child: ElevatedButton(
+                      key: const Key('nfc_save_button'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: tealAccent,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed: _promptController.text.trim().isEmpty
+                          ? null
+                          : () => _onSave(state.uid),
+                      child: const Text(
+                        'Save',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ] else if (state is SettingsError) ...[
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Text(
+                        state.message,
+                        style: const TextStyle(color: Colors.white70),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          key: const Key('nfc_cancel_button'),
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton(
+                          key: const Key('nfc_retry_button'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: tealAccent,
+                            side: const BorderSide(color: tealAccent),
+                          ),
+                          onPressed: () =>
+                              context.read<SettingsCubit>().scanAndBindNfcTag(),
+                          child: const Text('Retry'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8.0),
+                    child: Text(
+                      'Tap the NFC tag to the back of your phone…',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const Center(
+                    child: CircularProgressIndicator(color: tealAccent),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+                const SizedBox(height: 4),
+                Text(
+                  'The UID will be bound to the prompt you enter.',
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+              ],
+            ),
           ),
         );
       },

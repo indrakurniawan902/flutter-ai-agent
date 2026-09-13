@@ -31,6 +31,8 @@ import 'package:flutter_ai_agent/domain/models/share/shared_payload.dart';
 import 'package:flutter_ai_agent/presentation/screen/share/cubit/share_target_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/share/cubit/share_target_state.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
+import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
+import 'package:flutter_ai_agent/presentation/navigation/app_routes.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_approval_sheet.dart';
@@ -126,6 +128,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   CameraVisionServiceBase? _cameraVisionService;
   FileWorkspaceServiceBase? _fileWorkspaceService;
   ChatAttachment? _stagedAttachment;
+  bool _isNfcScanning = false;
 
   late final PermissionGate _permissionGate;
   PermissionStatus? _micStatus;
@@ -1167,6 +1170,96 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _scanNfcTag() async {
+    if (_isNfcScanning) return;
+    final cubit = _resolveAgentCubit();
+    if (cubit == null) return;
+    _isNfcScanning = true;
+    try {
+      final dispatched = await cubit.scanNfcAndDispatchPrompt();
+      if (!mounted) return;
+      if (dispatched) {
+        _scrollToBottom();
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'No prompt bound to this NFC tag. Bind it in Settings > NFC Tag Triggers.',
+          ),
+          backgroundColor: const Color(0xFF1E293B),
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: 'Open Settings',
+            onPressed: () {
+              context.pushNamed(AppRoutes.nrSettings);
+            },
+          ),
+        ),
+      );
+    } finally {
+      _isNfcScanning = false;
+    }
+  }
+
+  Future<void> _scanNfcBalance() async {
+    if (_isNfcScanning) return;
+    final cubit = _resolveAgentCubit();
+    if (cubit == null) return;
+    _isNfcScanning = true;
+    try {
+      final balance = await cubit.scanNfcEmoneyBalance();
+      if (!mounted) return;
+      if (balance != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${_emoneyBrandLabel(balance.brand)} balance: Rp ${_formatRupiah(balance.balanceRupiah)}',
+            ),
+            backgroundColor: const Color(0xFF008080),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Could not read e-Money balance. Enable NFC and tap the card, or use Settings > NFC Tag Triggers.',
+            ),
+            backgroundColor: const Color(0xFF1E293B),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      _isNfcScanning = false;
+    }
+  }
+
+  static String _emoneyBrandLabel(EmoneyCardBrand brand) {
+    switch (brand) {
+      case EmoneyCardBrand.mandiriEmoney:
+        return 'Mandiri e-Money';
+      case EmoneyCardBrand.bcaFlazz:
+        return 'BCA Flazz';
+      case EmoneyCardBrand.briBrizzi:
+        return 'BRI Brizzi';
+      case EmoneyCardBrand.bniTapCash:
+        return 'BNI TapCash';
+      case EmoneyCardBrand.unknown:
+        return 'e-Money';
+    }
+  }
+
+  static String _formatRupiah(int amount) {
+    final digits = amount.abs().toString();
+    final grouped = digits.replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (match) => '${match[1]}.',
+    );
+    return amount < 0 ? '-$grouped' : grouped;
+  }
+
   void _showConnectionDetailsDialog(BuildContext context) {
     final activeProfile = _resolveServerProfileCubit()?.state.activeProfile;
     final profileName = activeProfile?.name ?? 'No active profile';
@@ -1633,7 +1726,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             actions: [
               IconButton(
                 key: const Key('chat_speaker_toggle'),
-                iconSize: 20,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 32),
+                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                iconSize: 18,
                 icon: Icon(
                   _isSpeakerMuted ? Icons.volume_off : Icons.volume_up,
                 ),
@@ -1643,7 +1739,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               ),
               IconButton(
                 key: const Key('chat_mode_toggle'),
-                iconSize: 20,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 32),
+                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                iconSize: 18,
                 icon: Icon(
                   _mode == ChatMode.gateway
                       ? Icons.hub_rounded
@@ -1659,14 +1758,40 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               ),
               IconButton(
                 key: const Key('chat_qr_scan_button'),
-                iconSize: 20,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 32),
+                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                iconSize: 18,
                 icon: const Icon(Icons.qr_code_scanner),
                 tooltip: 'Scan Pairing QR',
                 onPressed: _openQrScanner,
               ),
               IconButton(
+                key: const Key('chat_nfc_scan_button'),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 32),
+                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                iconSize: 18,
+                icon: const Icon(Icons.nfc),
+                tooltip: 'Scan NFC Tag',
+                onPressed: _scanNfcTag,
+              ),
+              IconButton(
+                key: const Key('chat_nfc_balance_button'),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 32),
+                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                iconSize: 18,
+                icon: const Icon(Icons.account_balance_wallet_outlined),
+                tooltip: 'Read e-Money Balance',
+                onPressed: _scanNfcBalance,
+              ),
+              IconButton(
                 key: const Key('chat_reset_button'),
-                iconSize: 20,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 32),
+                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                iconSize: 18,
                 icon: const Icon(Icons.refresh),
                 tooltip: 'Reset Conversation',
                 onPressed: () => _confirmReset(context),
@@ -1680,7 +1805,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   if (!isBusy) return const SizedBox.shrink();
                   return IconButton(
                     key: const Key('chat_stop_button'),
-                    iconSize: 20,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 26, minHeight: 32),
+                    visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                    iconSize: 18,
                     icon: const Icon(
                       Icons.stop_circle_outlined,
                       color: Colors.redAccent,
@@ -1688,6 +1816,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     tooltip: 'Stop Generation',
                     onPressed: () => _confirmStop(context),
                   );
+                },
+              ),
+              IconButton(
+                key: const Key('chat_settings_button'),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 32),
+                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                iconSize: 18,
+                icon: const Icon(Icons.settings),
+                tooltip: 'Settings',
+                onPressed: () {
+                  context.pushNamed(AppRoutes.nrSettings);
                 },
               ),
               const SizedBox(width: 4),

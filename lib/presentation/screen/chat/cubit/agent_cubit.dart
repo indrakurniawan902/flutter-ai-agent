@@ -20,6 +20,8 @@ import 'package:flutter_ai_agent/domain/services/tools/tool_pruning_service.dart
 import 'package:flutter_ai_agent/domain/tools/chat/security_policy.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 import 'package:flutter_ai_agent/domain/services/skills/skills_registry_service.dart';
+import 'package:flutter_ai_agent/domain/services/tools/nfc_prompt_resolver.dart';
+import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
 import 'package:flutter_ai_agent/utils/thought_extractor.dart';
@@ -36,6 +38,7 @@ class AgentCubit extends Cubit<AgentState> {
   final ChatLocalRepository? _chatLocalRepository;
   final LocalMemoryServiceBase? _localMemoryService;
   final ToolPruningService? _toolPruningService;
+  final NfcServiceBase? _nfcService;
   final List<MemoryItem> _activeMemories = [];
   String activeProfileId;
   String baseUrl;
@@ -68,6 +71,8 @@ class AgentCubit extends Cubit<AgentState> {
     required LlmRepository llmRepository,
     ChatLocalRepository? chatLocalRepository,
     LocalMemoryServiceBase? localMemoryService,
+    SecureStorageService? secureStorageService,
+    NfcServiceBase? nfcService,
     @ignoreParam double temperature = 0.7,
   }) =>
       AgentCubit(
@@ -75,9 +80,10 @@ class AgentCubit extends Cubit<AgentState> {
         toolRegistry: getIt.isRegistered<ToolRegistry>()
             ? getIt<ToolRegistry>()
             : null,
-        secureStorageService: getIt.isRegistered<SecureStorageService>()
-            ? getIt<SecureStorageService>()
-            : null,
+        secureStorageService: secureStorageService ??
+            (getIt.isRegistered<SecureStorageService>()
+                ? getIt<SecureStorageService>()
+                : null),
         skillsRegistryService: getIt.isRegistered<SkillsRegistryService>()
             ? getIt<SkillsRegistryService>()
             : null,
@@ -92,6 +98,10 @@ class AgentCubit extends Cubit<AgentState> {
             (getIt.isRegistered<LocalMemoryServiceBase>()
                 ? getIt<LocalMemoryServiceBase>()
                 : null),
+        nfcService: nfcService ??
+            (getIt.isRegistered<NfcServiceBase>()
+                ? getIt<NfcServiceBase>()
+                : null),
         temperature: temperature,
       );
 
@@ -103,6 +113,7 @@ class AgentCubit extends Cubit<AgentState> {
     ToolPruningService? toolPruningService,
     ChatLocalRepository? chatLocalRepository,
     LocalMemoryServiceBase? localMemoryService,
+    NfcServiceBase? nfcService,
     this.activeProfileId = 'default',
     this.baseUrl = 'https://api.openai.com/v1',
     this.model = 'gpt-4o',
@@ -116,6 +127,7 @@ class AgentCubit extends Cubit<AgentState> {
         _toolPruningService = toolPruningService, // ignore: prefer_initializing_formals
         _chatLocalRepository = chatLocalRepository,
         _localMemoryService = localMemoryService,
+        _nfcService = nfcService,
         super(const AgentIdle());
 
   /// Associated skills registry service, if any.
@@ -539,6 +551,42 @@ class AgentCubit extends Cubit<AgentState> {
     } catch (_) {
       // Title is best-effort; never break the loop.
     }
+  }
+
+  /// Scans an NFC tag and, when the UID is bound to a saved prompt, sends that
+  /// prompt as a user message. Returns true when a prompt was dispatched.
+  Future<bool> scanNfcAndDispatchPrompt() async {
+    final service = _nfcService;
+    if (service == null) return false;
+    final isAvailable = (await service.isAvailable()).getOrElse(() => false);
+    if (!isAvailable) return false;
+    final isEnabled = (await service.isEnabled()).getOrElse(() => false);
+    if (!isEnabled) return false;
+
+    final uidResult = await service.readCardUid();
+    if (uidResult.isLeft()) return false;
+    final uid = uidResult.getOrElse(() => '');
+    if (uid.isEmpty) return false;
+
+    final bindings =
+        await _secureStorageService?.getNfcPromptBindings() ?? const [];
+    final prompt = NfcPromptResolver(bindings: bindings).resolve(uid);
+    if (prompt == null || prompt.trim().isEmpty) return false;
+    await sendMessage(prompt);
+    return true;
+  }
+
+  /// Reads an e-Money card balance over NFC.
+  Future<EmoneyBalance?> scanNfcEmoneyBalance() async {
+    final service = _nfcService;
+    if (service == null) return null;
+    final isAvailable = (await service.isAvailable()).getOrElse(() => false);
+    if (!isAvailable) return null;
+    final isEnabled = (await service.isEnabled()).getOrElse(() => false);
+    if (!isEnabled) return null;
+
+    final result = await service.readEmoneyBalance();
+    return result.fold((_) => null, (balance) => balance);
   }
 
   /// Pauses the agent loop and requests user approval for [request].

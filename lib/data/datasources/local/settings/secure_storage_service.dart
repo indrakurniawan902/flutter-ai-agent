@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_ai_agent/data/models/server_profiles/server_profile_model.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/ambient_trigger_settings.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/nfc_tag_prompt_binding.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:injectable/injectable.dart';
@@ -38,6 +39,7 @@ class SecureStorageService {
   static const String keyServerProfiles = 'server_profiles_list';
   static const String keyAmbientTriggerSettings = 'ambient_trigger_settings';
   static const String keyProgressiveToolPruning = 'progressive_tool_pruning';
+  static const String keyNfcPromptBindings = 'nfc_prompt_bindings';
 
   final FlutterSecureStorage _storage;
 
@@ -262,6 +264,17 @@ class SecureStorageService {
     } catch (_) {
       return const AmbientTriggerSettings();
     }
+  }
+
+  Future<void> saveNfcPromptBindings(List<NfcTagPromptBinding> bindings) async {
+    await _storage.write(key: keyNfcPromptBindings, value: jsonEncode(bindings.map((b) => b.toJson()).toList()));
+  }
+
+  Future<List<NfcTagPromptBinding>> getNfcPromptBindings() async {
+    final raw = await _storage.read(key: keyNfcPromptBindings);
+    if (raw == null || raw.trim().isEmpty) return [];
+    final List<dynamic> decoded = jsonDecode(raw);
+    return decoded.whereType<Map<String, dynamic>>().map(NfcTagPromptBinding.fromJson).toList();
   }
 
   Future<void> clearAll() async {

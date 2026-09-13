@@ -6,6 +6,7 @@ import 'package:injectable/injectable.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/ambient_event.dart';
+import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
 import 'ambient_trigger_service.dart';
 import 'calendar_service.dart';
 import 'background_service.dart';
@@ -86,6 +87,7 @@ class ToolRegistry {
     ContactLauncherTools? contactLauncherTools,
     IntentLauncherServiceBase? intentLauncherService,
     UrlReaderServiceBase? urlReaderService,
+    NfcServiceBase? nfcService,
   }) {
     if (clipboardService != null) registerClipboardTools(clipboardService);
     if (locationService != null) registerLocationTools(locationService);
@@ -117,6 +119,7 @@ class ToolRegistry {
       registerIntentLauncherTools(intentLauncherService);
     }
     if (urlReaderService != null) registerUrlReaderTools(urlReaderService);
+    if (nfcService != null) registerNfcTools(nfcService);
     registerMetaTools();
   }
 
@@ -1343,6 +1346,111 @@ class ToolRegistry {
         execute: (args) async {
           final url = args['url']?.toString() ?? '';
           return service.fetchReadableText(url);
+        },
+      ),
+    );
+  }
+
+  void registerNfcTools(NfcServiceBase service) {
+    register(
+      RegisteredTool(
+        name: 'nfc_read_tag',
+        description:
+            'Reads the UID of a tapped NFC tag or card (ISO 14443 A/B, MIFARE, ISO 15693). Tap the tag to the phone when asked. Returns the UID as lowercase hex.',
+        parameters: const {
+          'type': 'object',
+          'properties': {},
+          'required': [],
+        },
+        securityTier: SecurityTier.tier2Permission,
+        execute: (args) async {
+          final available = await service.isAvailable();
+          if (available.isLeft()) {
+            return available.fold(
+              (failure) => Left(failure),
+              (_) => const Left(ServerFailure('NFC is not supported on this device')),
+            );
+          }
+          if (available.getOrElse(() => false) == false) {
+            return const Left(
+              ServerFailure('NFC is not supported on this device'),
+            );
+          }
+          final enabled = await service.isEnabled();
+          if (enabled.isLeft()) {
+            return enabled.fold(
+              (failure) => Left(failure),
+              (_) => const Left(
+                ServerFailure(
+                  'NFC is disabled. Open NFC settings: use launch_system_setting with setting_type "nfc" to enable it, then retry.',
+                ),
+              ),
+            );
+          }
+          if (enabled.getOrElse(() => false) == false) {
+            return const Left(
+              ServerFailure(
+                'NFC is disabled. Open NFC settings: use launch_system_setting with setting_type "nfc" to enable it, then retry.',
+              ),
+            );
+          }
+          return service.readCardUid();
+        },
+      ),
+    );
+
+    register(
+      RegisteredTool(
+        name: 'nfc_read_emoney_balance',
+        description:
+            'Reads the remaining balance (and up to 3 recent transactions when available) of an Indonesian e-money card - Mandiri e-Money, BCA Flazz, BRI Brizzi, BNI TapCash - by tapping it to the phone. READ-ONLY: never writes, tops up, or debits the card.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'expected_uid': {
+              'type': 'string',
+              'description':
+                  'Optional lowercase hex card UID; if given, the read is aborted when the tapped card has a different UID.',
+            },
+          },
+          'required': [],
+        },
+        securityTier: SecurityTier.tier2Permission,
+        execute: (args) async {
+          final available = await service.isAvailable();
+          if (available.isLeft()) {
+            return available.fold(
+              (failure) => Left(failure),
+              (_) => const Left(ServerFailure('NFC is not supported on this device')),
+            );
+          }
+          if (available.getOrElse(() => false) == false) {
+            return const Left(
+              ServerFailure('NFC is not supported on this device'),
+            );
+          }
+          final enabled = await service.isEnabled();
+          if (enabled.isLeft()) {
+            return enabled.fold(
+              (failure) => Left(failure),
+              (_) => const Left(
+                ServerFailure(
+                  'NFC is disabled. Open NFC settings: use launch_system_setting with setting_type "nfc" to enable it, then retry.',
+                ),
+              ),
+            );
+          }
+          if (enabled.getOrElse(() => false) == false) {
+            return const Left(
+              ServerFailure(
+                'NFC is disabled. Open NFC settings: use launch_system_setting with setting_type "nfc" to enable it, then retry.',
+              ),
+            );
+          }
+          final result = await service.readEmoneyBalance(
+            expectedCardUid: args['expected_uid']?.toString(),
+          );
+          return result.map((balance) => jsonEncode(balance.toJson()));
         },
       ),
     );
