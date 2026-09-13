@@ -2,6 +2,7 @@ import 'package:dartz/dartz.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_chunk.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/session.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
@@ -249,6 +250,77 @@ void main() {
       final assistant =
           cubit.messages.lastWhere((m) => m.role == 'assistant');
       expect(assistant.thoughtProcess, 'plan');
+      verify(
+        () => mockChatLocalRepository.saveMessages(
+          'default',
+          any<List<ChatMessage>>(),
+        ),
+      ).called(greaterThanOrEqualTo(1));
+      await cubit.close();
+    });
+  });
+
+  group('session-keyed persistence', () {
+    test('persists under session id once a session is active', () async {
+      when(
+        () => mockChatLocalRepository.getSessions('default'),
+      ).thenAnswer(
+        (_) async => Right<Failure, List<Session>>(
+          const [
+            Session(
+              id: 7,
+              profileId: 'default',
+              title: 'New chat',
+              createdAt: 0,
+              updatedAt: 0,
+            ),
+          ],
+        ),
+      );
+      when(
+        () => mockChatLocalRepository.getMessages('7'),
+      ).thenAnswer(
+        (_) async => const Right<Failure, List<ChatMessage>>(<ChatMessage>[]),
+      );
+
+      final cubit = buildCubit();
+      await cubit.loadChatHistory();
+      cubit.addMessage(const ChatMessage(role: 'user', content: 'Hi'));
+      await untilCalled(
+        () => mockChatLocalRepository.saveMessages(
+          any<String>(),
+          any<List<ChatMessage>>(),
+        ),
+      );
+
+      expect(cubit.activeSessionId, 7);
+      verify(
+        () => mockChatLocalRepository.saveMessages(
+          '7',
+          any<List<ChatMessage>>(),
+        ),
+      ).called(greaterThanOrEqualTo(1));
+      await cubit.close();
+    });
+
+    test('null-session fallback keys on activeProfileId', () async {
+      when(
+        () => mockChatLocalRepository.getSessions('default'),
+      ).thenAnswer(
+        (_) async => Left<Failure, List<Session>>(CacheFailure('nope')),
+      );
+
+      final cubit = buildCubit();
+      await cubit.loadChatHistory();
+      cubit.addMessage(const ChatMessage(role: 'user', content: 'Hi'));
+      await untilCalled(
+        () => mockChatLocalRepository.saveMessages(
+          any<String>(),
+          any<List<ChatMessage>>(),
+        ),
+      );
+
+      expect(cubit.activeSessionId, isNull);
       verify(
         () => mockChatLocalRepository.saveMessages(
           'default',

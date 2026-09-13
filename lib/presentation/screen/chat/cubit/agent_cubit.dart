@@ -11,6 +11,7 @@ import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
 import 'package:flutter_ai_agent/domain/models/chat/tool_call_request.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/memory_item.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/session.dart';
 import 'package:flutter_ai_agent/domain/repositories/chat/chat_local_repository.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/local_memory_service.dart';
 import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart';
@@ -42,6 +43,12 @@ class AgentCubit extends Cubit<AgentState> {
   String? apiKey;
   final int maxTurns;
   bool progressiveToolPruning = true;
+
+  static const String _untitledSessionTitle = 'New chat';
+  static const int _maxTitleLength = 40;
+
+  int? activeSessionId;
+  final List<Session> _sessions = [];
 
   final List<ChatMessage> _messages = [];
   final List<ToolCallDelta> _pendingTurnToolCalls = [];
@@ -116,14 +123,32 @@ class AgentCubit extends Cubit<AgentState> {
   /// Active memories queried for the prompt.
   List<MemoryItem> get activeMemories => List.unmodifiable(_activeMemories);
 
+  /// Chat sessions for the active profile, newest-first as returned by repo.
+  List<Session> get sessions => List.unmodifiable(_sessions);
+
   /// Current pending tool call awaiting approval, if any.
   ToolCallRequest? get pendingToolCall => _pendingToolCall;
+
+  /// Mirrors `ChatLocalRepositoryImpl.titleFromMessage` without importing the
+  /// data layer: collapse whitespace, truncate to [_maxTitleLength], fall back
+  /// to [_untitledSessionTitle].
+  String _titleFromMessage(String? message) {
+    final normalized =
+        (message ?? '').trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (normalized.isEmpty) return _untitledSessionTitle;
+    if (normalized.length <= _maxTitleLength) return normalized;
+    return normalized.substring(0, _maxTitleLength);
+  }
+
+  /// Storage key for message persistence: the active session id when present,
+  /// otherwise the active profile id (legacy / no-repo fallback).
+  String get _persistKey => activeSessionId?.toString() ?? activeProfileId;
 
   Future<void> _persistMessages() async {
     final repo = _chatLocalRepository;
     if (repo == null) return;
     try {
-      await repo.saveMessages(activeProfileId, List.unmodifiable(_messages));
+      await repo.saveMessages(_persistKey, List.unmodifiable(_messages));
     } catch (_) {
       // Persistence failures must not break the ReAct loop.
     }
@@ -137,6 +162,9 @@ class AgentCubit extends Cubit<AgentState> {
   }
 
   /// Loads persisted messages for [profileId] (or [activeProfileId]).
+  ///
+  /// Ensures the profile has an active session (creating or migrating one when
+  /// needed) before loading that session's messages.
   Future<void> loadChatHistory([String? profileId]) async {
     if (profileId != null && profileId.isNotEmpty) {
       activeProfileId = profileId;
@@ -146,19 +174,211 @@ class AgentCubit extends Cubit<AgentState> {
       if (!isClosed) emit(AgentIdle(messages: List.unmodifiable(_messages)));
       return;
     }
-    final result = await repo.getMessages(activeProfileId);
-    result.fold(
-      (_) {
-        if (!isClosed) emit(AgentIdle(messages: List.unmodifiable(_messages)));
-      },
-      (loaded) {
-        _messages
-          ..clear()
-          ..addAll(loaded);
-        if (!isClosed) emit(AgentIdle(messages: List.unmodifiable(_messages)));
-      },
-    );
+    await _ensureSession(activeProfileId);
+    await _loadSessionMessages(_persistKey);
   }
+
+  /// Fetches sessions for [profileId], returning `null` on Left or throw so the
+  /// caller can fall back to profile-keyed (session-less) persistence.
+  Future<List<Session>?> _fetchSessions(
+    ChatLocalRepository repo,
+    String profileId,
+  ) async {
+    try {
+      final result = await repo.getSessions(profileId);
+      return result.fold<List<Session>?>((_) => null, (s) => s);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _replaceSessions(List<Session> list) {
+    _sessions
+      ..clear()
+      ..addAll(list);
+  }
+
+  /// Creates a session via [repo], returning `null` on Left or throw.
+  Future<Session?> _createSessionRepo(
+    ChatLocalRepository repo,
+    String profileId, [
+    String? title,
+  ]) async {
+    try {
+      final result = await repo.createSession(profileId, title);
+      return result.fold<Session?>((_) => null, (s) => s);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Ensures [activeProfileId] has an active session: reuses an existing one,
+  /// migrates a legacy profile-keyed thread, or seeds a fresh session. Leaves
+  /// [activeSessionId] null on repo failure so persistence falls back to the
+  /// profile key.
+  Future<void> _ensureSession(String profileId) async {
+    final repo = _chatLocalRepository;
+    if (repo == null) return;
+    final fetched = await _fetchSessions(repo, profileId);
+    if (fetched == null) {
+      activeSessionId = null;
+      return;
+    }
+    _replaceSessions(fetched);
+    if (fetched.isEmpty) {
+      await _migrateOrSeed(repo, profileId);
+      final again = await _fetchSessions(repo, profileId);
+      if (again != null && again.isNotEmpty) _replaceSessions(again);
+    }
+    activeSessionId = _sessions.isNotEmpty ? _sessions.first.id : null;
+  }
+
+  /// Migrates a legacy profile-keyed thread into a titled session, otherwise
+  /// seeds a fresh default session. Errors are swallowed; either way a created
+  /// session is prepended to the local cache so [activeSessionId] can resolve.
+  Future<void> _migrateOrSeed(
+    ChatLocalRepository repo,
+    String profileId,
+  ) async {
+    List<ChatMessage> legacy = const <ChatMessage>[];
+    try {
+      final result = await repo.getMessages(profileId);
+      legacy = result.fold<List<ChatMessage>>((_) => const [], (m) => m);
+    } catch (_) {
+      legacy = const [];
+    }
+    if (legacy.isNotEmpty) {
+      final firstUser = legacy.firstWhere(
+        (m) => m.role == 'user',
+        orElse: () => legacy.first,
+      );
+      final created = await _createSessionRepo(
+        repo,
+        profileId,
+        _titleFromMessage(firstUser.content),
+      );
+      if (created != null) {
+        _sessions.insert(0, created);
+        try {
+          await repo.saveMessages(created.id.toString(), legacy);
+        } catch (_) {/* ignore */}
+        try {
+          await repo.clearMessages(profileId);
+        } catch (_) {/* ignore */}
+      }
+    } else {
+      final created = await _createSessionRepo(repo, profileId);
+      if (created != null) _sessions.insert(0, created);
+    }
+  }
+
+  /// Replaces in-memory history with messages stored under [key] and emits
+  /// [AgentIdle]. Never throws.
+  Future<void> _loadSessionMessages(String key) async {
+    final repo = _chatLocalRepository;
+    if (repo == null) {
+      if (!isClosed) emit(AgentIdle(messages: List.unmodifiable(_messages)));
+      return;
+    }
+    try {
+      final result = await repo.getMessages(key);
+      result.fold(
+        (_) {
+          if (!isClosed) {
+            emit(AgentIdle(messages: List.unmodifiable(_messages)));
+          }
+        },
+        (loaded) {
+          _messages
+            ..clear()
+            ..addAll(loaded);
+          if (!isClosed) {
+            emit(AgentIdle(messages: List.unmodifiable(_messages)));
+          }
+        },
+      );
+    } catch (_) {
+      if (!isClosed) emit(AgentIdle(messages: List.unmodifiable(_messages)));
+    }
+  }
+
+  /// Starts a new chat session for the active profile and switches to it.
+  Future<void> newChat() async {
+    final repo = _chatLocalRepository;
+    if (repo == null) return;
+    final created = await _createSessionRepo(repo, activeProfileId);
+    if (created == null) return;
+    _sessions.insert(0, created);
+    activeSessionId = created.id;
+    _messages.clear();
+    if (!isClosed) emit(const AgentIdle());
+  }
+
+  /// Switches to [sessionId]: cancels any running loop and loads its history.
+  Future<void> switchSession(int sessionId) async {
+    final repo = _chatLocalRepository;
+    if (repo == null) return;
+    if (sessionId == activeSessionId) return;
+    _runGeneration++;
+    _isCancelled = true;
+    if (_streamCompleter != null && !_streamCompleter!.isCompleted) {
+      _streamCompleter!.complete();
+    }
+    _pendingTurnToolCalls.clear();
+    _pendingToolCall = null;
+    activeSessionId = sessionId;
+    await _loadSessionMessages(sessionId.toString());
+  }
+
+  /// Renames [sessionId] and refreshes its title in the local cache.
+  Future<void> renameSession(int sessionId, String title) async {
+    final repo = _chatLocalRepository;
+    if (repo == null) return;
+    final derived = _titleFromMessage(title);
+    try {
+      final result = await repo.updateSessionTitle(sessionId, derived);
+      if (result.isRight()) {
+        final idx = _sessions.indexWhere((s) => s.id == sessionId);
+        if (idx != -1) {
+          _sessions[idx] = _sessions[idx].copyWith(title: derived);
+        }
+      }
+    } catch (_) {/* ignore */}
+  }
+
+  /// Deletes [sessionId]. If it was active, activates the newest remaining
+  /// session or seeds a fresh one when none remain.
+  Future<void> deleteSession(int sessionId) async {
+    final repo = _chatLocalRepository;
+    if (repo == null) return;
+    try {
+      final result = await repo.deleteSession(sessionId);
+      if (result.isLeft()) return;
+    } catch (_) {
+      return;
+    }
+    _sessions.removeWhere((s) => s.id == sessionId);
+    if (sessionId == activeSessionId) {
+      if (_sessions.isNotEmpty) {
+        activeSessionId = _sessions.first.id;
+        await _loadSessionMessages(activeSessionId!.toString());
+      } else {
+        await newChat();
+      }
+    }
+  }
+
+  /// Re-reads the session list for the active profile into the local cache.
+  Future<void> refreshSessions() async {
+    final repo = _chatLocalRepository;
+    if (repo == null) return;
+    final fetched = await _fetchSessions(repo, activeProfileId);
+    if (fetched != null) _replaceSessions(fetched);
+    if (!isClosed && state is AgentIdle) {
+      emit(AgentIdle(messages: List.unmodifiable(_messages)));
+    }
+  }
+
 
   /// Switches active profile and loads its history.
   Future<void> switchProfile(String newProfileId) async {
@@ -209,7 +429,29 @@ class AgentCubit extends Cubit<AgentState> {
     }
     _messages.add(ChatMessage(role: 'user', content: prompt));
     await _persistMessages();
+    await _maybeAutoTitle(prompt);
     await _runLoop(0, generation);
+  }
+
+  /// Gives an untitled active session a readable title derived from [prompt],
+  /// without an LLM call. No-op when there is no session repo, no active
+  /// session, or the session already has a non-default title.
+  Future<void> _maybeAutoTitle(String prompt) async {
+    final repo = _chatLocalRepository;
+    final sessionId = activeSessionId;
+    if (repo == null || sessionId == null) return;
+    final idx = _sessions.indexWhere((s) => s.id == sessionId);
+    if (idx == -1 || _sessions[idx].title != _untitledSessionTitle) return;
+    final title = _titleFromMessage(prompt);
+    if (title == _untitledSessionTitle) return;
+    try {
+      final result = await repo.updateSessionTitle(sessionId, title);
+      if (result.isRight()) {
+        _sessions[idx] = _sessions[idx].copyWith(title: title);
+      }
+    } catch (_) {
+      // Title is best-effort; never break the loop.
+    }
   }
 
   /// Pauses the agent loop and requests user approval for [request].
@@ -320,7 +562,7 @@ class AgentCubit extends Cubit<AgentState> {
     _pendingTurnToolCalls.clear();
     final repo = _chatLocalRepository;
     if (repo != null) {
-      unawaited(repo.clearMessages(activeProfileId));
+      unawaited(repo.clearMessages(_persistKey));
     }
     if (!isClosed) emit(const AgentIdle());
   }
