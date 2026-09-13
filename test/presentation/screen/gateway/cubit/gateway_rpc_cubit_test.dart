@@ -753,7 +753,9 @@ void main() {
       expect(cubit.state, isA<GatewayRpcElicitationResolved>());
     });
 
-    test('disconnect rejects pending elicitations and sends frames',
+    test(
+        'disconnect rejects pending elicitations locally and ATTEMPTS a '
+        'rejection frame (delivery after socket teardown is not guaranteed)',
         () async {
       createCubit();
       addElicitation('elicit-disc');
@@ -762,6 +764,9 @@ void main() {
       cubit.syncWithConnectionState(GatewayConnectionState.disconnected);
       await pumpEventQueue();
 
+      // Proves the local rejection is dispatched and a frame is attempted on
+      // the client. Whether the bytes reach the server after teardown is the
+      // transport's problem: the server falls back to its own timeout.
       verify(() => mockGatewayClient.sendElicitationResponse(
             requestId: 'elicit-disc',
             approved: false,
@@ -769,6 +774,69 @@ void main() {
           )).called(1);
       expect(cubit.state, isA<GatewayRpcElicitationResolved>());
       expect(cubit.isListening, isFalse);
+    });
+
+    test('duplicate request_id rejects the old request exactly once and keeps '
+        'the new one pending', () async {
+      createCubit();
+
+      addElicitation('elicit-dup');
+      await pumpEventQueue();
+      addElicitation('elicit-dup');
+      await pumpEventQueue();
+
+      verify(() => mockGatewayClient.sendElicitationResponse(
+            requestId: 'elicit-dup',
+            approved: false,
+            biometricVerified: false,
+          )).called(1);
+      expect(cubit.state, isA<GatewayRpcElicitationPending>());
+      expect((cubit.state as GatewayRpcElicitationPending).requestId,
+          'elicit-dup');
+
+      // The second registration owns the slot: resolving it sends an approval.
+      await cubit.approveElicitation('elicit-dup');
+      verify(() => mockGatewayClient.sendElicitationResponse(
+            requestId: 'elicit-dup',
+            approved: true,
+            biometricVerified: false,
+          )).called(1);
+    });
+
+    test('elicitation frame with blank request_id is ignored without emitting',
+        () async {
+      createCubit();
+      final states = <GatewayRpcState>[];
+      final sub = cubit.stream.listen(states.add);
+
+      elicitationController.add(const GatewayElicitationRequestMessage(
+        requestId: '   ',
+        title: 'Unaddressable',
+        description: 'No id to respond to',
+        riskLevel: 'high',
+      ));
+      await pumpEventQueue();
+
+      expect(states, isEmpty);
+      expect(cubit.state, isA<GatewayRpcInitial>());
+      verifyNever(() => mockGatewayClient.sendElicitationResponse(
+            requestId: any(named: 'requestId'),
+            approved: any(named: 'approved'),
+            biometricVerified: any(named: 'biometricVerified'),
+          ));
+      await sub.cancel();
+    });
+
+    test('pending state carries request fields for the approval sheet',
+        () async {
+      createCubit();
+      addElicitation('elicit-fields');
+      await pumpEventQueue();
+
+      final pending = cubit.state as GatewayRpcElicitationPending;
+      expect(pending.fields, const [
+        {'name': 'amount', 'value': '500'},
+      ]);
     });
   });
 }

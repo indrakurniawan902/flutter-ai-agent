@@ -63,6 +63,7 @@ class GatewayRpcElicitationPending extends GatewayRpcState {
   final String title;
   final String description;
   final String riskLevel;
+  final List<Map<String, dynamic>> fields;
   final Duration expiresAfter;
 
   const GatewayRpcElicitationPending({
@@ -70,12 +71,13 @@ class GatewayRpcElicitationPending extends GatewayRpcState {
     required this.title,
     required this.description,
     required this.riskLevel,
+    this.fields = const [],
     this.expiresAfter = const Duration(seconds: 120),
   });
 
   @override
   List<Object?> get props =>
-      [requestId, title, description, riskLevel, expiresAfter];
+      [requestId, title, description, riskLevel, fields, expiresAfter];
 }
 
 /// State emitted once an elicitation request has been resolved locally.

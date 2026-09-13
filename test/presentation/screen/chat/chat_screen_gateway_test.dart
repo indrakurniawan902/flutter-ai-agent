@@ -43,6 +43,9 @@ void main() {
   late StreamController<GatewayMessage> gatewayMessageController;
   late StreamController<GatewayTextDeltaMessage> gatewayTextDeltaController;
   late StreamController<ServerProfileState> serverProfileStateController;
+  late StreamController<GatewayToolCallRequestMessage> toolRequestController;
+  late StreamController<GatewayElicitationRequestMessage>
+      elicitationRequestController;
 
   final sampleProfile = ServerProfile(
     id: 'prof-1',
@@ -83,6 +86,10 @@ void main() {
         StreamController<GatewayTextDeltaMessage>.broadcast();
     serverProfileStateController =
         StreamController<ServerProfileState>.broadcast();
+    toolRequestController =
+        StreamController<GatewayToolCallRequestMessage>.broadcast();
+    elicitationRequestController =
+        StreamController<GatewayElicitationRequestMessage>.broadcast();
 
     when(() => mockAgentCubit.state).thenReturn(const AgentIdle());
     when(() => mockAgentCubit.messages).thenReturn([]);
@@ -150,20 +157,53 @@ void main() {
     await gatewayMessageController.close();
     await gatewayTextDeltaController.close();
     await serverProfileStateController.close();
+    await toolRequestController.close();
+    await elicitationRequestController.close();
     await sl.reset();
   });
 
   Widget createWidgetUnderTest({
     ChatMode initialMode = ChatMode.direct,
+    GatewayRpcCubit? gatewayRpcCubit,
   }) {
     return MaterialApp(
       home: ChatScreen(
         initialMode: initialMode,
         gatewayClient: mockGatewayClient,
-        gatewayRpcCubit: mockGatewayRpcCubit,
+        gatewayRpcCubit: gatewayRpcCubit ?? mockGatewayRpcCubit,
         serverProfileCubit: mockServerProfileCubit,
       ),
     );
+  }
+
+  /// Real cubit wired to the mock client, so elicitation frames are produced
+  /// and consumed through the genuine dispatch path (no self-stubbing).
+  GatewayRpcCubit createRealRpcCubit() {
+    when(() => mockGatewayClient.toolCallRequestStream)
+        .thenAnswer((_) => toolRequestController.stream);
+    when(() => mockGatewayClient.elicitationRequestStream)
+        .thenAnswer((_) => elicitationRequestController.stream);
+    when(() => mockGatewayClient.sendElicitationResponse(
+          requestId: any(named: 'requestId'),
+          approved: any(named: 'approved'),
+          biometricVerified: any(named: 'biometricVerified'),
+        )).thenReturn(null);
+    final cubit = GatewayRpcCubit(
+      gatewayClient: mockGatewayClient,
+      toolRegistry: MockToolRegistry(),
+      autoStart: false,
+    );
+    addTearDown(cubit.close);
+    return cubit;
+  }
+
+  void addElicitationFrame(String id, {required String title}) {
+    elicitationRequestController.add(GatewayElicitationRequestMessage(
+      requestId: id,
+      title: title,
+      description: 'Remote HITL request $title',
+      riskLevel: 'high',
+    ));
   }
 
   group('ChatScreen Gateway - Connection Status Indicator', () {
@@ -555,30 +595,17 @@ void main() {
     testWidgets(
         'shows ElicitationApprovalSheet on GatewayRpcElicitationPending and '
         'tapping Reject dispatches a rejection response', (tester) async {
-      when(() => mockGatewayClient.sendElicitationResponse(
-            requestId: any(named: 'requestId'),
-            approved: any(named: 'approved'),
-            biometricVerified: any(named: 'biometricVerified'),
-          )).thenReturn(null);
-      when(() => mockGatewayRpcCubit.rejectElicitation(any()))
-          .thenAnswer((invocation) async {
-        mockGatewayClient.sendElicitationResponse(
-          requestId: invocation.positionalArguments.first as String,
-          approved: false,
-        );
-      });
+      when(() => mockGatewayClient.state)
+          .thenReturn(GatewayConnectionState.connected);
+      final rpcCubit = createRealRpcCubit();
 
-      await tester.pumpWidget(
-          createWidgetUnderTest(initialMode: ChatMode.gateway));
+      await tester.pumpWidget(createWidgetUnderTest(
+        initialMode: ChatMode.gateway,
+        gatewayRpcCubit: rpcCubit,
+      ));
       await tester.pumpAndSettle();
 
-      const pending = GatewayRpcElicitationPending(
-        requestId: 'elicit_ui_1',
-        title: 'Fund transfer',
-        description: 'Approve moving 500 USDT?',
-        riskLevel: 'high',
-      );
-      gatewayRpcStateController.add(pending);
+      addElicitationFrame('elicit_ui_1', title: 'Fund transfer');
       await tester.pumpAndSettle();
 
       expect(find.byType(ElicitationApprovalSheet), findsOneWidget);
@@ -588,14 +615,192 @@ void main() {
       await tester.tap(find.byKey(const Key('elicitation_reject_button')));
       await tester.pumpAndSettle();
 
-      verify(() => mockGatewayRpcCubit.rejectElicitation('elicit_ui_1'))
-          .called(1);
+      // Verified through the real cubit path: the tap must make the gateway
+      // client emit a rejection frame for exactly this request id.
       verify(() => mockGatewayClient.sendElicitationResponse(
             requestId: 'elicit_ui_1',
             approved: false,
             biometricVerified: false,
           )).called(1);
       expect(find.byType(ElicitationApprovalSheet), findsNothing);
+      expect(rpcCubit.state, isA<GatewayRpcElicitationResolved>());
+    });
+
+    testWidgets(
+        'two concurrent elicitations: rejecting the topmost sheet pops that '
+        'sheet and keeps the older one pending', (tester) async {
+      when(() => mockGatewayClient.state)
+          .thenReturn(GatewayConnectionState.connected);
+      final rpcCubit = createRealRpcCubit();
+
+      await tester.pumpWidget(createWidgetUnderTest(
+        initialMode: ChatMode.gateway,
+        gatewayRpcCubit: rpcCubit,
+      ));
+      await tester.pumpAndSettle();
+
+      addElicitationFrame('elicit_first', title: 'First request');
+      await tester.pumpAndSettle();
+      addElicitationFrame('elicit_second', title: 'Second request');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ElicitationApprovalSheet), findsNWidgets(2));
+
+      await tester.tap(
+          find.byKey(const Key('elicitation_reject_button')).last);
+      await tester.pumpAndSettle();
+
+      verify(() => mockGatewayClient.sendElicitationResponse(
+            requestId: 'elicit_second',
+            approved: false,
+            biometricVerified: false,
+          )).called(1);
+      verifyNever(() => mockGatewayClient.sendElicitationResponse(
+            requestId: 'elicit_first',
+            approved: any(named: 'approved'),
+            biometricVerified: any(named: 'biometricVerified'),
+          ));
+
+      // Topmost sheet gone, the older one still awaits a decision.
+      expect(find.byType(ElicitationApprovalSheet), findsOneWidget);
+      expect(find.text('First request'), findsOneWidget);
+      expect(find.text('Second request'), findsNothing);
+
+      await tester.tap(find.byKey(const Key('elicitation_reject_button')));
+      await tester.pumpAndSettle();
+
+      verify(() => mockGatewayClient.sendElicitationResponse(
+            requestId: 'elicit_first',
+            approved: false,
+            biometricVerified: false,
+          )).called(1);
+      expect(find.byType(ElicitationApprovalSheet), findsNothing);
+    });
+
+    testWidgets(
+        'leaving the chat screen rejects every still-open elicitation sheet',
+        (tester) async {
+      when(() => mockGatewayClient.state)
+          .thenReturn(GatewayConnectionState.connected);
+      final rpcCubit = createRealRpcCubit();
+
+      await tester.pumpWidget(createWidgetUnderTest(
+        initialMode: ChatMode.gateway,
+        gatewayRpcCubit: rpcCubit,
+      ));
+      await tester.pumpAndSettle();
+
+      addElicitationFrame('elicit_leave', title: 'Leaving demo');
+      await tester.pumpAndSettle();
+      expect(find.byType(ElicitationApprovalSheet), findsOneWidget);
+
+      // Unmounting the screen must not leave the server hanging.
+      await tester.pumpWidget(const MaterialApp(home: Scaffold()));
+      await tester.pumpAndSettle();
+
+      verify(() => mockGatewayClient.sendElicitationResponse(
+            requestId: 'elicit_leave',
+            approved: false,
+            biometricVerified: false,
+          )).called(1);
+    });
+
+    testWidgets(
+        'elicitation sheet surfaces request fields and drops the raw id dump',
+        (tester) async {
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.gateway));
+      await tester.pumpAndSettle();
+
+      const pending = GatewayRpcElicitationPending(
+        requestId: 'elicit_fields_ui',
+        title: 'Fund transfer',
+        description: 'Approve moving funds?',
+        riskLevel: 'high',
+        fields: [
+          {'name': 'amount', 'value': '500'},
+          {'name': 'recipient', 'value': '0xdeadbeef'},
+        ],
+      );
+      gatewayRpcStateController.add(pending);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Request Fields'), findsOneWidget);
+      expect(find.byKey(const Key('elicitation_field_row_0')), findsOneWidget);
+      expect(find.textContaining('amount'), findsOneWidget);
+      expect(find.textContaining('0xdeadbeef'), findsOneWidget);
+      expect(find.textContaining('elicit_fields_ui'), findsNothing);
+      expect(find.textContaining('expires_after'), findsNothing);
+    });
+
+    testWidgets(
+        'elicitation sheet bounds fields at 10 rows and reports the overflow',
+        (tester) async {
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.gateway));
+      await tester.pumpAndSettle();
+
+      final fields = [
+        for (var i = 0; i < 14; i++) {'name': 'f$i', 'value': 'v$i'},
+      ];
+      gatewayRpcStateController.add(GatewayRpcElicitationPending(
+        requestId: 'elicit_many_fields',
+        title: 'Many fields',
+        description: 'Overflow demo',
+        riskLevel: 'low',
+        fields: fields,
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('elicitation_field_row_0')), findsOneWidget);
+      expect(find.byKey(const Key('elicitation_field_row_9')), findsOneWidget);
+      expect(
+          find.byKey(const Key('elicitation_field_row_10')), findsNothing);
+      expect(find.text('+4 more'), findsOneWidget);
+    });
+
+    testWidgets('truncates an oversized field value to 200 chars',
+        (tester) async {
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.gateway));
+      await tester.pumpAndSettle();
+
+      final longValue = 'y' * 300;
+      gatewayRpcStateController.add(GatewayRpcElicitationPending(
+        requestId: 'elicit_long',
+        title: 'Long value',
+        description: 'Truncation demo',
+        riskLevel: 'low',
+        fields: [
+          {'name': 'payload', 'value': longValue},
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      final row = tester.widget<Text>(
+          find.byKey(const Key('elicitation_field_row_0')));
+      final rendered = row.textSpan?.toPlainText() ?? '';
+      expect(rendered, 'payload: ${'y' * 200}…');
+      expect(rendered.length, lessThan(longValue.length));
+    });
+
+    testWidgets('omits the fields section when the request carries none',
+        (tester) async {
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.gateway));
+      await tester.pumpAndSettle();
+
+      const pending = GatewayRpcElicitationPending(
+        requestId: 'elicit_nofields',
+        title: 'Plain prompt',
+        description: 'Nothing attached',
+        riskLevel: 'low',
+      );
+      gatewayRpcStateController.add(pending);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ElicitationApprovalSheet), findsOneWidget);
+      expect(find.text('Request Fields'), findsNothing);
     });
 
     testWidgets(
