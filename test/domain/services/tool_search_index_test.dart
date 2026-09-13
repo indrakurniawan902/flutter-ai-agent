@@ -36,6 +36,10 @@ void main() {
 
       expect(tokens, equals(<String>['battery']));
     });
+
+    test('drops where for rank scoring', () {
+      expect(ToolSearchIndex.tokenize('where am i'), isNot(contains('where')));
+    });
   });
 
   group('ToolSearchIndex.toolNamesForPrompt', () {
@@ -93,6 +97,20 @@ void main() {
         isEmpty,
       );
     });
+
+    test('matches location tools for where prompt despite stopword', () {
+      expect(
+        ToolSearchIndex.toolNamesForPrompt('where am i'),
+        contains('get_location'),
+      );
+    });
+
+    test('matches location tools for Indonesian mana prompt', () {
+      expect(
+        ToolSearchIndex.toolNamesForPrompt('di mana saya'),
+        contains('get_location'),
+      );
+    });
   });
 
   group('ToolSearchIndex.rank', () {
@@ -133,6 +151,10 @@ void main() {
         description:
             'Searches the available tools by keyword and returns matching tool names, best match first. Accepts multi-word queries; prefer single keywords like battery, location, notification.',
       ),
+      const ToolSearchDoc(
+        name: 'tool_describe',
+        description: 'Describes a tool and its parameters.',
+      ),
     ];
 
     test('ranks device_status first for multi-word query', () {
@@ -171,6 +193,19 @@ void main() {
       );
 
       expect(result.first, equals('device_status'));
+    });
+
+    test('matches all-stopword exact name tool_search', () {
+      final result = ToolSearchIndex.rank(query: 'tool_search', docs: docs);
+
+      expect(result, hasLength(1));
+      expect(result, equals(<String>['tool_search']));
+    });
+
+    test('matches all-stopword exact name via spaces', () {
+      final result = ToolSearchIndex.rank(query: 'tool describe', docs: docs);
+
+      expect(result, contains('tool_describe'));
     });
 
     test('returns empty for unknown gibberish', () {

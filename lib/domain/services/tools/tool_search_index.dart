@@ -170,10 +170,11 @@ class ToolSearchIndex {
     'hp': ['device'],
     'ponsel': ['device'],
     'informasi': ['info'],
-    'info': ['info'],
     'spesifikasi': ['info', 'system'],
     'lokasi': ['location'],
     'posisi': ['location'],
+    'mana': ['where', 'location'],
+    'dimana': ['where', 'location'],
     'peta': ['map'],
     'notifikasi': ['notification'],
     'pemberitahuan': ['notification'],
@@ -192,14 +193,11 @@ class ToolSearchIndex {
     'telepon': ['phone'],
     'panggilan': ['call'],
     'berkas': ['file'],
-    'file': ['file'],
     'dokumen': ['document'],
-    'folder': ['folder'],
     'direktori': ['directory'],
     'unduh': ['download'],
     'salin': ['copy'],
     'tempel': ['paste'],
-    'clipboard': ['clipboard'],
     'suara': ['voice'],
     'ucapkan': ['speak'],
     'bicara': ['speak'],
@@ -213,10 +211,8 @@ class ToolSearchIndex {
     'buka': ['open'],
     'tautan': ['link', 'url'],
     'situs': ['url'],
-    'status': ['status'],
     'isyarat': ['signal'],
     'penyimpanan': ['storage'],
-    'pengingat_lokasi': ['geofence'],
     'sekitar': ['nearby'],
     'pesan': ['message'],
     'kirim': ['send'],
@@ -324,14 +320,20 @@ class ToolSearchIndex {
   /// Lowercases, splits on any non-alphanumeric run, drops [stopwords],
   /// expands every token through [indonesianSynonyms] (original token kept
   /// first, expansions appended, de-duplicated, order preserved).
-  static List<String> tokenize(String query) {
-    final lowered = query.toLowerCase();
+  static List<String> tokenize(String query) =>
+      _expandTokens(query, dropStopwords: true);
+
+  static List<String> _expandTokens(
+    String text, {
+    required bool dropStopwords,
+  }) {
+    final lowered = text.toLowerCase();
     final parts = lowered.split(RegExp(r'[^a-z0-9]+'));
     final result = <String>[];
     final seen = <String>{};
     for (final part in parts) {
       if (part.isEmpty) continue;
-      if (stopwords.contains(part)) continue;
+      if (dropStopwords && stopwords.contains(part)) continue;
       if (seen.add(part)) result.add(part);
       final expansions = indonesianSynonyms[part];
       if (expansions != null) {
@@ -346,7 +348,7 @@ class ToolSearchIndex {
   /// Tool names whose category keyword appears in [prompt].
   /// Whole-token matching only (no substring matching).
   static Set<String> toolNamesForPrompt(String prompt) {
-    final tokens = tokenize(prompt).toSet();
+    final tokens = _expandTokens(prompt, dropStopwords: false).toSet();
     final matched = <String>{};
     for (final category in categories) {
       var hit = false;
@@ -371,7 +373,6 @@ class ToolSearchIndex {
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return const <String>[];
     final queryTokens = tokenize(q);
-    if (queryTokens.isEmpty) return const <String>[];
     final qUnderscored = q.replaceAll(' ', '_');
     final scores = List<int>.filled(docs.length, 0);
     for (var i = 0; i < docs.length; i++) {
@@ -382,27 +383,29 @@ class ToolSearchIndex {
       if (q == nameLower || qUnderscored == nameLower) {
         score += 100;
       }
-      final nameTokens = nameLower
-          .split(RegExp(r'[^a-z0-9]+'))
-          .where((t) => t.isNotEmpty)
-          .toList(growable: false);
-      final descTokens = descLower
-          .split(RegExp(r'[^a-z0-9]+'))
-          .where((t) => t.isNotEmpty)
-          .toSet();
-      for (final token in queryTokens) {
-        if (nameTokens.contains(token)) {
-          score += 10;
-        } else if (token.length >= 3 &&
-            nameTokens.any((n) => n.startsWith(token))) {
-          score += 6;
-        } else if (token.length >= 3 && nameLower.contains(token)) {
-          score += 4;
-        }
-        if (descTokens.contains(token)) {
-          score += 2;
-        } else if (token.length >= 3 && descLower.contains(token)) {
-          score += 1;
+      if (queryTokens.isNotEmpty) {
+        final nameTokens = nameLower
+            .split(RegExp(r'[^a-z0-9]+'))
+            .where((t) => t.isNotEmpty)
+            .toList(growable: false);
+        final descTokens = descLower
+            .split(RegExp(r'[^a-z0-9]+'))
+            .where((t) => t.isNotEmpty)
+            .toSet();
+        for (final token in queryTokens) {
+          if (nameTokens.contains(token)) {
+            score += 10;
+          } else if (token.length >= 3 &&
+              nameTokens.any((n) => n.startsWith(token))) {
+            score += 6;
+          } else if (token.length >= 3 && nameLower.contains(token)) {
+            score += 4;
+          }
+          if (descTokens.contains(token)) {
+            score += 2;
+          } else if (token.length >= 3 && descLower.contains(token)) {
+            score += 1;
+          }
         }
       }
       scores[i] = score;

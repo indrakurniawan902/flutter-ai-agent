@@ -83,6 +83,13 @@ void main() {
     expect(result.split('\n').first, equals('device_status'));
   });
 
+  test('all-stopword exact name query self-matches tool_search', () async {
+    final result = await search('tool_search');
+
+    expect(result.split('\n'), contains('tool_search'));
+    expect(result, isNot(contains('No tools matched')));
+  });
+
   test('unknown query returns actionable sentence', () async {
     final result = await search('zzzqqq nonsense');
 
