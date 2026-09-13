@@ -105,15 +105,21 @@ void main() {
       expect(find.byKey(const Key('chat_send_button')), findsOneWidget);
     });
 
-    testWidgets('renders HeaderConsoleBar with GatewayStatusChip and AchievementTierBadge', (tester) async {
+    testWidgets('renders HeaderConsoleBar with GatewayStatusChip and real connection state pill', (tester) async {
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('header_console_bar')), findsOneWidget);
       expect(find.byKey(const Key('gateway_status_chip')), findsOneWidget);
-      expect(find.byKey(const Key('achievement_tier_badge')), findsOneWidget);
-      expect(find.text('Running 8644'), findsOneWidget);
-      expect(find.text('Olympian • 47/60 Badges'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('header_console_bar')),
+          matching: find.text('Standalone'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Running 8644'), findsNothing);
+      expect(find.text('Olympian • 47/60 Badges'), findsNothing);
     });
 
     testWidgets('does not overflow on narrow mobile screens (320x568)', (tester) async {
@@ -128,7 +134,7 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.byKey(const Key('chat_app_bar_logo')), findsOneWidget);
       expect(find.text('Flames'), findsOneWidget);
-      expect(find.byKey(const Key('chat_connection_indicator')), findsOneWidget);
+      expect(find.byKey(const Key('gateway_status_chip')), findsOneWidget);
       expect(find.byKey(const Key('header_console_bar')), findsOneWidget);
     });
 
@@ -189,14 +195,11 @@ void main() {
       verify(() => mockAgentCubit.reset()).called(1);
     });
 
-    testWidgets('tapping settings button navigates to SettingsScreen', (tester) async {
+    testWidgets('settings gear removed from header (owned by bottom nav)', (tester) async {
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('chat_settings_button')));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(SettingsScreen), findsOneWidget);
+      expect(find.byKey(const Key('chat_settings_button')), findsNothing);
     });
   });
 

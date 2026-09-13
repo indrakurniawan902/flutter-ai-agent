@@ -35,7 +35,7 @@ class FloatingBottomNavBar extends StatelessWidget {
     NavigationBarItemData(
       keyName: 'nav_item_chat',
       label: 'Chat',
-      icon: Icons.terminal,
+      icon: Icons.terminal_outlined,
       indicatorKey: 'nav_indicator_chat',
     ),
     NavigationBarItemData(
@@ -79,9 +79,11 @@ class FloatingBottomNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       top: false,
-      child: Container(
-        key: const Key('floating_bottom_nav_bar'),
-        margin: const EdgeInsets.only(left: 16, right: 16, bottom: 12, top: 4),
+      child: Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
+        child: Container(
+          key: const Key('floating_bottom_nav_bar'),
+          margin: const EdgeInsets.only(left: 16, right: 16, bottom: 12, top: 4),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
@@ -123,6 +125,7 @@ class FloatingBottomNavBar extends StatelessWidget {
           ),
         ),
       ),
+      ),
     );
   }
 }
@@ -156,21 +159,10 @@ class _NavItemWidget extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeOutCubic,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isActive
-                        ? activeColor.withValues(alpha: 0.12)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    item.icon,
-                    size: 22,
-                    color: isActive ? activeColor : inactiveColor,
-                  ),
+                Icon(
+                  item.icon,
+                  size: 22,
+                  color: isActive ? activeColor : inactiveColor,
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -179,7 +171,7 @@ class _NavItemWidget extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: HermesTypography.monospace(
                     fontSize: 10,
-                    fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                     color: isActive ? activeColor : inactiveColor,
                     letterSpacing: 0.2,
                   ),

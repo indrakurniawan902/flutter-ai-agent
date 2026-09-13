@@ -92,154 +92,17 @@ class _PulsingDotState extends State<PulsingDot>
   }
 }
 
-/// Monospace status pill showing the local/remote gateway connection and port.
-class GatewayStatusChip extends StatelessWidget {
-  final int port;
-  final bool isRunning;
-  final String? customLabel;
-  final VoidCallback? onTap;
-
-  const GatewayStatusChip({
-    super.key,
-    this.port = 8644,
-    this.isRunning = true,
-    this.customLabel,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final statusColor = isRunning
-        ? HermesColors.emerald
-        : HermesColors.inkMuted;
-    final labelText = customLabel ?? (isRunning ? 'Running $port' : 'Offline');
-
-    final content = Material(
-      color: Colors.transparent,
-      child: InkWell(
-        key: const Key('gateway_status_chip'),
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: HermesColors.cardSurface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isRunning
-                  ? HermesColors.emerald.withValues(alpha: 0.25)
-                  : HermesColors.border,
-              width: 0.8,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              PulsingDot(size: 7.0, color: statusColor),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  labelText,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: HermesTypography.statusPill(
-                    color: statusColor,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    return Tooltip(message: 'Gateway RPC Node: $labelText', child: content);
-  }
-}
-
-/// Gamified achievement tier indicator badge (e.g. Olympian • 47/60 Badges).
-class AchievementTierBadge extends StatelessWidget {
-  final String tier;
-  final String progress;
-  final String? customLabel;
-  final VoidCallback? onTap;
-
-  const AchievementTierBadge({
-    super.key,
-    this.tier = 'Olympian',
-    this.progress = '47/60 Badges',
-    this.customLabel,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final labelText = customLabel ?? '$tier • $progress';
-
-    final content = Material(
-      color: Colors.transparent,
-      child: InkWell(
-        key: const Key('achievement_tier_badge'),
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: HermesColors.cardSurface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: HermesColors.amber.withValues(alpha: 0.3),
-              width: 0.8,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.bolt, size: 13, color: HermesColors.amber),
-              const SizedBox(width: 4),
-              Flexible(
-                child: Text(
-                  labelText,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: HermesTypography.tierBadge(
-                    color: HermesColors.amber,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    return Tooltip(message: 'Agent Achievement: $labelText', child: content);
-  }
-}
-
-/// Header Console / Status Bar sitting atop the terminal workstation.
+/// Real-state connection pill fed by the screen (label + color + tap handler).
 class HeaderConsoleBar extends StatelessWidget {
-  final int port;
-  final bool isGatewayRunning;
-  final String? gatewayLabel;
-  final String tier;
-  final String badgeProgress;
-  final String? tierLabel;
-  final VoidCallback? onTapGateway;
-  final VoidCallback? onTapTierBadge;
+  final String? connectionLabel;
+  final Color? connectionColor;
+  final VoidCallback? onTapConnection;
 
   const HeaderConsoleBar({
     super.key,
-    this.port = 8644,
-    this.isGatewayRunning = true,
-    this.gatewayLabel,
-    this.tier = 'Olympian',
-    this.badgeProgress = '47/60 Badges',
-    this.tierLabel,
-    this.onTapGateway,
-    this.onTapTierBadge,
+    this.connectionLabel,
+    this.connectionColor,
+    this.onTapConnection,
   });
 
   @override
@@ -260,20 +123,10 @@ class HeaderConsoleBar extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Flexible(
-                child: GatewayStatusChip(
-                  port: port,
-                  isRunning: isGatewayRunning,
-                  customLabel: gatewayLabel,
-                  onTap: onTapGateway,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: AchievementTierBadge(
-                  tier: tier,
-                  progress: badgeProgress,
-                  customLabel: tierLabel,
-                  onTap: onTapTierBadge,
+                child: _ConnectionStatusPill(
+                  label: connectionLabel,
+                  color: connectionColor ?? HermesColors.inkMuted,
+                  onTap: onTapConnection,
                 ),
               ),
             ],
@@ -281,5 +134,64 @@ class HeaderConsoleBar extends StatelessWidget {
         },
       ),
     );
+  }
+}
+
+class _ConnectionStatusPill extends StatelessWidget {
+  final String? label;
+  final Color color;
+  final VoidCallback? onTap;
+
+  const _ConnectionStatusPill({
+    required this.label,
+    required this.color,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: const Key('gateway_status_chip'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: HermesColors.cardSurface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: color.withValues(alpha: 0.25),
+              width: 0.8,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              PulsingDot(size: 7.0, color: color),
+              if (label != null) ...[
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: HermesTypography.statusPill(
+                      color: color,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final message = label;
+    if (message == null) return content;
+    return Tooltip(message: 'Gateway RPC Node: $message', child: content);
   }
 }
