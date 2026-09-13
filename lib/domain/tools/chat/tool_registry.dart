@@ -21,6 +21,7 @@ import 'notification_service.dart';
 import 'notification_triage_service.dart';
 import 'security_policy.dart';
 import 'system_settings_allow_list.dart';
+import 'url_reader_service.dart';
 import 'voice_input_service.dart';
 import 'voice_output_service.dart';
 
@@ -84,6 +85,7 @@ class ToolRegistry {
     BackgroundServiceBase? backgroundService,
     ContactLauncherTools? contactLauncherTools,
     IntentLauncherServiceBase? intentLauncherService,
+    UrlReaderServiceBase? urlReaderService,
   }) {
     if (clipboardService != null) registerClipboardTools(clipboardService);
     if (locationService != null) registerLocationTools(locationService);
@@ -114,6 +116,7 @@ class ToolRegistry {
     if (intentLauncherService != null) {
       registerIntentLauncherTools(intentLauncherService);
     }
+    if (urlReaderService != null) registerUrlReaderTools(urlReaderService);
     registerMetaTools();
   }
 
@@ -1315,6 +1318,32 @@ class ToolRegistry {
         securityTier: SecurityTier.tier2Permission,
         execute: (args) =>
             service.launchSystemSetting(args['setting_type']?.toString() ?? ''),
+      ),
+    );
+  }
+
+  void registerUrlReaderTools(UrlReaderServiceBase service) {
+    register(
+      RegisteredTool(
+        name: 'read_web_page',
+        description: 'Fetches a web page and returns its readable plain-text content '
+            '(scripts and markup stripped, capped). Use when the user shares or mentions '
+            'a link and you need the article body.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'url': {
+              'type': 'string',
+              'description': 'Absolute http/https URL to read',
+            },
+          },
+          'required': ['url'],
+        },
+        securityTier: SecurityTier.tier2Permission,
+        execute: (args) async {
+          final url = args['url']?.toString() ?? '';
+          return service.fetchReadableText(url);
+        },
       ),
     );
   }
