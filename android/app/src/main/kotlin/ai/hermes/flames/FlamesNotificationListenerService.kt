@@ -6,6 +6,13 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import java.util.concurrent.ConcurrentLinkedDeque
 
+/**
+ * Notification buffer lifecycle:
+ * - The buffer is IN-MEMORY only: wiped on app process restart.
+ * - Re-seeded ONLY from notifications currently active on screen at
+ *   [onListenerConnected] (activeNotifications snapshot) — notifications
+ *   posted while the service was dead are LOST FOREVER and never back-fill.
+ */
 class FlamesNotificationListenerService : NotificationListenerService() {
     companion object {
         private const val MAX_BUFFER_SIZE = 100
@@ -21,6 +28,10 @@ class FlamesNotificationListenerService : NotificationListenerService() {
             notificationBuffer.clear()
         }
 
+        /**
+         * Single source of truth for "will onNotificationPosted fire":
+         * true only while the service instance is alive.
+         */
         fun isConnected(): Boolean = instance != null
     }
 

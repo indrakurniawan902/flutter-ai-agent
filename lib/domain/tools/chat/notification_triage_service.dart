@@ -113,6 +113,8 @@ class OtpExtractionResult extends Equatable {
 abstract class NotificationListenerPlatformWrapper {
   Future<bool> isPermissionGranted();
   Future<bool> requestPermission();
+  Future<bool> isListenerConnected();
+  Future<bool> requestRebind();
   Future<List<Map<String, dynamic>>> getRecentNotifications({int limit = 20});
   Future<void> clearNotifications();
 }
@@ -120,6 +122,16 @@ abstract class NotificationListenerPlatformWrapper {
 abstract class NotificationTriageServiceBase {
   Future<bool> checkPermission();
   Future<bool> requestPermission();
+
+  /// Permission-granted does not imply connected. The buffer is in-memory, wiped
+  /// on process restart, and re-seeded only from notifications active at connect
+  /// time, so an empty list while connected means "nothing on screen since connect",
+  /// never "the phone has no notifications".
+  Future<bool> isListenerConnected();
+
+  /// Attempts programmatic rebind and returns the re-checked connection state.
+  Future<bool> requestRebind();
+
   Future<Either<Failure, List<NotificationEntry>>> getRecentNotifications({
     String? appFilter,
     int limit = 20,

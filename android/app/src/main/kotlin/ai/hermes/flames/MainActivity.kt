@@ -1,6 +1,7 @@
 package ai.hermes.flames
 
 import android.Manifest
+import android.app.NotificationListenerService
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -8,6 +9,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.annotation.NonNull
@@ -104,6 +107,33 @@ class MainActivity : FlutterActivity() {
                     "clearNotifications" -> {
                         FlamesNotificationListenerService.clearBuffer()
                         result.success(true)
+                    }
+                    "isListenerConnected" -> {
+                        result.success(FlamesNotificationListenerService.isConnected())
+                    }
+                    "requestRebind" -> {
+                        // On MIUI/HyperOS (Xiaomi) the listener is typically killed by
+                        // battery optimisation / autostart; a successful rebind may be
+                        // undone. The Dart layer surfaces a battery-optimisation CTA
+                        // separately.
+                        try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                NotificationListenerService.requestRebind(
+                                    ComponentName(applicationContext, FlamesNotificationListenerService::class.java)
+                                )
+                                Handler(Looper.getMainLooper()).postDelayed({
+                                    try {
+                                        result.success(FlamesNotificationListenerService.isConnected())
+                                    } catch (e: Exception) {
+                                        result.error("REBIND_ERROR", e.message, null)
+                                    }
+                                }, 2000L)
+                            } else {
+                                result.success(false)
+                            }
+                        } catch (e: Exception) {
+                            result.success(false)
+                        }
                     }
                     else -> {
                         result.notImplemented()
@@ -331,6 +361,10 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /**
+     * PERMISSION fact only: may be true while the listener service is dead.
+     * Liveness = isListenerConnected.
+     */
     private fun isNotificationListenerPermissionGranted(): Boolean {
         if (FlamesNotificationListenerService.isConnected()) {
             return true

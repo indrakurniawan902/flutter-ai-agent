@@ -34,7 +34,13 @@ void main() {
 
   setUp(() {
     mockPlatform = MockNotificationListenerPlatformWrapper();
-    service = NotificationTriageService(platformWrapper: mockPlatform);
+    service = NotificationTriageService(
+      platformWrapper: mockPlatform,
+      pollInterval: Duration.zero,
+    );
+    when(() => mockPlatform.isListenerConnected())
+        .thenAnswer((_) async => true);
+    when(() => mockPlatform.requestRebind()).thenAnswer((_) async => false);
   });
 
   group('NotificationEntry', () {
@@ -233,7 +239,107 @@ void main() {
     });
   });
 
+  group('isListenerConnected / requestRebind', () {
+    test('isListenerConnected delegates to platform wrapper', () async {
+      // Arrange
+      when(() => mockPlatform.isListenerConnected())
+          .thenAnswer((_) async => true);
+
+      // Act & Assert
+      expect(await service.isListenerConnected(), isTrue);
+
+      when(() => mockPlatform.isListenerConnected())
+          .thenAnswer((_) async => false);
+      expect(await service.isListenerConnected(), isFalse);
+
+      when(() => mockPlatform.isListenerConnected())
+          .thenThrow(Exception('boom'));
+      expect(await service.isListenerConnected(), isFalse);
+    });
+
+    test('requestRebind delegates to platform wrapper', () async {
+      // Arrange
+      when(() => mockPlatform.requestRebind()).thenAnswer((_) async => true);
+
+      // Act & Assert
+      expect(await service.requestRebind(), isTrue);
+
+      when(() => mockPlatform.requestRebind()).thenAnswer((_) async => false);
+      expect(await service.requestRebind(), isFalse);
+
+      when(() => mockPlatform.requestRebind()).thenThrow(Exception('boom'));
+      expect(await service.requestRebind(), isFalse);
+    });
+  });
+
   group('getRecentNotifications', () {
+    test('connected=true returns entries successfully', () async {
+      // Arrange
+      when(() => mockPlatform.isListenerConnected())
+          .thenAnswer((_) async => true);
+      when(() => mockPlatform.getRecentNotifications(limit: 20)).thenAnswer(
+        (_) async => [rawNotification(id: 'n1')],
+      );
+
+      // Act
+      final result = await service.getRecentNotifications();
+
+      // Assert
+      expect(result.isRight(), isTrue);
+      result.fold(
+        (_) => fail('expected Right'),
+        (entries) => expect(entries.first.id, 'n1'),
+      );
+    });
+
+    test(
+        'connected=false, requestRebind fails, re-checks false returns ListenerNotConnectedFailure',
+        () async {
+      // Arrange
+      when(() => mockPlatform.isListenerConnected())
+          .thenAnswer((_) async => false);
+      when(() => mockPlatform.requestRebind()).thenAnswer((_) async => false);
+
+      // Act
+      final result = await service.getRecentNotifications();
+
+      // Assert
+      expect(result.isLeft(), isTrue);
+      result.fold(
+        (failure) {
+          expect(failure, isA<ListenerNotConnectedFailure>());
+          expect(failure.message, contains('[listener_not_connected]'));
+        },
+        (_) => fail('expected Left'),
+      );
+      verify(() => mockPlatform.requestRebind()).called(1);
+    });
+
+    test('connected=false, first re-check after rebind true returns entries',
+        () async {
+      // Arrange
+      var callCount = 0;
+      when(() => mockPlatform.isListenerConnected()).thenAnswer((_) async {
+        callCount++;
+        return callCount > 1;
+      });
+      when(() => mockPlatform.requestRebind()).thenAnswer((_) async => true);
+      when(() => mockPlatform.getRecentNotifications(limit: 20)).thenAnswer(
+        (_) async => [rawNotification(id: 'recovered')],
+      );
+
+      // Act
+      final result = await service.getRecentNotifications();
+
+      // Assert
+      expect(result.isRight(), isTrue);
+      result.fold(
+        (_) => fail('expected Right'),
+        (entries) => expect(entries.first.id, 'recovered'),
+      );
+      verify(() => mockPlatform.requestRebind()).called(1);
+    });
+
     test('returns newest-first entries with app names resolved', () async {
       // Arrange
       when(() => mockPlatform.getRecentNotifications(limit: 20)).thenAnswer(
@@ -368,6 +474,28 @@ void main() {
       // Assert
       expect(result, isA<Left<Failure, String>>());
     });
+
+    test(
+        'propagates ListenerNotConnectedFailure when listener is not connected',
+        () async {
+      // Arrange
+      when(() => mockPlatform.isListenerConnected())
+          .thenAnswer((_) async => false);
+      when(() => mockPlatform.requestRebind()).thenAnswer((_) async => false);
+
+      // Act
+      final result = await service.readRecentNotificationsFormattedJson();
+
+      // Assert
+      expect(result.isLeft(), isTrue);
+      result.fold(
+        (failure) {
+          expect(failure, isA<ListenerNotConnectedFailure>());
+          expect(failure.message, contains('[listener_not_connected]'));
+        },
+        (_) => fail('expected Left'),
+      );
+    });
   });
 
   group('extractLatestOtp', () {
@@ -443,6 +571,27 @@ void main() {
       result.fold(
         (_) => fail('expected Right'),
         (otp) => expect(otp.found, isFalse),
+      );
+    });
+
+    test('extractLatestOtp when dead returns Left ListenerNotConnectedFailure',
+        () async {
+      // Arrange
+      when(() => mockPlatform.isListenerConnected())
+          .thenAnswer((_) async => false);
+      when(() => mockPlatform.requestRebind()).thenAnswer((_) async => false);
+
+      // Act
+      final result = await service.extractLatestOtp();
+
+      // Assert
+      expect(result.isLeft(), isTrue);
+      result.fold(
+        (failure) {
+          expect(failure, isA<ListenerNotConnectedFailure>());
+          expect(failure.message, contains('[listener_not_connected]'));
+        },
+        (_) => fail('expected Left, not success with found:false'),
       );
     });
 

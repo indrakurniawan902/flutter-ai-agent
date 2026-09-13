@@ -31,6 +31,24 @@ class DefaultNotificationListenerPlatformWrapper
   }
 
   @override
+  Future<bool> isListenerConnected() async {
+    try {
+      return await _channel.invokeMethod<bool>('isListenerConnected') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> requestRebind() async {
+    try {
+      return await _channel.invokeMethod<bool>('requestRebind') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
   Future<List<Map<String, dynamic>>> getRecentNotifications({
     int limit = 20,
   }) async {
@@ -53,9 +71,14 @@ class DefaultNotificationListenerPlatformWrapper
 @LazySingleton(as: NotificationTriageServiceBase)
 class NotificationTriageService implements NotificationTriageServiceBase {
   final NotificationListenerPlatformWrapper _platform;
+  final Duration _pollInterval;
 
-  NotificationTriageService({NotificationListenerPlatformWrapper? platformWrapper})
-      : _platform = platformWrapper ?? DefaultNotificationListenerPlatformWrapper();
+  NotificationTriageService({
+    NotificationListenerPlatformWrapper? platformWrapper,
+    Duration pollInterval = const Duration(milliseconds: 700),
+  })  : _platform =
+            platformWrapper ?? DefaultNotificationListenerPlatformWrapper(),
+        _pollInterval = pollInterval;
 
   @factoryMethod
   factory NotificationTriageService.create() => NotificationTriageService();
@@ -155,6 +178,24 @@ class NotificationTriageService implements NotificationTriageServiceBase {
     return '${collapsed.substring(0, maxLength)}...';
   }
 
+  Future<Failure?> _ensureListenerConnected() async {
+    try {
+      if (await _platform.isListenerConnected()) return null;
+      await _platform.requestRebind();
+      for (var i = 0; i < 3; i++) {
+        await Future<void>.delayed(_pollInterval);
+        if (await _platform.isListenerConnected()) return null;
+      }
+      return const ListenerNotConnectedFailure(
+        '[listener_not_connected] Notification listener service is not running, so no notifications can be observed (buffer is in-memory and re-seeded only at connect). One-tap fix: open Notification Listener settings via launch_system_setting(notification_listener) and toggle the service off/on, then retry. On MIUI also disable battery optimisation / enable autostart for this app.',
+      );
+    } catch (_) {
+      return const ListenerNotConnectedFailure(
+        '[listener_not_connected] Notification listener service is not running, so no notifications can be observed (buffer is in-memory and re-seeded only at connect). One-tap fix: open Notification Listener settings via launch_system_setting(notification_listener) and toggle the service off/on, then retry. On MIUI also disable battery optimisation / enable autostart for this app.',
+      );
+    }
+  }
+
   @override
   Future<bool> checkPermission() async {
     try {
@@ -179,11 +220,31 @@ class NotificationTriageService implements NotificationTriageServiceBase {
   }
 
   @override
+  Future<bool> isListenerConnected() async {
+    try {
+      return await _platform.isListenerConnected();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> requestRebind() async {
+    try {
+      return await _platform.requestRebind();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
   Future<Either<Failure, List<NotificationEntry>>> getRecentNotifications({
     String? appFilter,
     int limit = 20,
   }) async {
     try {
+      final gate = await _ensureListenerConnected();
+      if (gate != null) return Left(gate);
       final entries = await _loadEntries(limit: limit);
       final visible = entries
           .where((e) => matchesAppFilter(e, appFilter) && !isSensitive(e))
@@ -213,6 +274,8 @@ class NotificationTriageService implements NotificationTriageServiceBase {
     int limit = 20,
   }) async {
     try {
+      final gate = await _ensureListenerConnected();
+      if (gate != null) return Left(gate);
       final entries = await _loadEntries(limit: limit);
       for (final entry in entries) {
         if (!matchesAppFilter(entry, appFilter)) continue;

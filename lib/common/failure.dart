@@ -47,6 +47,13 @@ class UnsupportedEndpointFailure extends Failure {
   ]);
 }
 
+class ListenerNotConnectedFailure extends Failure {
+  const ListenerNotConnectedFailure([
+    super.message =
+        'Notification listener service is not connected [listener_not_connected]',
+  ]);
+}
+
 class CameraCancelledFailure extends Failure {
   const CameraCancelledFailure([
     super.message = 'camera_cancelled: User cancelled image capture',
