@@ -6,6 +6,7 @@ import 'package:injectable/injectable.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/ambient_event.dart';
+import 'package:flutter_ai_agent/domain/services/tools/tool_search_index.dart';
 import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
 import 'ambient_trigger_service.dart';
 import 'calendar_service.dart';
@@ -128,7 +129,9 @@ class ToolRegistry {
       RegisteredTool(
         name: 'tool_search',
         description:
-            'Searches the available tools by keyword and returns matching tool names.',
+            'Searches the available tools by keyword and returns matching tool names, '
+            'best match first. Accepts multi-word queries; prefer single keywords like '
+            'battery, location, notification.',
         parameters: const {
           'type': 'object',
           'properties': {
@@ -141,17 +144,20 @@ class ToolRegistry {
         },
         securityTier: SecurityTier.tier1Auto,
         execute: (args) async {
-          final query = (args['query'] ?? '').toString().toLowerCase();
-          final matches = <String>[];
-          for (final tool in activeTools) {
-            if (matches.length >= 10) break;
-            final haystack =
-                '${tool.name} ${tool.description}'.toLowerCase();
-            if (query.isEmpty || haystack.contains(query)) {
-              matches.add(tool.name);
-            }
+          final query = (args['query'] ?? '').toString().trim();
+          final names = ToolSearchIndex.rank(
+            query: query,
+            docs: activeTools
+                .map((t) => ToolSearchDoc(name: t.name, description: t.description))
+                .toList(growable: false),
+          );
+          if (names.isEmpty) {
+            return Right(
+              'No tools matched "$query". Try a single English keyword '
+              '(e.g. battery, location, notification).',
+            );
           }
-          return Right(matches.join('\n'));
+          return Right(names.join('\n'));
         },
       ),
     );
