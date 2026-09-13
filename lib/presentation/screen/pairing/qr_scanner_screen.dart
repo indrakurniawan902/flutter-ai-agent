@@ -451,7 +451,6 @@ class _QrScannerScreenState extends State<QrScannerScreen>
   @override
   Widget build(BuildContext context) {
     final isTorchOnNotifier = _controller?.isTorchOn;
-    final native = _controller?.scannerController;
 
     return Scaffold(
       backgroundColor: darkSurface,

@@ -189,7 +189,7 @@ void main() {
       when(() => mockDeviceInfo.deviceInfo).thenAnswer(
         (_) async => BaseDeviceInfo({
           'model': 'iPhone',
-          'name': "Indra's iPhone",
+          'name': "User's iPhone",
           'systemName': 'iOS',
           'systemVersion': '17.2',
           'utsname': {'machine': 'iPhone15,2'},

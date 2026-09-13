@@ -612,8 +612,8 @@ void main() {
       // rewritten by GatewayClient.normalizeGatewayUri, so the form must admit
       // every one of them.
       const gatewayUrls = [
-        'wss://hermes.indra-developer.my.id/device/ws',
-        'https://hermes.indra-developer.my.id',
+        'wss://example.com/device/ws',
+        'https://example.com',
         'ws://192.168.1.10:18789/device/ws',
         'http://192.168.1.10:8644',
       ];
@@ -754,10 +754,7 @@ void main() {
           matching: find.byType(TextField),
         ),
       );
-      expect(
-        inner.decoration?.hintText,
-        'wss://hermes.indra-developer.my.id/device/ws',
-      );
+      expect(inner.decoration?.hintText, 'wss://example.com/ws');
     });
 
     testWidgets(

@@ -22,7 +22,7 @@ void main() {
       final a = MemoryItem(
         id: 1,
         key: 'user_name',
-        content: 'Indra',
+        content: 'User',
         tags: const ['profile'],
         createdAt: fixedCreated,
         updatedAt: fixedUpdated,
@@ -30,7 +30,7 @@ void main() {
       final b = MemoryItem(
         id: 1,
         key: 'user_name',
-        content: 'Indra',
+        content: 'User',
         tags: const ['profile'],
         createdAt: fixedCreated,
         updatedAt: fixedUpdated,

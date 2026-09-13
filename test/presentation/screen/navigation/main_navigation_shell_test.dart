@@ -160,7 +160,10 @@ void main() {
       // Enter search query in Memory Vault
       await tester.enterText(find.byKey(const Key('memory_search_input')), 'router');
       await tester.pumpAndSettle();
-      expect(find.textContaining('9router'), findsOneWidget);
+      // Seed data was purged (T19.5); with no LocalMemoryService registered the
+      // vault has no records and shows the vault empty state. The retained
+      // *input* text is the real assertion below.
+      expect(find.byKey(const Key('memory_empty_state')), findsOneWidget);
 
       // Switch back to Tab 1: Chat
       await tester.tap(find.byKey(const Key('nav_item_chat')));

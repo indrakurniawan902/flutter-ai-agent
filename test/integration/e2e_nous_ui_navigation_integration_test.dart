@@ -218,7 +218,9 @@ void main() {
         await tester.enterText(find.byKey(const Key('memory_search_input')), 'router');
         await tester.pumpAndSettle();
 
-        expect(find.textContaining('9router'), findsOneWidget);
+        // Seed records were purged (T19.5), so an empty vault is expected;
+        // this assertion only guards that the vault tab rendered its list area.
+        expect(find.byKey(const Key('memory_empty_state')), findsOneWidget);
 
         // 4. Switch to Tab 2 (Pocket Node)
         await tester.tap(find.byKey(const Key('nav_item_node')));
@@ -273,7 +275,7 @@ void main() {
                 description: 'Querying battery and connectivity',
                 status: ActionStepStatus.done,
                 parameters: {'battery': true, 'connectivity': true},
-                output: {'battery': 92, 'charging': true, 'wifi': 'Indra-Mesh'},
+                output: {'battery': 92, 'charging': true, 'wifi': 'Home-WiFi'},
               ),
               ActionStep(
                 id: 'step_2',
@@ -318,7 +320,7 @@ void main() {
 
         expect(find.text('Parameters'), findsOneWidget);
         expect(find.text('Output JSON'), findsOneWidget);
-        expect(find.textContaining('Indra-Mesh'), findsOneWidget);
+        expect(find.textContaining('Home-WiFi'), findsOneWidget);
 
         // 4. Update state with final assistant text response
         inMemoryMessages.add(

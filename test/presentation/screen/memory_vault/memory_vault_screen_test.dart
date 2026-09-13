@@ -12,37 +12,67 @@ void main() {
   }
 
   group('MemoryVaultScreen', () {
-    testWidgets('renders search field, FTS5 badge, and memory records', (tester) async {
+    testWidgets('renders initial empty state with correct key and text', (tester) async {
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();
 
-      expect(find.text('Memory Vault'), findsOneWidget);
-      expect(find.byKey(const Key('memory_search_input')), findsOneWidget);
-      expect(find.byKey(const Key('memory_fts5_badge')), findsOneWidget);
-      expect(find.textContaining('FTS5 Indexed'), findsOneWidget);
+      expect(find.byKey(const Key('memory_empty_state')), findsOneWidget);
+      expect(find.text('No memories saved yet. Tap + to add one.'), findsOneWidget);
+      expect(find.byKey(const Key('memory_add_button')), findsOneWidget);
+    });
+
+    testWidgets('adding a memory record shows it in list', (tester) async {
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('memory_add_button')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byKey(const Key('memory_add_key_field')), 'work.role');
+      await tester.enterText(find.byKey(const Key('memory_add_content_field')), 'Engineer');
+
+      await tester.tap(find.byKey(const Key('memory_add_save_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('work.role'), findsOneWidget);
+      expect(find.text('Engineer'), findsOneWidget);
     });
 
     testWidgets('searching text filters memory items', (tester) async {
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('Eryushin'), findsOneWidget);
-
-      await tester.enterText(find.byKey(const Key('memory_search_input')), 'router');
+      // Add a test record first
+      await tester.tap(find.byKey(const Key('memory_add_button')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('memory_add_key_field')), 'work.role');
+      await tester.enterText(find.byKey(const Key('memory_add_content_field')), 'Engineer');
+      await tester.tap(find.byKey(const Key('memory_add_save_button')));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('9router'), findsOneWidget);
-      expect(find.textContaining('SM-G991B'), findsNothing);
+      await tester.enterText(find.byKey(const Key('memory_search_input')), 'work');
+      await tester.pumpAndSettle();
+
+      expect(find.text('work.role'), findsOneWidget);
+      expect(find.text('Engineer'), findsOneWidget);
     });
 
     testWidgets('shows empty state when search finds no results', (tester) async {
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();
 
+      // Add a test record first
+      await tester.tap(find.byKey(const Key('memory_add_button')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('memory_add_key_field')), 'work.role');
+      await tester.enterText(find.byKey(const Key('memory_add_content_field')), 'Engineer');
+      await tester.tap(find.byKey(const Key('memory_add_save_button')));
+      await tester.pumpAndSettle();
+
       await tester.enterText(find.byKey(const Key('memory_search_input')), 'unknown_query_123');
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('memory_empty_state')), findsOneWidget);
+      expect(find.byKey(const Key('memory_search_empty_state')), findsOneWidget);
       expect(find.text('No memory records match your search query'), findsOneWidget);
     });
   });

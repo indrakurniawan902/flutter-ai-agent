@@ -407,7 +407,7 @@ class _SettingsViewState extends State<_SettingsView> {
                       keyboardType: TextInputType.url,
                       decoration: const InputDecoration(
                         labelText: 'Base URL',
-                        hintText: 'https://indra-9router.my.id/v1',
+                        hintText: 'https://api.openai.com/v1',
                         prefixIcon: Icon(Icons.dns),
                         border: OutlineInputBorder(),
                       ),
@@ -1109,7 +1109,7 @@ class _AddProfileDialogState extends State<_AddProfileDialog> {
                 style: const TextStyle(color: Colors.white),
                 decoration: const InputDecoration(
                   labelText: 'Profile Name',
-                  hintText: 'VPS Oracle',
+                  hintText: 'Office',
                   border: OutlineInputBorder(),
                 ),
                 validator: (v) =>
@@ -1123,7 +1123,7 @@ class _AddProfileDialogState extends State<_AddProfileDialog> {
                 style: const TextStyle(color: Colors.white),
                 decoration: const InputDecoration(
                   labelText: 'Gateway URL',
-                  hintText: 'wss://hermes.indra-developer.my.id/device/ws',
+                  hintText: 'wss://example.com/ws',
                   border: OutlineInputBorder(),
                 ),
                 validator: (v) {

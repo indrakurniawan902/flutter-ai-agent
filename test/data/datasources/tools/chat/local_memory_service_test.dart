@@ -57,14 +57,14 @@ void main() {
     test('inserts new memory and retrieves by id and key', () async {
       final result = await service.saveMemory(
         'user_name',
-        'User name is Indra',
+        'User name is Alex',
         ['profile', 'identity'],
       );
       expect(result.isRight(), isTrue);
       final saved = result.getOrElse(() => throw StateError('no item'));
       expect(saved.id, isNotNull);
       expect(saved.key, 'user_name');
-      expect(saved.content, 'User name is Indra');
+      expect(saved.content, 'User name is Alex');
       expect(saved.tags, ['profile', 'identity']);
 
       final byKey = await service.getMemoryByKey('user_name');
@@ -74,7 +74,7 @@ void main() {
         (item) {
           expect(item, isNotNull);
           expect(item!.id, saved.id);
-          expect(item.content, 'User name is Indra');
+          expect(item.content, 'User name is Alex');
         },
       );
 
@@ -262,17 +262,17 @@ void main() {
     setUp(() async {
       await service.saveMemory(
         'user_profile',
-        'Indra is a software engineer working with Flutter and Dart on mobile applications.',
+        'Alex is a software engineer working with Flutter and Dart on mobile applications.',
         ['profile', 'engineering'],
       );
       await service.saveMemory(
         'favorite_editor',
-        'Indra loves using Neovim and VS Code for writing Flutter and Dart code every day.',
+        'Alex loves using Neovim and VS Code for writing Flutter and Dart code every day.',
         ['tools', 'preferences'],
       );
       await service.saveMemory(
         'pet_info',
-        'Indra has a white cat named Snow who loves sleeping on laptops.',
+        'Alex has a white cat named Snow who loves sleeping on laptops.',
         ['personal', 'pets'],
       );
       await service.saveMemory(
@@ -320,7 +320,7 @@ void main() {
     });
 
     test('respects limit parameter', () async {
-      final result = await service.searchMemories('Indra', 2);
+      final result = await service.searchMemories('Alex', 2);
       expect(result.isRight(), isTrue);
       result.fold(
         (_) => fail('should succeed'),
@@ -329,7 +329,7 @@ void main() {
     });
 
     test('falls back to default limit for non-positive limit', () async {
-      final result = await service.searchMemories('Indra', 0);
+      final result = await service.searchMemories('Alex', 0);
       expect(result.isRight(), isTrue);
       result.fold(
         (_) => fail('should succeed'),

@@ -43,45 +43,7 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
   String _selectedCategory = 'all';
   bool _isLoading = false;
 
-  static const List<MemoryRecord> _defaultRecords = [
-    MemoryRecord(
-      key: 'user.identity.name',
-      content: 'User preferred name: Indra (Eryushin)',
-      category: 'profile',
-      timestamp: '2026-09-11 15:20',
-      score: 1.0,
-    ),
-    MemoryRecord(
-      key: 'router.llm.endpoint',
-      content: 'Target LLM router: https://indra-9router.my.id/v1',
-      category: 'router',
-      timestamp: '2026-09-11 14:15',
-      score: 0.95,
-    ),
-    MemoryRecord(
-      key: 'device.hardware.model',
-      content: 'Device hardware model: SM-G991B (Samsung Exynos / Android 14)',
-      category: 'hardware',
-      timestamp: '2026-09-11 13:40',
-      score: 0.90,
-    ),
-    MemoryRecord(
-      key: 'agent.rules.budget',
-      content: 'Default ReAct loop budget: 20 turns before human checkpoint',
-      category: 'rules',
-      timestamp: '2026-09-11 12:00',
-      score: 0.88,
-    ),
-    MemoryRecord(
-      key: 'gateway.profile.active',
-      content: 'Active server profile: Production Hermes Gateway (WSS 8644)',
-      category: 'router',
-      timestamp: '2026-09-11 10:10',
-      score: 0.85,
-    ),
-  ];
-
-  late List<MemoryRecord> _records = List.of(_defaultRecords);
+  List<MemoryRecord> _records = [];
 
   static const List<Map<String, String>> _categories = [
     {'id': 'all', 'label': 'All'},
@@ -104,39 +66,121 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
     setState(() => _isLoading = true);
     try {
       final res = await service.getAllMemories();
-      await res.fold(
-        (_) async {},
-        (items) async {
-          if (items.isEmpty) {
-            for (final r in _defaultRecords) {
-              await service.saveMemory(r.key, r.content, [r.category]);
-            }
-            final seededRes = await service.getAllMemories();
-            seededRes.fold((_) {}, (seededItems) {
-              if (mounted) {
-                setState(() {
-                  _records = seededItems.map(_fromMemoryItem).toList();
-                });
-              }
-            });
-          } else {
-            if (mounted) {
-              setState(() {
-                _records = items.map(_fromMemoryItem).toList();
-              });
-            }
-          }
-        },
-      );
+      res.fold((_) {}, (items) {
+        if (mounted) {
+          setState(() {
+            _records = items.map(_fromMemoryItem).toList();
+          });
+        }
+      });
     } catch (_) {}
     if (mounted) {
       setState(() => _isLoading = false);
     }
   }
 
+  Future<void> _showAddMemoryDialog() async {
+    final keyController = TextEditingController();
+    final contentController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: HermesColors.cardSurface,
+        title: const Text(
+          'Add Memory',
+          style: TextStyle(color: HermesColors.inkPrimary, fontSize: 17),
+        ),
+        content: Form(
+          key: formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  key: const Key('memory_add_key_field'),
+                  controller: keyController,
+                  style: const TextStyle(color: HermesColors.inkPrimary),
+                  decoration: const InputDecoration(
+                    labelText: 'Key',
+                    hintText: 'e.g. user.home.city',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) => (v?.trim().isEmpty ?? true)
+                      ? 'Key cannot be empty'
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  key: const Key('memory_add_content_field'),
+                  controller: contentController,
+                  maxLines: 3,
+                  style: const TextStyle(color: HermesColors.inkPrimary),
+                  decoration: const InputDecoration(
+                    labelText: 'Content',
+                    hintText: 'e.g. Preferred location is Jakarta',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) => (v?.trim().isEmpty ?? true)
+                      ? 'Content cannot be empty'
+                      : null,
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            key: const Key('memory_add_save_button'),
+            onPressed: () async {
+              if (formKey.currentState?.validate() ?? false) {
+                final key = keyController.text.trim();
+                final content = contentController.text.trim();
+                final category = _detectCategory(key);
+                if (sl.isRegistered<LocalMemoryServiceBase>()) {
+                  await sl<LocalMemoryServiceBase>().saveMemory(key, content, [
+                    category,
+                  ]);
+                  await _initMemoryStore();
+                } else {
+                  final now = DateTime.now();
+                  final timeStr =
+                      '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+                  if (mounted) {
+                    setState(() {
+                      _records.add(
+                        MemoryRecord(
+                          key: key,
+                          content: content,
+                          category: category,
+                          timestamp: timeStr,
+                          score: 1.0,
+                        ),
+                      );
+                    });
+                  }
+                }
+                if (dialogContext.mounted) {
+                  Navigator.of(dialogContext).pop();
+                }
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   MemoryRecord _fromMemoryItem(MemoryItem item) {
-    final cat =
-        item.tags.isNotEmpty ? item.tags.first : _detectCategory(item.key);
+    final cat = item.tags.isNotEmpty
+        ? item.tags.first
+        : _detectCategory(item.key);
     final dt = item.updatedAt;
     final timeStr =
         '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
@@ -180,15 +224,19 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
       await sl<LocalMemoryServiceBase>().deleteMemoryByKey(record.key);
     }
     setState(() {
-      _records.removeWhere((r) =>
-          r.key == record.key || (record.id != null && r.id == record.id));
+      _records.removeWhere(
+        (r) => r.key == record.key || (record.id != null && r.id == record.id),
+      );
     });
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             'Memory record "${record.key}" deleted.',
-            style: HermesTypography.monospace(fontSize: 12, color: Colors.white),
+            style: HermesTypography.monospace(
+              fontSize: 12,
+              color: Colors.white,
+            ),
           ),
           backgroundColor: HermesColors.cardSurface,
           duration: const Duration(seconds: 2),
@@ -212,9 +260,11 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
 
   List<MemoryRecord> get _filteredRecords {
     return _records.where((record) {
-      final matchesCat = _selectedCategory == 'all' ||
+      final matchesCat =
+          _selectedCategory == 'all' ||
           record.category.toLowerCase() == _selectedCategory.toLowerCase();
-      final matchesQuery = _searchQuery.isEmpty ||
+      final matchesQuery =
+          _searchQuery.isEmpty ||
           record.key.toLowerCase().contains(_searchQuery) ||
           record.content.toLowerCase().contains(_searchQuery);
       return matchesCat && matchesQuery;
@@ -234,9 +284,23 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, size: 18, color: HermesColors.inkSecondary),
+            icon: const Icon(
+              Icons.refresh,
+              size: 18,
+              color: HermesColors.inkSecondary,
+            ),
             tooltip: 'Refresh Memories',
             onPressed: _initMemoryStore,
+          ),
+          IconButton(
+            key: const Key('memory_add_button'),
+            icon: const Icon(
+              Icons.add,
+              size: 20,
+              color: HermesColors.inkSecondary,
+            ),
+            tooltip: 'Add Memory',
+            onPressed: _showAddMemoryDialog,
           ),
           Container(
             key: const Key('memory_fts5_badge'),
@@ -250,7 +314,11 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.storage, size: 14, color: HermesColors.electricTeal),
+                const Icon(
+                  Icons.storage,
+                  size: 14,
+                  color: HermesColors.electricTeal,
+                ),
                 const SizedBox(width: 6),
                 Text(
                   'FTS5 Indexed • SQLite',
@@ -282,20 +350,37 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
             child: TextField(
               key: const Key('memory_search_input'),
               controller: _searchController,
-              style: const TextStyle(color: HermesColors.inkPrimary, fontSize: 14),
+              style: const TextStyle(
+                color: HermesColors.inkPrimary,
+                fontSize: 14,
+              ),
               decoration: InputDecoration(
-                hintText: 'Search FTS5 memory index (e.g. Indra, router)...',
-                hintStyle: const TextStyle(color: HermesColors.inkMuted, fontSize: 13),
-                prefixIcon: const Icon(Icons.search, size: 20, color: HermesColors.inkSecondary),
+                hintText: 'Search FTS5 memory index (e.g. home, office)...',
+                hintStyle: const TextStyle(
+                  color: HermesColors.inkMuted,
+                  fontSize: 13,
+                ),
+                prefixIcon: const Icon(
+                  Icons.search,
+                  size: 20,
+                  color: HermesColors.inkSecondary,
+                ),
                 suffixIcon: _searchQuery.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18, color: HermesColors.inkMuted),
+                        icon: const Icon(
+                          Icons.clear,
+                          size: 18,
+                          color: HermesColors.inkMuted,
+                        ),
                         onPressed: () => _searchController.clear(),
                       )
                     : null,
                 filled: true,
                 fillColor: HermesColors.cardSurface,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: HermesColors.border),
@@ -306,7 +391,9 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: HermesColors.electricTeal),
+                  borderSide: const BorderSide(
+                    color: HermesColors.electricTeal,
+                  ),
                 ),
               ),
             ),
@@ -327,8 +414,12 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
                       cat['label']!,
                       style: HermesTypography.monospace(
                         fontSize: 12,
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                        color: isSelected ? HermesColors.electricTeal : HermesColors.inkSecondary,
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                        color: isSelected
+                            ? HermesColors.electricTeal
+                            : HermesColors.inkSecondary,
                       ),
                     ),
                     selected: isSelected,
@@ -338,12 +429,16 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
                       });
                     },
                     backgroundColor: HermesColors.cardSurface,
-                    selectedColor: HermesColors.electricTeal.withValues(alpha: 0.15),
+                    selectedColor: HermesColors.electricTeal.withValues(
+                      alpha: 0.15,
+                    ),
                     checkmarkColor: HermesColors.electricTeal,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
                       side: BorderSide(
-                        color: isSelected ? HermesColors.electricTeal : HermesColors.border,
+                        color: isSelected
+                            ? HermesColors.electricTeal
+                            : HermesColors.border,
                         width: isSelected ? 1.2 : 1.0,
                       ),
                     ),
@@ -355,13 +450,40 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
 
           // Memory Records List
           Expanded(
-            child: filtered.isEmpty
+            child: _records.isEmpty
                 ? Center(
                     key: const Key('memory_empty_state'),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(
+                          Icons.storage_outlined,
+                          size: 48,
+                          color: HermesColors.inkMuted,
+                        ),
+                        SizedBox(height: 12),
+                        Text(
+                          'No memories saved yet. Tap + to add one.',
+                          style: TextStyle(
+                            color: HermesColors.inkSecondary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : filtered.isEmpty
+                ? Center(
+                    key: const Key('memory_search_empty_state'),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.search_off_outlined, size: 48, color: HermesColors.inkMuted),
+                        const Icon(
+                          Icons.search_off_outlined,
+                          size: 48,
+                          color: HermesColors.inkMuted,
+                        ),
                         const SizedBox(height: 12),
                         const Text(
                           'No memory records match your search query',
@@ -385,7 +507,8 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
                     itemCount: filtered.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 10),
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final item = filtered[index];
                       return Container(
@@ -410,11 +533,16 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
                                 ),
                                 const Spacer(),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: HermesColors.deepObsidian,
                                     borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: HermesColors.hairline),
+                                    border: Border.all(
+                                      color: HermesColors.hairline,
+                                    ),
                                   ),
                                   child: Text(
                                     item.category.toUpperCase(),
