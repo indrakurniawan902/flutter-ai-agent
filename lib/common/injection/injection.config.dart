@@ -28,8 +28,6 @@ import 'package:flutter_ai_agent/data/datasources/remote/gateway/gateway_client.
     as _i122;
 import 'package:flutter_ai_agent/data/datasources/remote/pairing/scanner_controller_wrapper.dart'
     as _i319;
-import 'package:flutter_ai_agent/data/datasources/skills/doc_builder_skill.dart'
-    as _i701;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/ambient_trigger_service.dart'
     as _i315;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/background_service.dart'
