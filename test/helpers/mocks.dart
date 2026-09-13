@@ -40,6 +40,7 @@ import 'package:flutter_ai_agent/domain/tools/chat/battery_optimization_service.
 import 'package:flutter_ai_agent/data/datasources/remote/gateway/gateway_socket.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_rpc_receiver.dart';
+import 'package:flutter_ai_agent/domain/services/tools/tool_pruning_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_rpc_cubit.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -192,5 +193,8 @@ class MockBatteryOptimizationPlatformWrapper extends Mock
 
 class MockBatteryOptimizationService extends Mock
     implements BatteryOptimizationServiceBase {}
+
+// Tools
+class MockToolPruningService extends Mock implements ToolPruningService {}
 
 
