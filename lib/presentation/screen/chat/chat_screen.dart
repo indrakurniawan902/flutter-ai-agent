@@ -178,7 +178,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _mode = widget.initialMode;
     _textController.addListener(_onTextChanged);
 
-    WidgetsBinding.instance.addObserver(this);
     _permissionGate = widget.permissionGate ?? PermissionGate();
     if (_permissionGateCanRun) {
       unawaited(_refreshPermissionStatuses());
@@ -407,7 +406,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _textController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
-    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -1818,18 +1816,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     tooltip: 'Stop Generation',
                     onPressed: () => _confirmStop(context),
                   );
-                },
-              ),
-              IconButton(
-                key: const Key('chat_settings_button'),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 26, minHeight: 32),
-                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
-                iconSize: 18,
-                icon: const Icon(Icons.settings),
-                tooltip: 'Settings',
-                onPressed: () {
-                  context.pushNamed(AppRoutes.nrSettings);
                 },
               ),
               const SizedBox(width: 4),
