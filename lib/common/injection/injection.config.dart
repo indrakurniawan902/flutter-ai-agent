@@ -172,7 +172,7 @@ extension GetItInjectableX on _i174.GetIt {
       ),
     );
     gh.lazySingleton<_i613.ChatLocalDatasource>(
-      () => _i613.ChatLocalDatasourceImpl(
+      () => _i613.ChatLocalDatasourceImpl.create(
         storage: gh<_i558.FlutterSecureStorage>(),
       ),
     );
