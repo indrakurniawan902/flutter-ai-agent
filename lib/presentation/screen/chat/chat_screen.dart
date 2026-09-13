@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
@@ -29,6 +31,7 @@ import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_approval_sheet.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_confirmation_card.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/app_settings_opener.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/elicitation_approval_sheet.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/header_console_bar.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/live_action_stepper_card.dart';
@@ -41,6 +44,7 @@ import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_rpc_c
 import 'package:flutter_ai_agent/presentation/screen/pairing/qr_scanner_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_state.dart';
+import 'package:flutter_ai_agent/utils/permission_gate.dart';
 import 'package:flutter_ai_agent/utils/thought_extractor.dart';
 
 /// Main Chat Screen displaying streaming conversation, tool call cards,
@@ -56,6 +60,7 @@ class ChatScreen extends StatefulWidget {
   final VoiceInputServiceBase? voiceInputService;
   final VoiceOutputServiceBase? voiceOutputService;
   final BackgroundServiceBase? backgroundService;
+  final PermissionGate? permissionGate;
 
   const ChatScreen({
     super.key,
@@ -69,13 +74,14 @@ class ChatScreen extends StatefulWidget {
     this.voiceInputService,
     this.voiceOutputService,
     this.backgroundService,
+    this.permissionGate,
   });
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
@@ -107,6 +113,28 @@ class _ChatScreenState extends State<ChatScreen> {
   FileWorkspaceServiceBase? _fileWorkspaceService;
   ChatAttachment? _stagedAttachment;
 
+  late final PermissionGate _permissionGate;
+  PermissionStatus? _micStatus;
+  PermissionStatus? _cameraStatus;
+  bool _permissionBannerDismissed = false;
+
+  /// The default [PermissionGate] reaches `permission_handler` through a
+  /// platform channel that never completes inside `flutter test` (no plugin
+  /// host), which would stall every voice/camera interaction. Skip the gate
+  /// for the default instance when running under the test framework; an
+  /// explicitly injected gate (see `permissionGate`) is always honoured.
+  bool get _permissionGateCanRun =>
+      widget.permissionGate != null ||
+      !Platform.environment.containsKey('FLUTTER_TEST');
+
+  bool get _hasBlockedPermission {
+    final micBlocked = _micStatus != null &&
+        (_micStatus!.isDenied || _micStatus!.isPermanentlyDenied);
+    final cameraBlocked = _cameraStatus != null &&
+        (_cameraStatus!.isDenied || _cameraStatus!.isPermanentlyDenied);
+    return micBlocked || cameraBlocked;
+  }
+
   GatewayClientBase? _resolveGatewayClient() =>
       widget.gatewayClient ??
       (sl.isRegistered<GatewayClientBase>()
@@ -128,6 +156,12 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     _mode = widget.initialMode;
     _textController.addListener(_onTextChanged);
+
+    WidgetsBinding.instance.addObserver(this);
+    _permissionGate = widget.permissionGate ?? PermissionGate();
+    if (_permissionGateCanRun) {
+      unawaited(_refreshPermissionStatuses());
+    }
 
     _voiceService = widget.voiceInputService ??
         (sl.isRegistered<VoiceInputServiceBase>()
@@ -290,6 +324,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _backgroundActionSub?.cancel();
     _voiceStatusSub?.cancel();
     _voiceErrorSub?.cancel();
@@ -315,6 +350,44 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollController.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _permissionGateCanRun) {
+      unawaited(_refreshPermissionStatuses());
+    }
+  }
+
+  Future<void> _refreshPermissionStatuses() async {
+    PermissionStatus? mic;
+    PermissionStatus? camera;
+    try {
+      mic = await _permissionGate.check(PermissionRationaleType.microphone);
+    } catch (_) {
+      mic = null;
+    }
+    try {
+      camera = await _permissionGate.check(PermissionRationaleType.camera);
+    } catch (_) {
+      camera = null;
+    }
+    if (!mounted) return;
+    setState(() {
+      _micStatus = mic;
+      _cameraStatus = camera;
+    });
+  }
+
+  /// Requests a permission through the gate, degrading to "proceed" when the
+  /// gate cannot run (test host without a plugin backend).
+  Future<bool> _requestPermission(PermissionRationaleType type) async {
+    if (!_permissionGateCanRun) return true;
+    try {
+      return await _permissionGate.requestWithRationale(context, type);
+    } catch (_) {
+      return true;
+    }
   }
 
   void _handleBackgroundAction(String action) {
@@ -361,6 +434,35 @@ class _ChatScreenState extends State<ChatScreen> {
     final isBusy =
         _agentCubit != null && _isAgentBusy(_agentCubit!.state);
     if (isBusy) return;
+
+    final micGranted = await _requestPermission(
+      PermissionRationaleType.microphone,
+    );
+    if (!micGranted) {
+      if (mounted) {
+        setState(() {
+          _isVoiceRecording = false;
+          _isHoldToSpeak = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Izin mikrofon belum aktif — buka pengaturan aplikasi '
+              'untuk mengaktifkannya',
+            ),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'Buka Pengaturan',
+              onPressed: () {
+                unawaited(AppSettingsOpenerRegistry.instance.openAppSettings());
+              },
+            ),
+          ),
+        );
+      }
+      return;
+    }
 
     await _voiceOutputService?.interrupt();
 
@@ -468,13 +570,14 @@ class _ChatScreenState extends State<ChatScreen> {
     return idx < 0 ? normalized : normalized.substring(idx + 1);
   }
 
-  void _showAttachmentSnackBar(String message) {
+  void _showAttachmentSnackBar(String message, {SnackBarAction? action}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.redAccent,
         behavior: SnackBarBehavior.floating,
+        action: action,
       ),
     );
   }
@@ -569,6 +672,23 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _pickFromCamera(CameraSource source) async {
     final camera = _cameraVisionService;
     if (camera == null) return;
+
+    final cameraGranted = await _requestPermission(
+      PermissionRationaleType.camera,
+    );
+    if (!cameraGranted) {
+      _showAttachmentSnackBar(
+        'Izin kamera belum aktif',
+        action: SnackBarAction(
+          label: 'Buka Pengaturan',
+          onPressed: () {
+            unawaited(AppSettingsOpenerRegistry.instance.openAppSettings());
+          },
+        ),
+      );
+      return;
+    }
+
     final result = await camera.takePhoto(source: source);
     result.fold(
       (failure) => _showAttachmentSnackBar(failure.message),
@@ -1262,6 +1382,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     onCancel: _cancelVoiceInput,
                   ),
                 ),
+              if (_hasBlockedPermission && !_permissionBannerDismissed)
+                _buildPermissionInfoBanner(context),
               _buildInputBar(context, state),
             ],
           ),
@@ -2062,6 +2184,84 @@ class _ChatScreenState extends State<ChatScreen> {
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPermissionInfoBanner(BuildContext context) {
+    final micBlocked = _micStatus != null &&
+        (_micStatus!.isDenied || _micStatus!.isPermanentlyDenied);
+    final cameraBlocked = _cameraStatus != null &&
+        (_cameraStatus!.isDenied || _cameraStatus!.isPermanentlyDenied);
+
+    final labels = <String>[
+      if (micBlocked) 'mikrofon',
+      if (cameraBlocked) 'kamera',
+    ];
+    final message = labels.length > 1
+        ? 'Izin ${labels.join(' dan ')} belum aktif'
+        : 'Izin ${labels.first} belum aktif';
+
+    return Container(
+      key: const Key('permission_status_banner'),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF334155)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.security_outlined,
+            size: 18,
+            color: Color(0xFF008080),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: Color(0xFFF8FAFC),
+                fontSize: 12,
+              ),
+            ),
+          ),
+          TextButton(
+            key: const Key('permission_banner_open_settings'),
+            onPressed: () {
+              unawaited(
+                (_permissionGate.settingsOpener ??
+                        AppSettingsOpenerRegistry.instance)
+                    .openAppSettings(),
+              );
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFF008080),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(0, 32),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text(
+              'Buka Pengaturan',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+          IconButton(
+            key: const Key('permission_banner_dismiss'),
+            onPressed: () {
+              setState(() {
+                _permissionBannerDismissed = true;
+              });
+            },
+            icon: const Icon(Icons.close, size: 16),
+            color: const Color(0xFF94A3B8),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            tooltip: 'Tutup',
           ),
         ],
       ),
