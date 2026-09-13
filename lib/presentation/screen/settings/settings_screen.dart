@@ -4,6 +4,7 @@ import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
+import 'package:flutter_ai_agent/domain/services/gateway/gateway_url.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_routes.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_cubit.dart';
@@ -766,17 +767,14 @@ class _AddProfileDialogState extends State<_AddProfileDialog> {
                 style: const TextStyle(color: Colors.white),
                 decoration: const InputDecoration(
                   labelText: 'Gateway URL',
-                  hintText: 'https://indra-9router.my.id/v1',
+                  hintText: 'wss://hermes.indra-developer.my.id/device/ws',
                   border: OutlineInputBorder(),
                 ),
                 validator: (v) {
                   final val = v?.trim() ?? '';
                   if (val.isEmpty) return 'URL cannot be empty';
-                  final uri = Uri.tryParse(val);
-                  if (uri == null ||
-                      (!uri.isScheme('http') && !uri.isScheme('https')) ||
-                      uri.host.isEmpty) {
-                    return 'Enter a valid HTTP/HTTPS URL';
+                  if (!isAcceptableGatewayUrl(val)) {
+                    return 'Enter a valid HTTP/HTTPS/WS/WSS URL';
                   }
                   return null;
                 },

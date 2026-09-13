@@ -9,6 +9,8 @@ import 'package:flutter_ai_agent/domain/entities/gateway/gateway_connection_stat
 import 'package:flutter_ai_agent/domain/entities/gateway/gateway_message.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
+import 'package:flutter_ai_agent/domain/services/gateway/gateway_url.dart'
+    as gateway_url;
 
 /// Supplies the tool manifest frames advertised to the bridge.
 typedef ToolManifestProvider = List<Map<String, dynamic>> Function();
@@ -60,7 +62,10 @@ class GatewayClientOptions {
 /// Universal bidirectional network client connecting the Flutter app to any remote Hermes Gateway instance.
 class GatewayClient implements GatewayClientBase {
   /// Default bridge path used only when a gateway URL carries no path.
-  static const String defaultGatewayPath = '/device/ws';
+  ///
+  /// Aliases the domain-layer [gateway_url.defaultGatewayPath] so the UI
+  /// validator and this client can never disagree about the route.
+  static const String defaultGatewayPath = gateway_url.defaultGatewayPath;
 
   final GatewaySocketFactory socketFactory;
   final GatewayClientOptions options;
@@ -130,6 +135,9 @@ class GatewayClient implements GatewayClientBase {
   /// through completely unchanged - no double-append, no `/ws` override and no
   /// trailing-slash rewriting. An empty or `/` path falls back to
   /// [defaultGatewayPath], the real bridge route.
+  ///
+  /// Agrees with [gateway_url.isAcceptableGatewayUrl]: any URL the UI validator
+  /// admits normalizes here into a `ws://`/`wss://` URI with a non-empty host.
   static Uri normalizeGatewayUri(String rawUrl) {
     var url = rawUrl.trim();
 

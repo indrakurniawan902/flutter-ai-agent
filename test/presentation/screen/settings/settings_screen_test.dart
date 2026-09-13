@@ -584,7 +584,7 @@ void main() {
       await tester.tap(find.byKey(const Key('add_profile_submit_button')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Enter a valid HTTP/HTTPS URL'), findsOneWidget);
+      expect(find.text('Enter a valid HTTP/HTTPS/WS/WSS URL'), findsOneWidget);
       verifyNever(() => mockServerProfileCubit.addProfile(
             name: any(named: 'name'),
             gatewayUrl: any(named: 'gatewayUrl'),
@@ -593,6 +593,171 @@ void main() {
             model: any(named: 'model'),
             temperature: any(named: 'temperature'),
           ));
+    });
+
+    testWidgets('accepts gateway URLs in all four normalizable schemes', (tester) async {
+      when(() => mockSettingsCubit.state).thenReturn(
+        const SettingsLoaded(
+          baseUrl: 'https://indra-9router.my.id/v1',
+          apiKey: 'sk-valid-key',
+          model: 'ag-glm',
+          temperature: 0.7,
+        ),
+      );
+      when(() => mockServerProfileCubit.state).thenReturn(
+        const ServerProfileLoaded(profiles: [], activeProfile: null),
+      );
+
+      // A gateway endpoint IS a WebSocket endpoint; http/https/ws/wss are all
+      // rewritten by GatewayClient.normalizeGatewayUri, so the form must admit
+      // every one of them.
+      const gatewayUrls = [
+        'wss://hermes.indra-developer.my.id/device/ws',
+        'https://hermes.indra-developer.my.id',
+        'ws://192.168.1.10:18789/device/ws',
+        'http://192.168.1.10:8644',
+      ];
+
+      for (final url in gatewayUrls) {
+        when(() => mockServerProfileCubit.addProfile(
+              name: 'Bridge',
+              gatewayUrl: url,
+              token: 'sk-bridge-token',
+              makeActive: true,
+              model: 'ag-glm',
+              temperature: 0.7,
+            )).thenAnswer((_) async {});
+
+        await tester.pumpWidget(buildTestWidget());
+        await tester.pump();
+
+        await tester.tap(find.byKey(const Key('settings_add_profile_button')));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.byKey(const Key('add_profile_name_field')),
+          'Bridge',
+        );
+        await tester.enterText(
+          find.byKey(const Key('add_profile_url_field')),
+          url,
+        );
+        await tester.enterText(
+          find.byKey(const Key('add_profile_token_field')),
+          'sk-bridge-token',
+        );
+        await tester.enterText(
+          find.byKey(const Key('add_profile_model_field')),
+          'ag-glm',
+        );
+
+        await tester.tap(find.byKey(const Key('add_profile_submit_button')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('Enter a valid HTTP/HTTPS/WS/WSS URL'),
+          findsNothing,
+          reason: '$url must pass validation',
+        );
+        verify(() => mockServerProfileCubit.addProfile(
+              name: 'Bridge',
+              gatewayUrl: url,
+              token: 'sk-bridge-token',
+              makeActive: true,
+              model: 'ag-glm',
+              temperature: 0.7,
+            )).called(1);
+      }
+    });
+
+    testWidgets('still rejects junk and empty gateway URLs', (tester) async {
+      when(() => mockSettingsCubit.state).thenReturn(
+        const SettingsLoaded(
+          baseUrl: 'https://indra-9router.my.id/v1',
+          apiKey: 'sk-valid-key',
+          model: 'ag-glm',
+          temperature: 0.7,
+        ),
+      );
+      when(() => mockServerProfileCubit.state).thenReturn(
+        const ServerProfileLoaded(profiles: [], activeProfile: null),
+      );
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('settings_add_profile_button')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('add_profile_name_field')),
+        'Bridge',
+      );
+      await tester.enterText(
+        find.byKey(const Key('add_profile_token_field')),
+        'sk-bridge-token',
+      );
+
+      // Non-URL junk.
+      await tester.enterText(
+        find.byKey(const Key('add_profile_url_field')),
+        'not a url',
+      );
+      await tester.tap(find.byKey(const Key('add_profile_submit_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Enter a valid HTTP/HTTPS/WS/WSS URL'), findsOneWidget);
+
+      // Empty.
+      await tester.enterText(
+        find.byKey(const Key('add_profile_url_field')),
+        '',
+      );
+      await tester.tap(find.byKey(const Key('add_profile_submit_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('URL cannot be empty'), findsOneWidget);
+
+      verifyNever(() => mockServerProfileCubit.addProfile(
+            name: any(named: 'name'),
+            gatewayUrl: any(named: 'gatewayUrl'),
+            token: any(named: 'token'),
+            makeActive: any(named: 'makeActive'),
+            model: any(named: 'model'),
+            temperature: any(named: 'temperature'),
+          ));
+    });
+
+    testWidgets('gateway URL field hints at a WebSocket gateway endpoint',
+        (tester) async {
+      when(() => mockSettingsCubit.state).thenReturn(
+        const SettingsLoaded(
+          baseUrl: 'https://indra-9router.my.id/v1',
+          apiKey: 'sk-valid-key',
+          model: 'ag-glm',
+          temperature: 0.7,
+        ),
+      );
+      when(() => mockServerProfileCubit.state).thenReturn(
+        const ServerProfileLoaded(profiles: [], activeProfile: null),
+      );
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('settings_add_profile_button')));
+      await tester.pumpAndSettle();
+
+      final inner = tester.widget<TextField>(
+        find.descendant(
+          of: find.byKey(const Key('add_profile_url_field')),
+          matching: find.byType(TextField),
+        ),
+      );
+      expect(
+        inner.decoration?.hintText,
+        'wss://hermes.indra-developer.my.id/device/ws',
+      );
     });
 
     testWidgets(
