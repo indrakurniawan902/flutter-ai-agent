@@ -17,6 +17,7 @@ import 'package:flutter_ai_agent/presentation/screen/chat/chat_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_approval_sheet.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/elicitation_approval_sheet.dart';
 import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_link_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_rpc_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/pairing/qr_scanner_screen.dart';
@@ -549,6 +550,117 @@ void main() {
 
       verify(() => mockGatewayRpcCubit.rejectAction('rpc_req_43')).called(1);
       expect(find.byType(ActionApprovalSheet), findsNothing);
+    });
+
+    testWidgets(
+        'shows ElicitationApprovalSheet on GatewayRpcElicitationPending and '
+        'tapping Reject dispatches a rejection response', (tester) async {
+      when(() => mockGatewayClient.sendElicitationResponse(
+            requestId: any(named: 'requestId'),
+            approved: any(named: 'approved'),
+            biometricVerified: any(named: 'biometricVerified'),
+          )).thenReturn(null);
+      when(() => mockGatewayRpcCubit.rejectElicitation(any()))
+          .thenAnswer((invocation) async {
+        mockGatewayClient.sendElicitationResponse(
+          requestId: invocation.positionalArguments.first as String,
+          approved: false,
+        );
+      });
+
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.gateway));
+      await tester.pumpAndSettle();
+
+      const pending = GatewayRpcElicitationPending(
+        requestId: 'elicit_ui_1',
+        title: 'Fund transfer',
+        description: 'Approve moving 500 USDT?',
+        riskLevel: 'high',
+      );
+      gatewayRpcStateController.add(pending);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ElicitationApprovalSheet), findsOneWidget);
+      expect(find.text('HIGH RISK'), findsOneWidget);
+      expect(find.text('Fund transfer'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('elicitation_reject_button')));
+      await tester.pumpAndSettle();
+
+      verify(() => mockGatewayRpcCubit.rejectElicitation('elicit_ui_1'))
+          .called(1);
+      verify(() => mockGatewayClient.sendElicitationResponse(
+            requestId: 'elicit_ui_1',
+            approved: false,
+            biometricVerified: false,
+          )).called(1);
+      expect(find.byType(ElicitationApprovalSheet), findsNothing);
+    });
+
+    testWidgets(
+        'tapping Approve on elicitation sheet dispatches approval',
+        (tester) async {
+      when(() => mockGatewayRpcCubit.approveElicitation(
+            any(),
+            biometricVerified: any(named: 'biometricVerified'),
+          )).thenAnswer((_) async {});
+
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.gateway));
+      await tester.pumpAndSettle();
+
+      const pending = GatewayRpcElicitationPending(
+        requestId: 'elicit_ui_2',
+        title: 'Delete backups',
+        description: 'Irreversible wipe requested by Hermes',
+        riskLevel: 'medium',
+      );
+      gatewayRpcStateController.add(pending);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ElicitationApprovalSheet), findsOneWidget);
+      expect(find.text('MEDIUM RISK'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('elicitation_approve_button')));
+      await tester.pumpAndSettle();
+
+      verify(() => mockGatewayRpcCubit.approveElicitation(
+            'elicit_ui_2',
+            biometricVerified: false,
+          )).called(1);
+      expect(find.byType(ElicitationApprovalSheet), findsNothing);
+    });
+
+    testWidgets(
+        'GatewayRpcElicitationResolved closes an open elicitation sheet',
+        (tester) async {
+      when(() => mockGatewayRpcCubit.rejectElicitation(any()))
+          .thenAnswer((_) async {});
+
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.gateway));
+      await tester.pumpAndSettle();
+
+      const pending = GatewayRpcElicitationPending(
+        requestId: 'elicit_ui_3',
+        title: 'Factory reset',
+        description: 'Timed-out demo',
+        riskLevel: 'high',
+      );
+      gatewayRpcStateController.add(pending);
+      await tester.pumpAndSettle();
+      expect(find.byType(ElicitationApprovalSheet), findsOneWidget);
+
+      gatewayRpcStateController.add(
+        const GatewayRpcElicitationResolved(
+          requestId: 'elicit_ui_3',
+          approved: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ElicitationApprovalSheet), findsNothing);
     });
   });
 }
