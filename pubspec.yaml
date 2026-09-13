@@ -73,7 +73,7 @@ dependencies:
   path_provider: ^2.1.5
   sqlite3_flutter_libs: ^0.6.0+eol
   sqflite_common_ffi: ^2.4.3
-  nfc_manager: ^3.3.0
+  nfc_manager: ^4.2.1
 
 dev_dependencies:
   flutter_test:
