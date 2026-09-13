@@ -18,12 +18,12 @@ void main() {
       expect(appRouter.routerDelegate.navigatorKey, equals(AppGlobals.navigatorKey));
     });
 
-    test('has exactly 10 registered GoRoute entries', () {
+    test('has exactly 11 registered GoRoute entries', () {
       final routes = appRouter.configuration.routes
           .whereType<GoRoute>()
           .toList();
 
-      expect(routes.length, equals(10));
+      expect(routes.length, equals(11));
     });
 
     test('registers all expected route names', () {
@@ -43,6 +43,7 @@ void main() {
         AppRoutes.nrPairing,
         AppRoutes.nrServerProfiles,
         AppRoutes.nrActionCenter,
+        AppRoutes.nrGeofenceManagement,
       };
 
       expect(routeNames, equals(expectedNames));
