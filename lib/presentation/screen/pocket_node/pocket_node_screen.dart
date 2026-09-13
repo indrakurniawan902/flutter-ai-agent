@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
@@ -9,12 +10,16 @@ import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dar
 import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/battery_optimization_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/calendar_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/exact_alarm_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/local_memory_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/action_center/action_center_screen.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/permission_rationale_modal.dart';
 import 'package:flutter_ai_agent/utils/hermes_theme.dart';
+import 'package:flutter_ai_agent/utils/permission_gate.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class PocketNodeScreen extends StatefulWidget {
   const PocketNodeScreen({super.key});
@@ -30,6 +35,21 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
   bool _notificationListenerEnabled = true;
   bool _heartbeatEnabled = true;
   bool _batteryOptimizationExempt = false;
+  bool? _notificationsGranted;
+  bool? _exactAlarmAllowed;
+  bool? _notificationListenerGranted;
+  bool _pendingListenerEnable = false;
+  bool _permissionRefreshInFlight = false;
+
+  late final PermissionGate _permissionGate;
+
+  /// The default [PermissionGate] reaches `permission_handler` through a
+  /// platform channel that never completes inside `flutter test` (no plugin
+  /// host). Skip it for the default instance under the test framework; a gate
+  /// registered in `sl` is always honoured (tests inject a mocked requester).
+  bool get _permissionGateCanRun =>
+      sl.isRegistered<PermissionGate>() ||
+      !Platform.environment.containsKey('FLUTTER_TEST');
 
   String _endpoint = 'ws://127.0.0.1:8644/rpc';
   String _statusText = 'Node 8644 • Online';
@@ -44,9 +64,11 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _permissionGate =
+        sl.isRegistered<PermissionGate>() ? sl<PermissionGate>() : PermissionGate();
     _initNodeTelemetry();
     _loadAmbientTriggerSettings();
-    _checkBatteryOptimization();
+    unawaited(_initialPermissionFlow());
   }
 
   @override
@@ -59,8 +81,102 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _checkBatteryOptimization();
+      _refreshPermissionState();
     }
+  }
+
+  Future<void> _initialPermissionFlow() async {
+    await _refreshPermissionState();
+    if (_notificationsGranted == false && mounted) {
+      await _maybeRequestNotifications();
+    }
+  }
+
+  /// Single place that re-evaluates every permission surface (POST_NOTIFICATIONS,
+  /// exact alarm, notification listener, battery optimization) and applies the
+  /// result with one [setState]. Runs on first build and on every
+  /// return-from-settings `resumed` event so no state needs an app restart.
+  Future<void> _refreshPermissionState() async {
+    if (_permissionRefreshInFlight) return;
+    _permissionRefreshInFlight = true;
+
+    bool? notificationsGranted = _notificationsGranted;
+    bool? exactAlarmAllowed = _exactAlarmAllowed;
+    bool? listenerGranted = _notificationListenerGranted;
+    bool batteryExempt = _batteryOptimizationExempt;
+    bool enableListenerNow = false;
+
+    if (_permissionGateCanRun) {
+      try {
+        final status = await _permissionGate
+            .check(PermissionRationaleType.notifications);
+        notificationsGranted = status.isGranted;
+      } catch (_) {}
+    }
+
+    if (sl.isRegistered<ExactAlarmServiceBase>()) {
+      try {
+        exactAlarmAllowed =
+            await sl<ExactAlarmServiceBase>().canScheduleExactAlarms();
+      } catch (_) {}
+    }
+
+    if (sl.isRegistered<NotificationTriageServiceBase>()) {
+      try {
+        listenerGranted =
+            await sl<NotificationTriageServiceBase>().checkPermission();
+      } catch (_) {}
+    }
+
+    if (sl.isRegistered<BatteryOptimizationServiceBase>()) {
+      try {
+        final res =
+            await sl<BatteryOptimizationServiceBase>().isBatteryOptimizationDisabled();
+        res.fold(
+          (_) {},
+          (exempt) => batteryExempt = exempt,
+        );
+      } catch (_) {}
+    }
+
+    if (_pendingListenerEnable && listenerGranted == true) {
+      _pendingListenerEnable = false;
+      enableListenerNow = true;
+    }
+
+    final listenerEnabledChanged = enableListenerNow;
+
+    if (mounted) {
+      setState(() {
+        _notificationsGranted = notificationsGranted;
+        _exactAlarmAllowed = exactAlarmAllowed;
+        _notificationListenerGranted = listenerGranted;
+        _batteryOptimizationExempt = batteryExempt;
+        if (enableListenerNow) {
+          _notificationListenerEnabled = true;
+        }
+      });
+    }
+    _permissionRefreshInFlight = false;
+
+    if (listenerEnabledChanged) {
+      await _persistAmbientSettings();
+    }
+  }
+
+  Future<void> _maybeRequestNotifications() async {
+    if (!_permissionGateCanRun || !mounted) return;
+    try {
+      final granted = await _permissionGate.requestWithRationale(
+        context,
+        PermissionRationaleType.notifications,
+      );
+      if (mounted) {
+        setState(() {
+          _notificationsGranted = granted;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadAmbientTriggerSettings() async {
@@ -76,25 +192,6 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
             _heartbeatEnabled = settings.heartbeatEnabled;
           });
         }
-      } catch (_) {}
-    }
-  }
-
-  Future<void> _checkBatteryOptimization() async {
-    if (sl.isRegistered<BatteryOptimizationServiceBase>()) {
-      try {
-        final service = sl<BatteryOptimizationServiceBase>();
-        final res = await service.isBatteryOptimizationDisabled();
-        res.fold(
-          (_) {},
-          (exempt) {
-            if (mounted) {
-              setState(() {
-                _batteryOptimizationExempt = exempt;
-              });
-            }
-          },
-        );
       } catch (_) {}
     }
   }
@@ -141,6 +238,73 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
         }
       } catch (_) {}
     }
+  }
+
+  /// The listener toggle must never be optimistic: check the real listener
+  /// status first, and when it is not granted route through the service's
+  /// settings action (ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS). The
+  /// pending enable is reconciled by [_refreshPermissionState] on resume.
+  Future<void> _onNotificationListenerToggle(bool enable) async {
+    if (!enable) {
+      await _onTriggerChanged(notificationListener: false);
+      return;
+    }
+    if (sl.isRegistered<NotificationTriageServiceBase>()) {
+      try {
+        final service = sl<NotificationTriageServiceBase>();
+        final granted = await service.checkPermission();
+        if (mounted) {
+          setState(() {
+            _notificationListenerGranted = granted;
+          });
+        }
+        if (!granted) {
+          _pendingListenerEnable = true;
+          try {
+            await service.requestPermission();
+          } catch (_) {}
+          _showFeedback('Aktifkan notification listener di Pengaturan.');
+          return;
+        }
+      } catch (_) {}
+    }
+    await _onTriggerChanged(notificationListener: true);
+  }
+
+  Future<void> _handleOpenNotificationSettings() async {
+    if (!_permissionGateCanRun || !mounted) return;
+    await _maybeRequestNotifications();
+  }
+
+  Future<void> _handleOpenExactAlarmSettings() async {
+    if (sl.isRegistered<ExactAlarmServiceBase>()) {
+      try {
+        await sl<ExactAlarmServiceBase>().openExactAlarmSettings();
+      } catch (_) {}
+    }
+    await _refreshPermissionState();
+  }
+
+  Future<void> _handleOpenListenerSettings() async {
+    if (sl.isRegistered<NotificationTriageServiceBase>()) {
+      try {
+        await sl<NotificationTriageServiceBase>().requestPermission();
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _persistAmbientSettings() async {
+    if (!sl.isRegistered<SecureStorageService>()) return;
+    try {
+      await sl<SecureStorageService>().saveAmbientTriggerSettings(
+            AmbientTriggerSettings(
+              geofenceEnabled: _geofenceEnabled,
+              batteryWatchdogEnabled: _batteryWatchdogEnabled,
+              notificationListenerEnabled: _notificationListenerEnabled,
+              heartbeatEnabled: _heartbeatEnabled,
+            ),
+          );
+    } catch (_) {}
   }
 
   Future<void> _handleDisableBatteryOptimization() async {
@@ -343,8 +507,7 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
             title: 'Notification Listener',
             subtitle: 'Intercept system notifications for autonomous triage',
             value: _notificationListenerEnabled,
-            onChanged: (val) =>
-                _onTriggerChanged(notificationListener: val),
+            onChanged: _onNotificationListenerToggle,
           ),
           const SizedBox(height: 8),
           _buildTriggerTile(
@@ -362,6 +525,7 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
           ),
           const SizedBox(height: 8),
           _buildBatteryOptimizationCard(),
+          ..._buildPermissionHelperBanners(),
           const SizedBox(height: 20),
           _buildSectionHeader('Node Operations & Quick Actions', Icons.bolt),
           const SizedBox(height: 8),
@@ -477,6 +641,90 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildPermissionHelperBanners() {
+    return [
+      if (_notificationsGranted == false)
+        _buildPermissionBannerRow(
+          key: const Key('permission_banner_notifications'),
+          message: 'Notifikasi belum aktif',
+          ctaKey: const Key('action_open_notification_settings'),
+          ctaLabel: 'Buka Pengaturan',
+          onTap: _handleOpenNotificationSettings,
+        ),
+      if (_exactAlarmAllowed == false)
+        _buildPermissionBannerRow(
+          key: const Key('permission_banner_exact_alarm'),
+          message: 'Alarm presisi belum diizinkan',
+          ctaKey: const Key('action_open_exact_alarm_settings'),
+          ctaLabel: 'Buka Pengaturan',
+          onTap: _handleOpenExactAlarmSettings,
+        ),
+      if (_notificationListenerEnabled &&
+          _notificationListenerGranted == false)
+        _buildPermissionBannerRow(
+          key: const Key('permission_banner_notification_listener'),
+          message: 'Notification listener belum aktif',
+          ctaKey: const Key('action_open_listener_settings'),
+          ctaLabel: 'Buka Pengaturan',
+          onTap: _handleOpenListenerSettings,
+        ),
+    ];
+  }
+
+  Widget _buildPermissionBannerRow({
+    required Key key,
+    required String message,
+    required Key ctaKey,
+    required String ctaLabel,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      key: key,
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: HermesColors.cardSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: HermesColors.border),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.warning_amber_rounded,
+            size: 16,
+            color: HermesColors.amber,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                fontSize: 11,
+                color: HermesColors.inkPrimary,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            key: ctaKey,
+            onPressed: onTap,
+            style: TextButton.styleFrom(
+              foregroundColor: HermesColors.electricTeal,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              textStyle: HermesTypography.monospace(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            child: Text(ctaLabel),
+          ),
         ],
       ),
     );

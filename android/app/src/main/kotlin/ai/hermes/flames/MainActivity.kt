@@ -1,6 +1,7 @@
 package ai.hermes.flames
 
 import android.Manifest
+import android.app.AlarmManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -24,6 +25,7 @@ class MainActivity : FlutterActivity() {
     private val CONTACTS_CHANNEL = "ai.hermes.flames/contacts"
     private val BATTERY_CHANNEL = "ai.hermes.flames/battery_optimization"
     private val INTENT_SETTINGS_CHANNEL = "ai.hermes.flames/intent_settings"
+    private val EXACT_ALARM_CHANNEL = "ai.hermes.flames/exact_alarm"
 
     private val CONTACTS_PERMISSION_REQUEST_CODE = 1001
     private var pendingContactsResult: MethodChannel.Result? = null
@@ -233,6 +235,40 @@ class MainActivity : FlutterActivity() {
                                 } catch (_: Exception) {}
                             }
                             result.success(true)
+                        }
+                    }
+                    else -> {
+                        result.notImplemented()
+                    }
+                }
+            }
+
+        // Exact Alarm Channel
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, EXACT_ALARM_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "canScheduleExactAlarms" -> {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+                            result.success(alarmManager?.canScheduleExactAlarms() ?: false)
+                        } else {
+                            result.success(true)
+                        }
+                    }
+                    "openExactAlarmSettings" -> {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            try {
+                                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                    data = Uri.parse("package:$packageName")
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                startActivity(intent)
+                                result.success(true)
+                            } catch (_: Exception) {
+                                result.success(false)
+                            }
+                        } else {
+                            result.success(false)
                         }
                     }
                     else -> {
