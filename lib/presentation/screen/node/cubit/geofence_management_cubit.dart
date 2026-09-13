@@ -44,8 +44,12 @@ class GeofenceManagementCubit extends Cubit<GeofenceManagementState> {
           _ambient.addGeofence(region);
         }
       }
-      await _persist(merged);
-      emit(state.copyWith(regions: merged, isLoading: false, clearError: true));
+      final persistedOk = await _persist(merged);
+      emit(state.copyWith(
+        regions: merged,
+        isLoading: false,
+        clearError: persistedOk,
+      ));
     } catch (e) {
       emit(state.copyWith(isLoading: false, error: '$e'));
     }
@@ -66,10 +70,11 @@ class GeofenceManagementCubit extends Cubit<GeofenceManagementState> {
       longitude: longitude,
       radiusMeters: radiusMeters,
     );
-    _ambient.addGeofence(region);
     final regions = [...state.regions, region];
+    final ok = await _persist(regions);
+    if (!ok) return null;
+    _ambient.addGeofence(region);
     emit(state.copyWith(regions: regions, clearError: true));
-    await _persist(regions);
     return id;
   }
 
@@ -80,16 +85,16 @@ class GeofenceManagementCubit extends Cubit<GeofenceManagementState> {
         .toList();
     final updated = regions.firstWhere((r) => r.id == id);
     _ambient.toggleGeofence(id, updated.isEnabled);
-    emit(state.copyWith(regions: regions, clearError: true));
-    await _persist(regions);
+    final ok = await _persist(regions);
+    emit(state.copyWith(regions: regions, clearError: ok));
   }
 
   /// Removes the region with [id], persists, and clears it from the live engine.
   Future<void> removeGeofence(String id) async {
     _ambient.removeGeofence(id);
     final regions = state.regions.where((r) => r.id != id).toList();
-    emit(state.copyWith(regions: regions, clearError: true));
-    await _persist(regions);
+    final ok = await _persist(regions);
+    emit(state.copyWith(regions: regions, clearError: ok));
   }
 
   /// Captures the current device location and returns latitude/longitude.
@@ -100,19 +105,23 @@ class GeofenceManagementCubit extends Cubit<GeofenceManagementState> {
     return result.fold(
       (_) => null,
       (data) {
-        final lat = data['latitude'] ?? data['lat'];
-        final lng = data['longitude'] ?? data['longitude'] ?? data['lng'];
+        final latRaw = data['latitude'];
+        final lat = latRaw is num ? latRaw : data['lat'];
+        final lngRaw = data['longitude'];
+        final lng = lngRaw is num ? lngRaw : data['lng'];
         if (lat is! num || lng is! num) return null;
         return (latitude: lat.toDouble(), longitude: lng.toDouble());
       },
     );
   }
 
-  Future<void> _persist(List<GeofenceRegion> regions) async {
+  Future<bool> _persist(List<GeofenceRegion> regions) async {
     try {
       await _storage.saveGeofences(regions);
+      return true;
     } catch (e) {
       emit(state.copyWith(error: '$e'));
+      return false;
     }
   }
 

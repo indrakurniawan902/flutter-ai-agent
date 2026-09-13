@@ -4,9 +4,11 @@ import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_
 import 'package:flutter_ai_agent/domain/entities/chat/ambient_event.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/permission_rationale_modal.dart';
 import 'package:flutter_ai_agent/presentation/screen/node/cubit/geofence_management_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/node/cubit/geofence_management_state.dart';
 import 'package:flutter_ai_agent/utils/hermes_theme.dart';
+import 'package:flutter_ai_agent/utils/permission_gate.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 /// Geofence region management screen.
@@ -15,8 +17,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 /// omitted it is built from the registered services.
 class GeofenceManagementScreen extends StatelessWidget {
   final GeofenceManagementCubit? cubit;
+  final PermissionGate? permissionGate;
 
-  const GeofenceManagementScreen({super.key, this.cubit});
+  const GeofenceManagementScreen({super.key, this.cubit, this.permissionGate});
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +27,7 @@ class GeofenceManagementScreen extends StatelessWidget {
     if (provided != null) {
       return BlocProvider<GeofenceManagementCubit>.value(
         value: provided,
-        child: const _GeofenceScaffold(),
+        child: _GeofenceScaffold(permissionGate: permissionGate),
       );
     }
     return BlocProvider<GeofenceManagementCubit>(
@@ -33,13 +36,15 @@ class GeofenceManagementScreen extends StatelessWidget {
         ambient: getIt<AmbientTriggerServiceBase>(),
         location: getIt<LocationServiceBase>(),
       )..load(),
-      child: const _GeofenceScaffold(),
+      child: _GeofenceScaffold(permissionGate: permissionGate),
     );
   }
 }
 
 class _GeofenceScaffold extends StatelessWidget {
-  const _GeofenceScaffold();
+  final PermissionGate? permissionGate;
+
+  const _GeofenceScaffold({this.permissionGate});
 
   @override
   Widget build(BuildContext context) {
@@ -51,32 +56,53 @@ class _GeofenceScaffold extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
-      body: BlocBuilder<GeofenceManagementCubit, GeofenceManagementState>(
-        builder: (context, state) {
-          if (state.isLoading && state.regions.isEmpty) {
-            return const Center(
-              child: CircularProgressIndicator(
-                color: HermesColors.accentTeal,
+      body: BlocListener<GeofenceManagementCubit, GeofenceManagementState>(
+        listenWhen: (prev, cur) =>
+            cur.error != null && cur.error != prev.error,
+        listener: (context, state) {
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(
+              SnackBar(
+                content: Text(
+                  state.error!,
+                  style: HermesTypography.monospace(
+                    fontSize: 12,
+                    color: Colors.white,
+                  ),
+                ),
+                backgroundColor: HermesColors.cardSurface,
+                behavior: SnackBarBehavior.floating,
               ),
             );
-          }
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            children: [
-              _AddGeofenceForm(),
-              const SizedBox(height: 20),
-              _buildSectionHeader('Saved Geofences'),
-              const SizedBox(height: 8),
-              if (state.regions.isEmpty)
-                const _EmptyState()
-              else
-                ...state.regions.map((region) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: _GeofenceTile(region: region),
-                    )),
-            ],
-          );
         },
+        child: BlocBuilder<GeofenceManagementCubit, GeofenceManagementState>(
+          builder: (context, state) {
+            if (state.isLoading && state.regions.isEmpty) {
+              return const Center(
+                child: CircularProgressIndicator(
+                  color: HermesColors.accentTeal,
+                ),
+              );
+            }
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              children: [
+                _AddGeofenceForm(permissionGate: permissionGate),
+                const SizedBox(height: 20),
+                _buildSectionHeader('Saved Geofences'),
+                const SizedBox(height: 8),
+                if (state.regions.isEmpty)
+                  const _EmptyState()
+                else
+                  ...state.regions.map((region) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _GeofenceTile(region: region),
+                      )),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -213,6 +239,10 @@ class _GeofenceTile extends StatelessWidget {
 }
 
 class _AddGeofenceForm extends StatefulWidget {
+  final PermissionGate? permissionGate;
+
+  const _AddGeofenceForm({this.permissionGate});
+
   @override
   State<_AddGeofenceForm> createState() => _AddGeofenceFormState();
 }
@@ -224,8 +254,11 @@ class _AddGeofenceFormState extends State<_AddGeofenceForm> {
   final _lngController = TextEditingController();
   double _radius = 100;
   bool _capturing = false;
+  bool _submitting = false;
 
   static const List<double> _radiusOptions = [50, 100, 200, 500];
+
+  PermissionGate get _permissionGate => widget.permissionGate ?? PermissionGate();
 
   @override
   void dispose() {
@@ -238,36 +271,54 @@ class _AddGeofenceFormState extends State<_AddGeofenceForm> {
   Future<void> _useCurrentLocation() async {
     final cubit = context.read<GeofenceManagementCubit>();
     setState(() => _capturing = true);
-    final loc = await cubit.captureCurrentLocation();
-    if (!mounted) return;
-    setState(() => _capturing = false);
-    if (loc == null) {
-      _showFeedback('Unable to capture current location.');
-      return;
+    try {
+      final granted = await _permissionGate.requestWithRationale(
+        context,
+        PermissionRationaleType.location,
+      );
+      if (!granted) return;
+      final loc = await cubit.captureCurrentLocation();
+      if (!mounted) return;
+      if (loc == null) {
+        _showFeedback('Unable to capture current location.');
+        return;
+      }
+      setState(() {
+        _latController.text = loc.latitude.toStringAsFixed(6);
+        _lngController.text = loc.longitude.toStringAsFixed(6);
+      });
+    } finally {
+      if (mounted) setState(() => _capturing = false);
     }
-    setState(() {
-      _latController.text = loc.latitude.toStringAsFixed(6);
-      _lngController.text = loc.longitude.toStringAsFixed(6);
-    });
   }
 
   Future<void> _submit() async {
+    if (_submitting) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final cubit = context.read<GeofenceManagementCubit>();
     final lat = double.parse(_latController.text.trim());
     final lng = double.parse(_lngController.text.trim());
-    await cubit.addGeofence(
-      label: _labelController.text.trim(),
-      latitude: lat,
-      longitude: lng,
-      radiusMeters: _radius,
-    );
-    if (!mounted) return;
-    _labelController.clear();
-    _latController.clear();
-    _lngController.clear();
-    setState(() => _radius = 100);
-    _showFeedback('Geofence added.');
+    setState(() => _submitting = true);
+    try {
+      final id = await cubit.addGeofence(
+        label: _labelController.text.trim(),
+        latitude: lat,
+        longitude: lng,
+        radiusMeters: _radius,
+      );
+      if (!mounted) return;
+      if (id == null) {
+        _showFeedback('Failed to save geofence.');
+        return;
+      }
+      _labelController.clear();
+      _latController.clear();
+      _lngController.clear();
+      setState(() => _radius = 100);
+      _showFeedback('Geofence added.');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   void _showFeedback(String message) {
