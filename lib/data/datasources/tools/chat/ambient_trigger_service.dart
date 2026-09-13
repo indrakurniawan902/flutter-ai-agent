@@ -6,6 +6,9 @@ import 'package:injectable/injectable.dart';
 import 'package:workmanager/workmanager.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/data/datasources/local/action_center/action_center_datasource.dart';
+import 'package:flutter_ai_agent/data/models/action_center/action_item_model.dart';
+import 'package:flutter_ai_agent/domain/entities/action_center/action_item.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/ambient_event.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart';
 
@@ -64,11 +67,13 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
     BatteryPlatformWrapper? battery,
     WorkmanagerPlatformWrapper? workmanager,
     List<GeofenceRegion>? initialRegions,
+    ActionCenterDatasource? actionCenterDatasource,
     this.lowThreshold = defaultLowThreshold,
     this.criticalThreshold = defaultCriticalThreshold,
     this.cooldown = defaultCooldown,
   })  : _battery = battery ?? DefaultBatteryPlatformWrapper(),
         _workmanager = workmanager ?? DefaultWorkmanagerPlatformWrapper(),
+        _actionCenterDatasource = actionCenterDatasource,
         _regions = List<GeofenceRegion>.from(initialRegions ?? const []);
 
   @factoryMethod
@@ -83,6 +88,12 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
 
   final BatteryPlatformWrapper _battery;
   final WorkmanagerPlatformWrapper _workmanager;
+
+  /// Optional Action Center inbox mirror. When null (the default, and the
+  /// only mode used by dependency injection) ambient checks behave exactly
+  /// as before and nothing is mirrored.
+  final ActionCenterDatasource? _actionCenterDatasource;
+
   final List<GeofenceRegion> _regions;
   final Map<String, bool> _insideState = {};
   final Map<String, DateTime> _lastFired = {};
@@ -132,6 +143,42 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
     _lastFired[key] = now;
   }
 
+  /// Mirrors every triggered [AmbientEvent] into the Action Center inbox as an
+  /// unread [ActionItemModel].
+  ///
+  /// Never throws: inbox mirroring is best-effort and must not change the
+  /// ambient check result returned to the caller.
+  Future<void> _mirrorEventsToActionCenter(List<AmbientEvent> events) async {
+    final datasource = _actionCenterDatasource;
+    if (datasource == null || events.isEmpty) return;
+    for (final event in events) {
+      try {
+        await datasource.addItem(_toActionItem(event));
+      } catch (_) {
+        // Swallow: a failed mirror must never break the ambient check.
+      }
+    }
+  }
+
+  ActionItemModel _toActionItem(AmbientEvent event) {
+    final typeName = event.type.name;
+    final isBattery = typeName.startsWith('battery');
+    return ActionItemModel(
+      id: event.id,
+      title: event.title,
+      summary: event.body,
+      timestamp: event.timestamp,
+      priority: event.type == AmbientEventType.batteryCritical
+          ? ActionItemPriority.high
+          : ActionItemPriority.normal,
+      isRead: false,
+      source: isBattery ? 'battery_watchdog' : 'geofence',
+      actionPayload: event.batteryLevel != null
+          ? <String, dynamic>{'batteryLevel': event.batteryLevel}
+          : <String, dynamic>{'type': event.type.name},
+    );
+  }
+
   @override
   double distanceMeters(
     double startLatitude,
@@ -170,19 +217,19 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
           return Right(AmbientCheckResult.empty(checkedAt: current));
         }
         _markFired(key, current);
+        final event = AmbientEvent(
+          id: '${key}_${current.millisecondsSinceEpoch}',
+          type: AmbientEventType.batteryCritical,
+          title: 'Battery critical',
+          body: 'Battery level is $level%. Connect charger.',
+          timestamp: current,
+          batteryLevel: level,
+        );
+        await _mirrorEventsToActionCenter([event]);
         return Right(
           AmbientCheckResult(
             triggered: true,
-            events: [
-              AmbientEvent(
-                id: '${key}_${current.millisecondsSinceEpoch}',
-                type: AmbientEventType.batteryCritical,
-                title: 'Battery critical',
-                body: 'Battery level is $level%. Connect charger.',
-                timestamp: current,
-                batteryLevel: level,
-              ),
-            ],
+            events: [event],
             checkedAt: current,
           ),
         );
@@ -193,19 +240,19 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
           return Right(AmbientCheckResult.empty(checkedAt: current));
         }
         _markFired(key, current);
+        final event = AmbientEvent(
+          id: '${key}_${current.millisecondsSinceEpoch}',
+          type: AmbientEventType.batteryLow,
+          title: 'Battery low',
+          body: 'Battery level is $level%. Low power mode suggested.',
+          timestamp: current,
+          batteryLevel: level,
+        );
+        await _mirrorEventsToActionCenter([event]);
         return Right(
           AmbientCheckResult(
             triggered: true,
-            events: [
-              AmbientEvent(
-                id: '${key}_${current.millisecondsSinceEpoch}',
-                type: AmbientEventType.batteryLow,
-                title: 'Battery low',
-                body: 'Battery level is $level%. Low power mode suggested.',
-                timestamp: current,
-                batteryLevel: level,
-              ),
-            ],
+            events: [event],
             checkedAt: current,
           ),
         );
@@ -267,6 +314,7 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
         }
         _insideState[region.id] = inside;
       }
+      await _mirrorEventsToActionCenter(fired);
       return Right(
         AmbientCheckResult(
           triggered: fired.isNotEmpty,
