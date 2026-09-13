@@ -1,0 +1,406 @@
+import 'dart:async';
+
+import 'package:dartz/dartz.dart';
+import 'package:flutter/foundation.dart';
+import 'package:injectable/injectable.dart';
+import 'package:nfc_manager/nfc_manager.dart';
+import 'package:nfc_manager/nfc_manager_android.dart';
+
+import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
+
+/// Plain-Dart view of a discovered tag. Holding the [transceive] callback here
+/// keeps the whole APDU flow fakeable without any MethodChannel.
+class RawNfcCard {
+  final Uint8List uid;
+  final List<String> techList;
+  final Future<Uint8List> Function(Uint8List) transceive;
+
+  const RawNfcCard({
+    required this.uid,
+    required this.techList,
+    required this.transceive,
+  });
+}
+
+class NfcScanResult {
+  final RawNfcCard card;
+
+  const NfcScanResult({required this.card});
+}
+
+/// Test/DI seam over `nfc_manager`. [DefaultNfcPlatformWrapper] is the only
+/// production implementation that touches the plugin.
+abstract class NfcPlatformWrapper {
+  /// Returns `'enabled'`, `'disabled'` or `'unsupported'`.
+  Future<String> availability();
+
+  Future<NfcScanResult> scan({
+    required Set<String> pollingOptions,
+    Duration timeout,
+  });
+}
+
+class NfcPlatformWrapperRegistry {
+  static NfcPlatformWrapper instance = DefaultNfcPlatformWrapper();
+}
+
+class DefaultNfcPlatformWrapper implements NfcPlatformWrapper {
+  @override
+  Future<String> availability() async {
+    final availability = await NfcManager.instance.checkAvailability();
+    switch (availability) {
+      case NfcAvailability.enabled:
+        return 'enabled';
+      case NfcAvailability.disabled:
+        return 'disabled';
+      case NfcAvailability.unsupported:
+        return 'unsupported';
+    }
+  }
+
+  @override
+  Future<NfcScanResult> scan({
+    required Set<String> pollingOptions,
+    Duration timeout = const Duration(seconds: 20),
+  }) async {
+    final completer = Completer<RawNfcCard>();
+    final polling = pollingOptions.map(_mapPollingOption).toSet();
+    try {
+      await NfcManager.instance.startSession(
+        pollingOptions: polling,
+        onDiscovered: (tag) {
+          if (completer.isCompleted) return;
+          final card = _toRawCard(tag);
+          if (card == null) {
+            completer.completeError(
+              UnsupportedError('Discovered NFC tag has no transceive capability'),
+            );
+            return;
+          }
+          completer.complete(card);
+        },
+      );
+      final card = await completer.future.timeout(
+        timeout,
+        onTimeout: () => throw TimeoutException('NFC scan timed out', timeout),
+      );
+      return NfcScanResult(card: card);
+    } finally {
+      try {
+        await NfcManager.instance.stopSession();
+      } catch (_) {
+        // Session may already be closed; never leave callers hanging.
+      }
+    }
+  }
+
+  RawNfcCard? _toRawCard(NfcTag tag) {
+    final androidTag = NfcTagAndroid.from(tag);
+    if (androidTag == null) return null;
+    final transceive =
+        IsoDepAndroid.from(tag)?.transceive ?? NfcAAndroid.from(tag)?.transceive;
+    if (transceive == null) return null;
+    return RawNfcCard(
+      uid: androidTag.id,
+      techList: androidTag.techList,
+      transceive: transceive,
+    );
+  }
+
+  NfcPollingOption _mapPollingOption(String option) {
+    switch (option) {
+      case 'iso14443':
+        return NfcPollingOption.iso14443;
+      case 'iso15693':
+        return NfcPollingOption.iso15693;
+      case 'iso18092':
+        return NfcPollingOption.iso18092;
+      default:
+        throw UnsupportedError('Unsupported NFC polling option: $option');
+    }
+  }
+}
+
+/// APDU profile for one e-money brand.
+class EmoneyApduProfile {
+  final EmoneyCardBrand brand;
+  final List<int> selectApdu;
+  final List<int> balanceApdu;
+
+  const EmoneyApduProfile({
+    required this.brand,
+    required this.selectApdu,
+    required this.balanceApdu,
+  });
+
+  static const mandiriEmoney = EmoneyApduProfile(
+    brand: EmoneyCardBrand.mandiriEmoney,
+    selectApdu: <int>[
+      0x00, 0xA4, 0x04, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x01,
+    ],
+    balanceApdu: <int>[0x00, 0xB5, 0x00, 0x00, 0x0A],
+  );
+
+  static const bcaFlazz = EmoneyApduProfile(
+    brand: EmoneyCardBrand.bcaFlazz,
+    selectApdu: <int>[
+      0x00, 0xA4, 0x04, 0x00, 0x0B, 0xA0, 0x00, 0x00, 0x00, 0x18, 0x0F, 0x00,
+      0x00, 0x01, 0x80, 0x01,
+    ],
+    balanceApdu: <int>[0x00, 0xB5, 0x00, 0x00, 0x0A],
+  );
+
+  static const briBrizzi = EmoneyApduProfile(
+    brand: EmoneyCardBrand.briBrizzi,
+    selectApdu: <int>[0x90, 0x5A, 0x00, 0x00, 0x03, 0x01, 0x00, 0x00, 0x00],
+    balanceApdu: <int>[0x90, 0x6C, 0x00, 0x00, 0x01, 0x00, 0x00],
+  );
+
+  static const bniTapCash = EmoneyApduProfile(
+    brand: EmoneyCardBrand.bniTapCash,
+    selectApdu: <int>[
+      0x00, 0xA4, 0x04, 0x00, 0x08, 0xA0, 0x00, 0x00, 0x42, 0x4E, 0x49, 0x10,
+      0x00, 0x01,
+    ],
+    balanceApdu: <int>[0x00, 0xB5, 0x00, 0x00, 0x0A],
+  );
+
+  static const List<EmoneyApduProfile> values = <EmoneyApduProfile>[
+    mandiriEmoney,
+    bcaFlazz,
+    briBrizzi,
+    bniTapCash,
+  ];
+}
+
+@LazySingleton(as: NfcServiceBase)
+class NfcService implements NfcServiceBase {
+  /// INS values that mutate/load a card. This service is read-only, so any
+  /// attempt to send one is a programming error and must be loud.
+  static const Set<int> _forbiddenIns = <int>{
+    0xD0,
+    0xD1,
+    0xD6,
+    0xD7,
+    0xD8,
+    0xDC,
+    0xE2,
+    0xE0,
+    0xD2,
+    0xD3,
+  };
+
+  final NfcPlatformWrapper _platform;
+
+  NfcService({NfcPlatformWrapper? platformWrapper})
+      : _platform = platformWrapper ?? NfcPlatformWrapperRegistry.instance;
+
+  @factoryMethod
+  factory NfcService.create() => NfcService();
+
+  @override
+  Future<Either<Failure, bool>> isAvailable() async {
+    try {
+      final availability = await _platform.availability();
+      return Right(availability != 'unsupported');
+    } catch (e) {
+      return Left(ServerFailure('Failed to check NFC availability: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, bool>> isEnabled() async {
+    try {
+      final availability = await _platform.availability();
+      return Right(availability == 'enabled');
+    } catch (e) {
+      return Left(ServerFailure('Failed to check NFC state: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, String>> readCardUid() async {
+    try {
+      final result = await _platform.scan(
+        pollingOptions: const <String>{'iso14443', 'iso15693'},
+      );
+      return Right(bytesToHex(result.card.uid));
+    } on TimeoutException {
+      return const Left(
+        ServerFailure('NFC scan timed out. Please tap the card again.'),
+      );
+    } catch (e) {
+      return Left(ServerFailure('Failed to read NFC card UID: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, EmoneyBalance>> readEmoneyBalance({
+    String? expectedCardUid,
+  }) async {
+    try {
+      final result = await _platform.scan(
+        pollingOptions: const <String>{'iso14443'},
+      );
+      final card = result.card;
+      final uid = bytesToHex(card.uid);
+
+      if (expectedCardUid != null &&
+          expectedCardUid.toLowerCase() != uid.toLowerCase()) {
+        return const Left(ServerFailure('Card UID mismatch'));
+      }
+
+      final profile = await _detectBrand(card);
+      if (profile == null) {
+        return const Left(
+          ServerFailure('Unrecognized or unsupported e-money card'),
+        );
+      }
+
+      final balanceResponse = await _transceive(card, profile.balanceApdu);
+      return Right(
+        EmoneyBalance(
+          brand: profile.brand,
+          cardUid: uid,
+          balanceRupiah: parseBalanceBytes(balanceResponse),
+          recentTransactions: parseTransactions(balanceResponse),
+        ),
+      );
+    } on TimeoutException {
+      return const Left(
+        ServerFailure('NFC scan timed out. Please tap the card again.'),
+      );
+    } catch (e) {
+      return Left(ServerFailure('Failed to read e-money balance: $e'));
+    }
+  }
+
+  Future<EmoneyApduProfile?> _detectBrand(RawNfcCard card) async {
+    for (final profile in EmoneyApduProfile.values) {
+      final response = await _transceive(card, profile.selectApdu);
+      if (isSuccessStatus(response)) {
+        return profile;
+      }
+    }
+    return null;
+  }
+
+  /// Sends [apdu] and transparently resolves ISO 7816 continuations:
+  /// `6C xx` (wrong Le) re-issues with the corrected Le, `61 xx` (more data)
+  /// issues a GET RESPONSE.
+  Future<Uint8List> _transceive(RawNfcCard card, List<int> apdu) async {
+    assertInsAllowed(apdu);
+    var response = await card.transceive(Uint8List.fromList(apdu));
+    var attempts = 0;
+    while (response.length >= 2 && attempts < 3) {
+      final sw1 = response[response.length - 2];
+      final sw2 = response[response.length - 1];
+      if (sw1 == 0x6C && apdu.isNotEmpty) {
+        final corrected = List<int>.from(apdu);
+        corrected[corrected.length - 1] = sw2;
+        assertInsAllowed(corrected);
+        response = await card.transceive(Uint8List.fromList(corrected));
+      } else if (sw1 == 0x61) {
+        final getResponse = <int>[0x00, 0xC0, 0x00, 0x00, sw2];
+        assertInsAllowed(getResponse);
+        response = await card.transceive(Uint8List.fromList(getResponse));
+      } else {
+        break;
+      }
+      attempts++;
+    }
+    return response;
+  }
+
+  /// Guards against ever emitting a WRITE/DEBIT/UPDATE/LOAD APDU.
+  @visibleForTesting
+  static void assertInsAllowed(List<int> apdu) {
+    final ins = apdu.length > 1 ? apdu[1] : -1;
+    if (_forbiddenIns.contains(ins)) {
+      throw UnsupportedError(
+        'Refusing to send mutating NFC APDU with INS 0x${ins.toRadixString(16)}',
+      );
+    }
+  }
+
+  /// True for `90 00`, or a `61 xx` / `6C xx` continuation.
+  @visibleForTesting
+  static bool isSuccessStatus(Uint8List response) {
+    if (response.length < 2) return false;
+    final sw1 = response[response.length - 2];
+    final sw2 = response[response.length - 1];
+    if (sw1 == 0x90 && sw2 == 0x00) return true;
+    return sw1 == 0x61 || sw1 == 0x6C;
+  }
+
+  /// Balance = first 4 data bytes, BIG-ENDIAN unsigned. The trailing SW1/SW2
+  /// are stripped first, so the offset is 0 into the data area.
+  @visibleForTesting
+  static int parseBalanceBytes(Uint8List apduResponse) {
+    final data = _dataArea(apduResponse);
+    if (data.length < 4) return 0;
+    return (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
+  }
+
+  /// Best-effort transaction parsing. Records are 16 bytes each (4-byte signed
+  /// big-endian amount + 12-byte label) and live after the 4-byte balance.
+  /// Only full records are read (max 3); anything ambiguous yields an empty
+  /// list instead of guessing.
+  @visibleForTesting
+  static List<EmoneyTransaction> parseTransactions(Uint8List apduResponse) {
+    try {
+      final data = _dataArea(apduResponse);
+      if (data.length < 20) return const <EmoneyTransaction>[];
+      final transactions = <EmoneyTransaction>[];
+      var offset = 4;
+      while (transactions.length < 3 && offset + 16 <= data.length) {
+        final record = data.sublist(offset, offset + 16);
+        transactions.add(
+          EmoneyTransaction(
+            amountRupiah: _readSignedInt32(record, 0),
+            label: _readAsciiLabel(record, 4, 12),
+          ),
+        );
+        offset += 16;
+      }
+      return transactions;
+    } catch (_) {
+      return const <EmoneyTransaction>[];
+    }
+  }
+
+  @visibleForTesting
+  static String bytesToHex(Uint8List bytes) {
+    final buffer = StringBuffer();
+    for (final byte in bytes) {
+      buffer.write(byte.toRadixString(16).padLeft(2, '0'));
+    }
+    return buffer.toString();
+  }
+
+  static Uint8List _dataArea(Uint8List apduResponse) {
+    if (apduResponse.length < 2) return Uint8List(0);
+    return Uint8List.sublistView(apduResponse, 0, apduResponse.length - 2);
+  }
+
+  static int _readSignedInt32(Uint8List bytes, int offset) {
+    final value = (bytes[offset] << 24) |
+        (bytes[offset + 1] << 16) |
+        (bytes[offset + 2] << 8) |
+        bytes[offset + 3];
+    return value.toSigned(32);
+  }
+
+  static String? _readAsciiLabel(Uint8List bytes, int offset, int length) {
+    final chars = <int>[];
+    for (var i = offset; i < offset + length && i < bytes.length; i++) {
+      final byte = bytes[i];
+      if (byte == 0x00 || byte == 0xFF) break;
+      if (byte >= 0x20 && byte <= 0x7E) chars.add(byte);
+    }
+    if (chars.isEmpty) return null;
+    return String.fromCharCodes(chars).trim();
+  }
+}
