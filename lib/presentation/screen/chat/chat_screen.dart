@@ -891,11 +891,13 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _scanNfcTag(BuildContext context) async {
+  Future<void> _scanNfcTag() async {
     if (_isNfcScanning) return;
+    final cubit = _resolveAgentCubit();
+    if (cubit == null) return;
     _isNfcScanning = true;
     try {
-      final dispatched = await context.read<AgentCubit>().scanNfcAndDispatchPrompt();
+      final dispatched = await cubit.scanNfcAndDispatchPrompt();
       if (!mounted) return;
       if (dispatched) {
         _scrollToBottom();
@@ -921,11 +923,13 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _scanNfcBalance(BuildContext context) async {
+  Future<void> _scanNfcBalance() async {
     if (_isNfcScanning) return;
+    final cubit = _resolveAgentCubit();
+    if (cubit == null) return;
     _isNfcScanning = true;
     try {
-      final balance = await context.read<AgentCubit>().scanNfcEmoneyBalance();
+      final balance = await cubit.scanNfcEmoneyBalance();
       if (!mounted) return;
       if (balance != null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1513,7 +1517,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 iconSize: 20,
                 icon: const Icon(Icons.nfc),
                 tooltip: 'Scan NFC Tag',
-                onPressed: () => _scanNfcTag(context),
+                onPressed: _scanNfcTag,
               ),
               IconButton(
                 key: const Key('chat_nfc_balance_button'),
@@ -1523,7 +1527,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 iconSize: 20,
                 icon: const Icon(Icons.account_balance_wallet_outlined),
                 tooltip: 'Read e-Money Balance',
-                onPressed: () => _scanNfcBalance(context),
+                onPressed: _scanNfcBalance,
               ),
               IconButton(
                 key: const Key('chat_reset_button'),
