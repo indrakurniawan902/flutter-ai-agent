@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
@@ -5,12 +7,27 @@ import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_
 import 'package:flutter_ai_agent/domain/entities/chat/ambient_event.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart';
+import 'package:flutter_ai_agent/presentation/screen/chat/widgets/app_settings_opener.dart';
 import 'package:flutter_ai_agent/presentation/screen/node/geofence_management_screen.dart';
 import 'package:flutter_ai_agent/utils/hermes_theme.dart';
+import 'package:flutter_ai_agent/utils/permission_gate.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../../helpers/mocks.dart';
+
+class _MockPermissionRequester extends Mock implements PermissionRequester {}
+
+class _FakeAppSettingsOpener implements AppSettingsOpener {
+  int calls = 0;
+
+  @override
+  Future<bool> openAppSettings() async {
+    calls++;
+    return true;
+  }
+}
 
 void main() {
   setUpAll(() {
@@ -22,6 +39,7 @@ void main() {
       radiusMeters: 0.0,
     ));
     registerFallbackValue(<GeofenceRegion>[]);
+    registerFallbackValue(Permission.location);
   });
 
   setUp(() async {
@@ -32,11 +50,18 @@ void main() {
     await sl.reset();
   });
 
-  Widget createWidgetUnderTest() {
+  Widget createWidgetUnderTest({PermissionGate? gate}) {
     return MaterialApp(
       theme: HermesTheme.darkTheme,
-      home: const GeofenceManagementScreen(),
+      home: GeofenceManagementScreen(permissionGate: gate),
     );
+  }
+
+  PermissionGate gateWith(PermissionStatus status, {AppSettingsOpener? opener}) {
+    final requester = _MockPermissionRequester();
+    when(() => requester.checkStatus(any())).thenAnswer((_) async => status);
+    when(() => requester.requestPermission(any())).thenAnswer((_) async => status);
+    return PermissionGate(requester: requester, settingsOpener: opener);
   }
 
   void registerMocks({
@@ -186,7 +211,9 @@ void main() {
         (tester) async {
       registerMocks();
 
-      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpWidget(
+        createWidgetUnderTest(gate: gateWith(PermissionStatus.granted)),
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('geofence_use_current_location')));
@@ -290,6 +317,210 @@ void main() {
           verify(() => mockStorage.saveGeofences(captureAny())).captured;
       final saved = captured.last as List<GeofenceRegion>;
       expect(saved.map((r) => r.id), containsAll(['gf-storage', 'gf-tool']));
+    });
+
+    testWidgets('double tap on Add Geofence creates only one geofence',
+        (tester) async {
+      final mockStorage = MockSecureStorageService();
+      final mockAmbient = MockAmbientTriggerService();
+      final mockLocation = MockLocationService();
+      final saveCompleter = Completer<void>();
+
+      when(() => mockStorage.getGeofences())
+          .thenAnswer((_) async => const <GeofenceRegion>[]);
+      when(() => mockStorage.saveGeofences(any()))
+          .thenAnswer((invocation) async {
+        final list =
+            invocation.positionalArguments.first as List<GeofenceRegion>;
+        if (list.isNotEmpty) await saveCompleter.future;
+      });
+      when(() => mockAmbient.regions).thenAnswer((_) => const []);
+      when(() => mockLocation.getLocation()).thenAnswer(
+        (_) async => Right(<String, dynamic>{'latitude': 0, 'longitude': 0}),
+      );
+
+      sl.registerSingleton<SecureStorageService>(mockStorage);
+      sl.registerSingleton<AmbientTriggerServiceBase>(mockAmbient);
+      sl.registerSingleton<LocationServiceBase>(mockLocation);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.byKey(const Key('geofence_label_field')), 'Office');
+      await tester.enterText(
+          find.byKey(const Key('geofence_lat_field')), '40.7128');
+      await tester.enterText(
+          find.byKey(const Key('geofence_lng_field')), '-74.0060');
+
+      await tester.tap(find.byKey(const Key('geofence_submit')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('geofence_submit')));
+      await tester.pump();
+
+      saveCompleter.complete();
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('geofence_empty')), findsNothing);
+      final captured = verify(
+        () => mockStorage.saveGeofences(captureAny()),
+      ).captured.whereType<List<GeofenceRegion>>().where((l) => l.isNotEmpty);
+      expect(captured.length, 1);
+      expect(captured.first.length, 1);
+    });
+
+    testWidgets('persist failure surfaces an error and keeps the form values',
+        (tester) async {
+      final mockStorage = MockSecureStorageService();
+      final mockAmbient = MockAmbientTriggerService();
+      final mockLocation = MockLocationService();
+
+      when(() => mockStorage.getGeofences())
+          .thenAnswer((_) async => const <GeofenceRegion>[]);
+      when(() => mockStorage.saveGeofences(any()))
+          .thenAnswer((invocation) async {
+        final list =
+            invocation.positionalArguments.first as List<GeofenceRegion>;
+        if (list.isNotEmpty) throw Exception('disk full');
+      });
+      when(() => mockAmbient.regions).thenAnswer((_) => const []);
+      when(() => mockLocation.getLocation()).thenAnswer(
+        (_) async => Right(<String, dynamic>{'latitude': 0, 'longitude': 0}),
+      );
+
+      sl.registerSingleton<SecureStorageService>(mockStorage);
+      sl.registerSingleton<AmbientTriggerServiceBase>(mockAmbient);
+      sl.registerSingleton<LocationServiceBase>(mockLocation);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.byKey(const Key('geofence_label_field')), 'Office');
+      await tester.enterText(
+          find.byKey(const Key('geofence_lat_field')), '40.7128');
+      await tester.enterText(
+          find.byKey(const Key('geofence_lng_field')), '-74.0060');
+
+      await tester.tap(find.byKey(const Key('geofence_submit')));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('disk full'), findsOneWidget);
+      expect(find.byKey(const Key('geofence_empty')), findsOneWidget);
+      final labelField = tester.widget<TextFormField>(
+        find.byKey(const Key('geofence_label_field')),
+      );
+      expect(labelField.controller?.text, 'Office');
+    });
+
+    testWidgets(
+        'use current location when permission granted fills lat and lng',
+        (tester) async {
+      registerMocks();
+      final gate = gateWith(PermissionStatus.granted);
+
+      await tester.pumpWidget(createWidgetUnderTest(gate: gate));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('geofence_use_current_location')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('37.774900'), findsOneWidget);
+      expect(find.text('-122.419400'), findsOneWidget);
+    });
+
+    testWidgets(
+        'use current location when permission denied shows rationale and '
+        'captures nothing', (tester) async {
+      registerMocks();
+      final mockLocation = sl<LocationServiceBase>();
+      final gate = gateWith(PermissionStatus.denied);
+
+      await tester.pumpWidget(createWidgetUnderTest(gate: gate));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('geofence_use_current_location')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(
+        find.byKey(const Key('permission_rationale_allow_btn')),
+        findsOneWidget,
+      );
+      verifyNever(() => mockLocation.getLocation());
+      expect(find.text('37.774900'), findsNothing);
+    });
+
+    testWidgets(
+        'use current location when permission permanently denied offers '
+        'Buka Pengaturan', (tester) async {
+      registerMocks();
+      final mockLocation = sl<LocationServiceBase>();
+      final opener = _FakeAppSettingsOpener();
+      final gate =
+          gateWith(PermissionStatus.permanentlyDenied, opener: opener);
+
+      await tester.pumpWidget(createWidgetUnderTest(gate: gate));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('geofence_use_current_location')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(
+        find.byKey(const Key('permission_rationale_permanently_denied_notice')),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(const Key('permission_rationale_allow_btn')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(opener.calls, 1);
+      verifyNever(() => mockLocation.getLocation());
+    });
+
+    testWidgets('selected radius is used when saving', (tester) async {
+      final mockStorage = MockSecureStorageService();
+      final mockAmbient = MockAmbientTriggerService();
+      final mockLocation = MockLocationService();
+
+      when(() => mockStorage.getGeofences())
+          .thenAnswer((_) async => const <GeofenceRegion>[]);
+      when(() => mockStorage.saveGeofences(any())).thenAnswer((_) async {});
+      when(() => mockAmbient.regions).thenAnswer((_) => const []);
+      when(() => mockLocation.getLocation()).thenAnswer(
+        (_) async => Right(<String, dynamic>{'latitude': 0, 'longitude': 0}),
+      );
+
+      sl.registerSingleton<SecureStorageService>(mockStorage);
+      sl.registerSingleton<AmbientTriggerServiceBase>(mockAmbient);
+      sl.registerSingleton<LocationServiceBase>(mockLocation);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('geofence_radius_dropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('200 m').last);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.byKey(const Key('geofence_label_field')), 'Office');
+      await tester.enterText(
+          find.byKey(const Key('geofence_lat_field')), '40.7128');
+      await tester.enterText(
+          find.byKey(const Key('geofence_lng_field')), '-74.0060');
+
+      await tester.tap(find.byKey(const Key('geofence_submit')));
+      await tester.pumpAndSettle();
+
+      final captured =
+          verify(() => mockStorage.saveGeofences(captureAny())).captured;
+      final saved = captured.last as List<GeofenceRegion>;
+      expect(saved.length, 1);
+      expect(saved.first.radiusMeters, 200);
     });
   });
 }
