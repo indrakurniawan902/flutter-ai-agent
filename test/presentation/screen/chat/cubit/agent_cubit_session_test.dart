@@ -383,4 +383,74 @@ void main() {
       await cubit.close();
     });
   });
+
+  group('session cache notifications', () {
+    test('renameSession emits a new AgentIdle with bumped sessionEpoch',
+        () async {
+      when(() => repo.getSessions(any<String>())).thenAnswer(
+        (_) async => Right<Failure, List<Session>>(
+          [session(1, title: 'A'), session(2, title: 'B')],
+        ),
+      );
+
+      final cubit = buildCubit();
+      await cubit.switchProfile(profileId);
+      expect(cubit.state, isA<AgentIdle>());
+      final epochBefore = (cubit.state as AgentIdle).sessionEpoch;
+
+      final emitted = <AgentIdle>[];
+      final sub = cubit.stream.listen((s) {
+        if (s is AgentIdle) emitted.add(s);
+      });
+
+      await cubit.renameSession(1, 'X');
+      await pumpEventQueue();
+
+      expect(emitted, isNotEmpty);
+      expect(emitted.last.sessionEpoch, greaterThan(epochBefore));
+      expect(
+        cubit.sessions.firstWhere((s) => s.id == 1).title,
+        'X',
+      );
+
+      await sub.cancel();
+      await cubit.close();
+    });
+
+    test('deleteSession on non-active session emits bumped sessionEpoch',
+        () async {
+      when(() => repo.getSessions(any<String>())).thenAnswer(
+        (_) async => Right<Failure, List<Session>>(
+          [session(1, title: 'A'), session(2, title: 'B')],
+        ),
+      );
+
+      final cubit = buildCubit();
+      await cubit.switchProfile(profileId);
+      expect(cubit.activeSessionId, 1);
+      final epochBefore = (cubit.state as AgentIdle).sessionEpoch;
+
+      final emitted = <AgentIdle>[];
+      final sub = cubit.stream.listen((s) {
+        if (s is AgentIdle) emitted.add(s);
+      });
+
+      await cubit.deleteSession(2);
+      await pumpEventQueue();
+
+      expect(emitted, isNotEmpty);
+      expect(emitted.last.sessionEpoch, greaterThan(epochBefore));
+      expect(cubit.sessions.any((s) => s.id == 2), isFalse);
+
+      await sub.cancel();
+      await cubit.close();
+    });
+
+    test('AgentIdle with different sessionEpoch is not equal', () {
+      expect(
+        AgentIdle(sessionEpoch: 1),
+        isNot(AgentIdle(sessionEpoch: 2)),
+      );
+    });
+  });
 }

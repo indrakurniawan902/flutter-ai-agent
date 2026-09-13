@@ -14,10 +14,15 @@ sealed class AgentState extends Equatable {
 class AgentIdle extends AgentState {
   final List<ChatMessage> messages;
 
-  const AgentIdle({this.messages = const []});
+  /// Bumped on every session-cache mutation (rename/delete/refresh) so an
+  /// otherwise-equal idle state still emits a stream event and rebuilds
+  /// listeners like the session drawer.
+  final int sessionEpoch;
+
+  const AgentIdle({this.messages = const [], this.sessionEpoch = 0});
 
   @override
-  List<Object?> get props => [messages];
+  List<Object?> get props => [messages, sessionEpoch];
 }
 
 /// Agent has sent request to LLM and is waiting for tokens.

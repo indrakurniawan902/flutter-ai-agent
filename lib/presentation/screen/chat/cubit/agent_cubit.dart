@@ -58,6 +58,7 @@ class AgentCubit extends Cubit<AgentState> {
   Completer<void>? _streamCompleter;
   bool _isCancelled = false;
   int _runGeneration = 0;
+  int _sessionEpoch = 0;
 
   @factoryMethod
   factory AgentCubit.create({
@@ -344,6 +345,21 @@ class AgentCubit extends Cubit<AgentState> {
     await _loadSessionMessages(sessionId.toString());
   }
 
+  /// Emits a fresh [AgentIdle] carrying an incremented [sessionEpoch] so that
+  /// session-cache mutations (rename/delete/refresh) always produce a stream
+  /// event even when the message list is unchanged. Guarded to idle states so
+  /// mid-stream AgentStreaming/AgentThinking states are never stomped; the
+  /// drawer rebuilds on the next stream event because its builder reads
+  /// [sessions] fresh.
+  void _emitSessionUpdate() {
+    if (!isClosed && state is AgentIdle) {
+      emit(AgentIdle(
+        messages: List.unmodifiable(_messages),
+        sessionEpoch: ++_sessionEpoch,
+      ));
+    }
+  }
+
   /// Renames [sessionId] and refreshes its title in the local cache.
   Future<void> renameSession(int sessionId, String title) async {
     final repo = _chatLocalRepository;
@@ -356,6 +372,7 @@ class AgentCubit extends Cubit<AgentState> {
         if (idx != -1) {
           _sessions[idx] = _sessions[idx].copyWith(title: derived);
         }
+        _emitSessionUpdate();
       }
     } catch (_) {/* ignore */}
   }
@@ -379,6 +396,8 @@ class AgentCubit extends Cubit<AgentState> {
       } else {
         await newChat();
       }
+    } else if (!isClosed && state is AgentIdle) {
+      _emitSessionUpdate();
     }
   }
 
@@ -395,9 +414,7 @@ class AgentCubit extends Cubit<AgentState> {
     if (activeSessionId == null || (fetched != null && fetched.isEmpty)) {
       await _ensureSession(activeProfileId);
     }
-    if (!isClosed && state is AgentIdle) {
-      emit(AgentIdle(messages: List.unmodifiable(_messages)));
-    }
+    _emitSessionUpdate();
   }
 
 
