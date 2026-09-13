@@ -90,6 +90,11 @@ void main() {
     when(() => mockLocalMemoryService.searchMemories(any(), any()))
         .thenAnswer((_) async => const Right([]));
 
+    when(() => mockNotificationTriageService.checkPermission())
+        .thenAnswer((_) async => true);
+    when(() => mockNotificationTriageService.isListenerConnected())
+        .thenAnswer((_) async => true);
+
     // Register all core and Fase 3 dependencies in GetIt
     sl.registerLazySingleton<FlutterSecureStorage>(() => mockSecureStorage);
     sl.registerLazySingleton<SecureStorageService>(
