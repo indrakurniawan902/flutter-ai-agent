@@ -8,7 +8,6 @@ import 'package:go_router/go_router.dart';
 
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
-import 'package:flutter_ai_agent/data/datasources/tools/chat/url_reader_service.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_mode.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
@@ -360,7 +359,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final reader = _resolveUrlReader();
       final url = payloads
           .map((p) =>
-              p.isUrl ? p.value : (UrlReaderService.extractUrl(p.value) ?? ''))
+              p.isUrl ? p.value : (UrlReaderServiceBase.extractUrl(p.value) ?? ''))
           .firstWhere((u) => u.isNotEmpty, orElse: () => '');
       if (reader != null && url.isNotEmpty) {
         final result = await reader.fetchReadableText(url);

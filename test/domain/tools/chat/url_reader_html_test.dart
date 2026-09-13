@@ -1,59 +1,60 @@
 import 'package:flutter_ai_agent/data/datasources/tools/chat/url_reader_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/url_reader_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('extractUrl', () {
     test('finds bare domain and prefixes https', () {
-      expect(UrlReaderService.extractUrl('read example.com/x now'),
+      expect(UrlReaderServiceBase.extractUrl('read example.com/x now'),
           'https://example.com/x');
     });
 
     test('finds https url inside prose', () {
       expect(
-        UrlReaderService.extractUrl('see https://a.test/p?q=1 for details'),
+        UrlReaderServiceBase.extractUrl('see https://a.test/p?q=1 for details'),
         'https://a.test/p?q=1',
       );
     });
 
     test('strips trailing punctuation', () {
       expect(
-        UrlReaderService.extractUrl('visit https://a.test/page.'),
+        UrlReaderServiceBase.extractUrl('visit https://a.test/page.'),
         'https://a.test/page',
       );
     });
 
     test('returns null for blank text', () {
-      expect(UrlReaderService.extractUrl('   '), isNull);
-      expect(UrlReaderService.extractUrl(''), isNull);
+      expect(UrlReaderServiceBase.extractUrl('   '), isNull);
+      expect(UrlReaderServiceBase.extractUrl(''), isNull);
     });
   });
 
   group('isUrl', () {
     test('accepts http and https', () {
-      expect(UrlReaderService.isUrl('http://a.test'), isTrue);
-      expect(UrlReaderService.isUrl('https://a.test/x'), isTrue);
+      expect(UrlReaderServiceBase.isUrl('http://a.test'), isTrue);
+      expect(UrlReaderServiceBase.isUrl('https://a.test/x'), isTrue);
     });
 
     test('rejects non-http scheme, no-scheme and empty', () {
-      expect(UrlReaderService.isUrl('ftp://a.test'), isFalse);
-      expect(UrlReaderService.isUrl('example.com'), isFalse);
-      expect(UrlReaderService.isUrl(''), isFalse);
+      expect(UrlReaderServiceBase.isUrl('ftp://a.test'), isFalse);
+      expect(UrlReaderServiceBase.isUrl('example.com'), isFalse);
+      expect(UrlReaderServiceBase.isUrl(''), isFalse);
     });
   });
 
   group('validateUrl', () {
     test('null for acceptable urls', () {
-      expect(UrlReaderService.validateUrl('http://a.test'), isNull);
-      expect(UrlReaderService.validateUrl('https://a.test/x'), isNull);
+      expect(UrlReaderServiceBase.validateUrl('http://a.test'), isNull);
+      expect(UrlReaderServiceBase.validateUrl('https://a.test/x'), isNull);
     });
 
     test('rejects ftp scheme', () {
-      expect(UrlReaderService.validateUrl('ftp://a.test'),
+      expect(UrlReaderServiceBase.validateUrl('ftp://a.test'),
           contains('Unsupported URL scheme'));
     });
 
     test('rejects empty', () {
-      expect(UrlReaderService.validateUrl('  '), 'URL is empty');
+      expect(UrlReaderServiceBase.validateUrl('  '), 'URL is empty');
     });
   });
 
