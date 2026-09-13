@@ -44,7 +44,7 @@ void main() {
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();
 
-      expect(find.byIcon(Icons.terminal), findsOneWidget);
+      expect(find.byIcon(Icons.terminal_outlined), findsOneWidget);
       expect(find.byIcon(Icons.extension_outlined), findsOneWidget);
       expect(find.byIcon(Icons.router_outlined), findsOneWidget);
       expect(find.byIcon(Icons.storage_outlined), findsOneWidget);
@@ -57,6 +57,12 @@ void main() {
 
       expect(find.byKey(const Key('nav_indicator_node')), findsOneWidget);
       expect(find.byKey(const Key('nav_indicator_chat')), findsNothing);
+
+      final activeIcon = tester.widget<Icon>(find.byIcon(Icons.router_outlined));
+      expect(activeIcon.color, HermesColors.electricTeal);
+
+      final inactiveIcon = tester.widget<Icon>(find.byIcon(Icons.terminal_outlined));
+      expect(inactiveIcon.color, HermesColors.inkSecondary);
     });
 
     testWidgets('tapping an item triggers onTap callback with index', (tester) async {
@@ -112,6 +118,36 @@ void main() {
 
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(SystemChannels.platform, null);
+    });
+    testWidgets('respects bottom safe-area padding for gesture bar', (tester) async {
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(
+            size: Size(800, 600),
+            padding: EdgeInsets.only(bottom: 34),
+          ),
+          child: MaterialApp(
+            home: Scaffold(
+              bottomNavigationBar: FloatingBottomNavBar(
+                currentIndex: 0,
+                onTap: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final barRect = tester.getRect(find.byKey(const Key('floating_bottom_nav_bar')));
+      final distanceFromBottom = 600 - barRect.bottom;
+      expect(distanceFromBottom, greaterThanOrEqualTo(34.0));
+    });
+
+    testWidgets('active tab has no filled background container', (tester) async {
+      await tester.pumpWidget(createWidgetUnderTest(currentIndex: 0));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AnimatedContainer), findsNothing);
     });
   });
 }
