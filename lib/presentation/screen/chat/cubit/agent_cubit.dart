@@ -239,6 +239,12 @@ class AgentCubit extends Cubit<AgentState> {
       if (again != null && again.isNotEmpty) _replaceSessions(again);
     }
     activeSessionId = _sessions.isNotEmpty ? _sessions.first.id : null;
+    // Migration / seeding above only touches storage. Pull the newly-active
+    // session back into memory so the next _persistMessages() cannot clobber
+    // migrated history. Guarded on isEmpty to never stomp an in-flight chat.
+    if (_messages.isEmpty && activeSessionId != null) {
+      await _loadSessionMessages(_persistKey);
+    }
   }
 
   /// Migrates a legacy profile-keyed thread into a titled session, otherwise
@@ -377,11 +383,18 @@ class AgentCubit extends Cubit<AgentState> {
   }
 
   /// Re-reads the session list for the active profile into the local cache.
+  ///
+  /// When no session is active or the profile has none yet (fresh install),
+  /// seeds/migrates a default session via [_ensureSession] so the drawer always
+  /// has something to show.
   Future<void> refreshSessions() async {
     final repo = _chatLocalRepository;
     if (repo == null) return;
     final fetched = await _fetchSessions(repo, activeProfileId);
     if (fetched != null) _replaceSessions(fetched);
+    if (activeSessionId == null || (fetched != null && fetched.isEmpty)) {
+      await _ensureSession(activeProfileId);
+    }
     if (!isClosed && state is AgentIdle) {
       emit(AgentIdle(messages: List.unmodifiable(_messages)));
     }
@@ -426,6 +439,13 @@ class AgentCubit extends Cubit<AgentState> {
     final int generation = _runGeneration;
     _isCancelled = false;
     await refreshSettings();
+    if (_chatLocalRepository != null && activeSessionId == null) {
+      try {
+        await _ensureSession(activeProfileId);
+      } catch (_) {
+        // Bootstrap failures must not block the ReAct loop.
+      }
+    }
     if (_localMemoryService != null) {
       final searchResult =
           await _localMemoryService.searchMemories(prompt.trim(), 3);

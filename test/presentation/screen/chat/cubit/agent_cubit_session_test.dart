@@ -140,6 +140,106 @@ void main() {
       ).called(greaterThanOrEqualTo(1));
       await cubit.close();
     });
+
+    test('sendMessage bootstraps a session when none is active', () async {
+      stubFinalStream('ok');
+
+      final cubit = buildCubit();
+      await cubit.sendMessage('hello');
+
+      expect(cubit.activeSessionId, 50);
+      verify(() => repo.createSession(profileId, any<String?>())).called(1);
+      await untilCalled(
+        () => repo.saveMessages('50', any<List<ChatMessage>>()),
+      );
+      verify(
+        () => repo.saveMessages('50', any<List<ChatMessage>>()),
+      ).called(greaterThanOrEqualTo(1));
+      await cubit.close();
+    });
+
+    test('refreshSessions seeds a session when none is active', () async {
+      final cubit = buildCubit();
+      await cubit.refreshSessions();
+
+      expect(cubit.activeSessionId, isNotNull);
+      expect(cubit.activeSessionId, 50);
+      verify(() => repo.createSession(profileId, any<String?>())).called(1);
+      await cubit.close();
+    });
+
+    test('bootstrap does not lose migrated legacy history', () async {
+      final legacy = [msg('user', 'old one'), msg('assistant', 'old two')];
+      final store = <String, List<ChatMessage>>{profileId: List.of(legacy)};
+      final writesTo50 = <List<ChatMessage>>[];
+
+      when(() => repo.getSessions(any<String>())).thenAnswer(
+        (_) async => const Right<Failure, List<Session>>(<Session>[]),
+      );
+      when(() => repo.getMessages(any<String>())).thenAnswer((inv) async {
+        final key = inv.positionalArguments.first as String;
+        return Right<Failure, List<ChatMessage>>(List.of(store[key] ?? const []));
+      });
+      when(() => repo.saveMessages(any<String>(), any<List<ChatMessage>>()))
+          .thenAnswer((inv) async {
+        final key = inv.positionalArguments.first as String;
+        final list = inv.positionalArguments.last as List<ChatMessage>;
+        if (key == '50') writesTo50.add(List.of(list));
+        store[key] = List.of(list);
+        return const Right<Failure, void>(null);
+      });
+      when(() => repo.clearMessages(any<String>())).thenAnswer((inv) async {
+        final key = inv.positionalArguments.first as String;
+        store[key] = <ChatMessage>[];
+        return const Right<Failure, void>(null);
+      });
+      // Left ends the ReAct loop before an assistant turn is appended/persisted,
+      // so the final saveMessages('50') is exactly the user-message append.
+      when(
+        () => mockLlmRepository.streamCompletion(
+          baseUrl: any(named: 'baseUrl'),
+          model: any(named: 'model'),
+          messages: any(named: 'messages'),
+          tools: any(named: 'tools'),
+          apiKey: any(named: 'apiKey'),
+          temperature: any(named: 'temperature'),
+        ),
+      ).thenAnswer(
+        (_) async =>
+            Left<Failure, Stream<ChatChunk>>(const ConnectionFailure()),
+      );
+
+      final cubit = buildCubit();
+      await cubit.sendMessage('new msg');
+
+      expect(writesTo50, isNotEmpty);
+      expect(
+        writesTo50.last.map((m) => m.content).toList(),
+        ['old one', 'old two', 'new msg'],
+      );
+      expect(
+        cubit.messages.map((m) => m.content).toList(),
+        ['old one', 'old two', 'new msg'],
+      );
+      await cubit.close();
+    });
+
+    test('drawer-open seeding loads session messages', () async {
+      when(() => repo.getSessions(any<String>())).thenAnswer(
+        (_) async => Right<Failure, List<Session>>([session(7)]),
+      );
+      when(() => repo.getMessages('7')).thenAnswer(
+        (_) async =>
+            Right<Failure, List<ChatMessage>>([msg('user', 'hello')]),
+      );
+
+      final cubit = buildCubit();
+      await cubit.refreshSessions();
+
+      expect(cubit.messages.length, 1);
+      expect(cubit.messages.single.content, 'hello');
+      await cubit.close();
+    });
   });
 
   group('newChat', () {
@@ -257,6 +357,9 @@ void main() {
       verify(() => repo.updateSessionTitle(5, 'What is the weather?'))
           .called(1);
       expect(cubit.sessions.first.title, 'What is the weather?');
+      verifyNever(
+        () => repo.createSession(any<String>(), any<String?>()),
+      );
       await cubit.close();
     });
 
