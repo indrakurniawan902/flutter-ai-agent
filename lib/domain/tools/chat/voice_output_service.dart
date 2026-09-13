@@ -6,7 +6,7 @@ import 'package:flutter_ai_agent/common/failure.dart';
 
 enum VoiceOutputStatus { idle, loading, playing, paused, stopped, error }
 
-enum TtsEngine { remoteTts, androidTts }
+enum TtsEngine { remoteTts, androidTts, piperTts }
 
 abstract class PlatformTtsEngine {
   bool get isAvailable;

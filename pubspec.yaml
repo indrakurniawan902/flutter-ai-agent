@@ -74,6 +74,7 @@ dependencies:
   sqlite3_flutter_libs: ^0.6.0+eol
   sqflite_common_ffi: ^2.4.3
   nfc_manager: ^4.2.1
+  sherpa_onnx: 1.13.8
 
 dev_dependencies:
   flutter_test:
