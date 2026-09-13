@@ -18,12 +18,12 @@ void main() {
       expect(appRouter.routerDelegate.navigatorKey, equals(AppGlobals.navigatorKey));
     });
 
-    test('has exactly 11 registered GoRoute entries', () {
+    test('has exactly 12 registered GoRoute entries', () {
       final routes = appRouter.configuration.routes
           .whereType<GoRoute>()
           .toList();
 
-      expect(routes.length, equals(11));
+      expect(routes.length, equals(12));
     });
 
     test('registers all expected route names', () {
@@ -44,6 +44,7 @@ void main() {
         AppRoutes.nrServerProfiles,
         AppRoutes.nrAddProfile,
         AppRoutes.nrActionCenter,
+        AppRoutes.nrGeofenceManagement,
       };
 
       expect(routeNames, equals(expectedNames));
@@ -67,6 +68,7 @@ void main() {
         AppRoutes.nrServerProfiles,
         AppRoutes.nrAddProfile,
         AppRoutes.nrActionCenter,
+        AppRoutes.nrGeofenceManagement,
       ];
 
       for (final name in allRouteNames) {
@@ -114,6 +116,10 @@ void main() {
 
       expect(routeByName[AppRoutes.nrAddProfile]?.path, equals('/settings/add-profile'));
       expect(routeByName[AppRoutes.nrAddProfile]?.builder, isNotNull);
+
+      expect(routeByName[AppRoutes.nrGeofenceManagement]?.path,
+          equals('/node/geofence-management'));
+      expect(routeByName[AppRoutes.nrGeofenceManagement]?.builder, isNotNull);
     });
   });
 }
