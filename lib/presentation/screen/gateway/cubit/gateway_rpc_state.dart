@@ -57,6 +57,41 @@ class GatewayRpcCompleted extends GatewayRpcState {
   List<Object?> get props => [callId, tool, result, error];
 }
 
+/// State emitted while a remote HITL elicitation request awaits user decision.
+class GatewayRpcElicitationPending extends GatewayRpcState {
+  final String requestId;
+  final String title;
+  final String description;
+  final String riskLevel;
+  final Duration expiresAfter;
+
+  const GatewayRpcElicitationPending({
+    required this.requestId,
+    required this.title,
+    required this.description,
+    required this.riskLevel,
+    this.expiresAfter = const Duration(seconds: 120),
+  });
+
+  @override
+  List<Object?> get props =>
+      [requestId, title, description, riskLevel, expiresAfter];
+}
+
+/// State emitted once an elicitation request has been resolved locally.
+class GatewayRpcElicitationResolved extends GatewayRpcState {
+  final String requestId;
+  final bool approved;
+
+  const GatewayRpcElicitationResolved({
+    required this.requestId,
+    required this.approved,
+  });
+
+  @override
+  List<Object?> get props => [requestId, approved];
+}
+
 /// State emitted on unhandled receiver errors.
 class GatewayRpcError extends GatewayRpcState {
   final String message;

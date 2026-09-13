@@ -291,6 +291,119 @@ void main() {
       expect(manifest.tools, hasLength(1));
     });
 
+    test('GatewayElicitationRequestMessage parses a full frame', () {
+      final json = {
+        'type': 'elicitation_request',
+        'request_id': 'elicit_1',
+        'title': 'Delete files',
+        'description': 'This will remove 3 files',
+        'risk_level': 'HIGH',
+        'fields': [
+          {'name': 'confirm', 'type': 'boolean'},
+          'not-a-map',
+          42,
+        ],
+      };
+
+      final parsed = GatewayMessage.fromJson(json);
+      expect(parsed, isA<GatewayElicitationRequestMessage>());
+      final msg = parsed as GatewayElicitationRequestMessage;
+      expect(msg.type, 'elicitation_request');
+      expect(msg.requestId, 'elicit_1');
+      expect(msg.title, 'Delete files');
+      expect(msg.description, 'This will remove 3 files');
+      expect(msg.riskLevel, 'high');
+      expect(msg.fields, hasLength(1));
+      expect(msg.fields.first, {'name': 'confirm', 'type': 'boolean'});
+    });
+
+    test('GatewayElicitationRequestMessage falls back to camelCase requestId',
+        () {
+      final json = {
+        'type': 'elicitation_request',
+        'requestId': 'elicit_camel',
+      };
+
+      final msg = GatewayElicitationRequestMessage.fromJson(json);
+      expect(msg.requestId, 'elicit_camel');
+      expect(msg.riskLevel, 'high');
+      expect(msg.fields, isEmpty);
+    });
+
+    test('GatewayElicitationRequestMessage id fallback and null risk default',
+        () {
+      final json = {
+        'type': 'elicitation_request',
+        'id': 'elicit_id',
+        'risk_level': null,
+      };
+
+      final msg = GatewayElicitationRequestMessage.fromJson(json);
+      expect(msg.requestId, 'elicit_id');
+      expect(msg.riskLevel, 'high');
+    });
+
+    test('GatewayElicitationRequestMessage keeps unknown risk as-is', () {
+      final json = {
+        'type': 'elicitation_request',
+        'request_id': 'elicit_2',
+        'risk_level': 'Critical',
+      };
+
+      final msg = GatewayElicitationRequestMessage.fromJson(json);
+      expect(msg.riskLevel, 'critical');
+    });
+
+    test('GatewayElicitationRequestMessage round-trips via toJson', () {
+      const msg = GatewayElicitationRequestMessage(
+        requestId: 'elicit_rt',
+        title: 'T',
+        description: 'D',
+        riskLevel: 'medium',
+        fields: [
+          {'name': 'x'},
+        ],
+      );
+
+      final json = msg.toJson();
+      expect(json['type'], 'elicitation_request');
+      expect(json['request_id'], 'elicit_rt');
+      expect(json['risk_level'], 'medium');
+      expect(json['fields'], [{'name': 'x'}]);
+
+      final parsed = GatewayMessage.fromJson(json);
+      expect(parsed, msg);
+    });
+
+    test('GatewayElicitationResponseMessage toJson emits snake_case shape', () {
+      const msg = GatewayElicitationResponseMessage(
+        requestId: 'elicit_9',
+        status: 'approved',
+        biometricVerified: true,
+      );
+
+      final json = msg.toJson();
+      expect(json['type'], 'elicitation_response');
+      expect(json['request_id'], 'elicit_9');
+      expect(json['status'], 'approved');
+      expect(json['biometric_verified'], true);
+    });
+
+    test('GatewayElicitationResponseMessage parses and defaults biometric', () {
+      final json = {
+        'type': 'elicitation_response',
+        'request_id': 'elicit_10',
+        'status': 'rejected',
+      };
+
+      final parsed = GatewayMessage.fromJson(json);
+      expect(parsed, isA<GatewayElicitationResponseMessage>());
+      final msg = parsed as GatewayElicitationResponseMessage;
+      expect(msg.requestId, 'elicit_10');
+      expect(msg.status, 'rejected');
+      expect(msg.biometricVerified, false);
+    });
+
     test('GatewayRawMessage handles unknown types', () {
       final json = {
         'type': 'custom_event',
