@@ -8,7 +8,6 @@ trap 'rm -rf "$TMP_DIR"' EXIT INT TERM
 setup_clean_tree() {
   mkdir -p "$1/lib/common/injection"
   touch "$1/lib/common/injection/injection.dart"
-  mkdir -p "$1/lib/domain/usecase"
   mkdir -p "$1/lib/presentation/screen"
   mkdir -p "$1/lib/utils"
   mkdir -p "$1/lib/data/repositories"
@@ -44,6 +43,7 @@ echo "$out" | grep -qi "features" || {
 }
 
 setup_clean_tree "$TMP_DIR/with_cubit"
+mkdir -p "$TMP_DIR/with_cubit/lib/domain"
 printf "%s\n" "import 'package:flutter_bloc/flutter_bloc.dart';" > "$TMP_DIR/with_cubit/lib/domain/test_cubit.dart"
 out=$(sh "$CHECKER" "$TMP_DIR/with_cubit" 2>&1)
 status=$?

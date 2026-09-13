@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_ai_agent/utils/hermes_theme.dart';
-import 'package:flutter_ai_agent/domain/models/chat/generative_card_data.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/generative_card_data.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/summary_card.dart';
 
 void main() {
