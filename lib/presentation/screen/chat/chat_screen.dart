@@ -1564,8 +1564,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 height: 0,
                 child: BlocBuilder<AgentCubit, AgentState>(
                   builder: (context, _) {
-                    final title =
-                        context.read<AgentCubit>().activeSessionTitle;
+                    String title = '';
+                    try {
+                      title = context.read<AgentCubit>().activeSessionTitle;
+                    } catch (_) {}
                     return Text('· $title');
                   },
                 ),
