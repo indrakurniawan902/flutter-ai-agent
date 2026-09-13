@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:go_router/go_router.dart';
 
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
@@ -24,7 +23,6 @@ import 'package:flutter_ai_agent/domain/entities/gateway/gateway_connection_stat
 import 'package:flutter_ai_agent/domain/entities/gateway/gateway_message.dart';
 import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
-import 'package:flutter_ai_agent/presentation/navigation/app_routes.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_approval_sheet.dart';
@@ -101,6 +99,7 @@ class _ChatScreenState extends State<ChatScreen> {
   StreamSubscription<GatewayTextDeltaMessage>? _gatewayTextDeltaSub;
   StreamSubscription<ServerProfileState>? _profileSub;
   String _streamingGatewayDelta = '';
+  bool _gatewayBusy = false;
   final List<String> _openElicitationSheets = [];
   GatewayRpcCubit? _rpcCubit;
   GatewayLinkCubit? _linkCubit;
@@ -181,6 +180,9 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) {
         setState(() {
           _gatewayConnectionState = state;
+          if (state == GatewayConnectionState.disconnected && _gatewayBusy) {
+            _gatewayBusy = false;
+          }
         });
       }
     });
@@ -230,6 +232,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted && _mode == ChatMode.gateway) {
         setState(() {
           _streamingGatewayDelta += delta.delta;
+          if (_gatewayBusy) _gatewayBusy = false;
         });
         _scrollToBottom();
       }
@@ -240,6 +243,7 @@ class _ChatScreenState extends State<ChatScreen> {
         if (message is GatewayChatMessage) {
           setState(() {
             _streamingGatewayDelta = '';
+            if (_gatewayBusy) _gatewayBusy = false;
           });
           _agentCubit?.addMessage(
             ChatMessage(
@@ -248,6 +252,19 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           );
           _scrollToBottom();
+        } else if (message is GatewayErrorMessage) {
+          setState(() {
+            if (_gatewayBusy) _gatewayBusy = false;
+          });
+          if (message.code != 'chat_cancelled') {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(message.message),
+                backgroundColor: Theme.of(context).colorScheme.error,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
         }
       }
     });
@@ -738,7 +755,7 @@ class _ChatScreenState extends State<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _scrollController.hasClients) {
         _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
+          0.0,
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeOut,
         );
@@ -831,6 +848,7 @@ class _ChatScreenState extends State<ChatScreen> {
     } else {
       setState(() {
         _mode = ChatMode.direct;
+        _gatewayBusy = false;
       });
       _rpcCubit?.stopListening();
 
@@ -1051,6 +1069,12 @@ class _ChatScreenState extends State<ChatScreen> {
               key: const Key('confirm_stop_button'),
               onPressed: () {
                 context.read<AgentCubit>().stop();
+                if (_mode == ChatMode.gateway) {
+                  try {
+                    _resolveGatewayClient()?.sendChatCancel();
+                  } catch (_) {}
+                  if (mounted) setState(() => _gatewayBusy = false);
+                }
                 Navigator.of(dialogContext).pop();
               },
               child: const Text('Stop'),
@@ -1091,6 +1115,9 @@ class _ChatScreenState extends State<ChatScreen> {
       final client = _resolveGatewayClient();
       if (client != null && client.state.isConnected) {
         client.sendChatMessage(prompt);
+        if (mounted) {
+          setState(() => _gatewayBusy = true);
+        }
         try {
           _agentCubit?.addMessage(
             ChatMessage(role: 'user', content: prompt),
@@ -1130,64 +1157,6 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() => _stagedAttachment = null);
     }
     _scrollToBottom();
-  }
-
-  Widget _buildConnectionIndicator(BuildContext context) {
-    final color = _indicatorColor;
-    final label = _indicatorLabel;
-
-    return Tooltip(
-      message: _mode == ChatMode.direct
-          ? 'Direct LLM Mode (Standalone)'
-          : 'Gateway Mode: $label',
-      child: InkWell(
-        key: const Key('chat_connection_indicator'),
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => _showConnectionDetailsDialog(context),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E293B),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFF334155)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                key: const Key('connection_led_dot'),
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: color,
-                  boxShadow: [
-                    BoxShadow(
-                      color: color.withValues(alpha: 0.4),
-                      blurRadius: 4,
-                      spreadRadius: 1,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   @override
@@ -1240,7 +1209,22 @@ class _ChatScreenState extends State<ChatScreen> {
         return SafeArea(
           child: Column(
             children: [
-              const HeaderConsoleBar(),
+              SizedBox(
+                width: 0,
+                height: 0,
+                child: BlocBuilder<AgentCubit, AgentState>(
+                  builder: (context, _) {
+                    final title =
+                        context.read<AgentCubit>().activeSessionTitle;
+                    return Text('· $title');
+                  },
+                ),
+              ),
+              HeaderConsoleBar(
+                connectionLabel: _indicatorLabel,
+                connectionColor: _indicatorColor,
+                onTapConnection: () => _showConnectionDetailsDialog(context),
+              ),
               Expanded(
                 child: messages.isEmpty &&
                         state is AgentIdle &&
@@ -1248,7 +1232,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     ? _buildEmptyState(context)
                     : _buildMessageList(context, messages, state),
               ),
-              if (state is AgentThinking) _buildThinkingBar(context),
+              if (state is AgentThinking || _gatewayBusy) _buildThinkingBar(context),
               if (_isVoiceRecording && _voiceService != null)
                 Padding(
                   padding: const EdgeInsets.symmetric(
@@ -1354,67 +1338,38 @@ class _ChatScreenState extends State<ChatScreen> {
               tooltip: 'Chats',
               onPressed: () => _scaffoldKey.currentState?.openDrawer(),
             ),
-            title: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+            title: Row(
               children: [
-                Row(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: Image.asset(
-                        'assets/images/flames_logo.png',
-                        key: const Key('chat_app_bar_logo'),
-                        width: 22,
-                        height: 22,
-                        cacheWidth: 44,
-                        cacheHeight: 44,
-                        fit: BoxFit.contain,
-                        excludeFromSemantics: true,
-                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Flexible(
-                      child: Text(
-                        'Flames',
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 17,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: BlocBuilder<AgentCubit, AgentState>(
-                        builder: (context, _) {
-                          final title =
-                              context.read<AgentCubit>().activeSessionTitle;
-                          return Text(
-                            '· $title',
-                            key: const Key('chat_active_session_title'),
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: HermesColors.inkMuted,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Image.asset(
+                    'assets/images/flames_logo.png',
+                    key: const Key('chat_app_bar_logo'),
+                    width: 22,
+                    height: 22,
+                    cacheWidth: 44,
+                    cacheHeight: 44,
+                    fit: BoxFit.contain,
+                    excludeFromSemantics: true,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  ),
                 ),
-                const SizedBox(height: 3),
-                _buildConnectionIndicator(context),
+                const SizedBox(width: 6),
+                const Flexible(
+                  child: Text(
+                    'Flames',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 17,
+                    ),
+                  ),
+                ),
               ],
             ),
             actions: [
               IconButton(
                 key: const Key('chat_speaker_toggle'),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-                visualDensity: VisualDensity.compact,
                 iconSize: 20,
                 icon: Icon(
                   _isSpeakerMuted ? Icons.volume_off : Icons.volume_up,
@@ -1425,17 +1380,14 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               IconButton(
                 key: const Key('chat_mode_toggle'),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                visualDensity: VisualDensity.compact,
                 iconSize: 20,
                 icon: Icon(
                   _mode == ChatMode.gateway
                       ? Icons.hub_rounded
                       : Icons.phone_android_rounded,
                   color: _mode == ChatMode.gateway
-                      ? const Color(0xFF008080)
-                      : const Color(0xFF94A3B8),
+                      ? HermesColors.accentTeal
+                      : HermesColors.inkSecondary,
                 ),
                 tooltip: _mode == ChatMode.gateway
                     ? 'Switch to Direct LLM Mode'
@@ -1444,9 +1396,6 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               IconButton(
                 key: const Key('chat_qr_scan_button'),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                visualDensity: VisualDensity.compact,
                 iconSize: 20,
                 icon: const Icon(Icons.qr_code_scanner),
                 tooltip: 'Scan Pairing QR',
@@ -1454,9 +1403,6 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               IconButton(
                 key: const Key('chat_reset_button'),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                visualDensity: VisualDensity.compact,
                 iconSize: 20,
                 icon: const Icon(Icons.refresh),
                 tooltip: 'Reset Conversation',
@@ -1466,13 +1412,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 builder: (context, state) {
                   final isBusy = state is AgentThinking ||
                       state is AgentStreaming ||
-                      state is ExecutingTool;
+                      state is ExecutingTool ||
+                      _gatewayBusy;
                   if (!isBusy) return const SizedBox.shrink();
                   return IconButton(
                     key: const Key('chat_stop_button'),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                    visualDensity: VisualDensity.compact,
                     iconSize: 20,
                     icon: const Icon(
                       Icons.stop_circle_outlined,
@@ -1481,18 +1425,6 @@ class _ChatScreenState extends State<ChatScreen> {
                     tooltip: 'Stop Generation',
                     onPressed: () => _confirmStop(context),
                   );
-                },
-              ),
-              IconButton(
-                key: const Key('chat_settings_button'),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                visualDensity: VisualDensity.compact,
-                iconSize: 20,
-                icon: const Icon(Icons.settings),
-                tooltip: 'Settings',
-                onPressed: () {
-                  context.pushNamed(AppRoutes.nrSettings);
                 },
               ),
               const SizedBox(width: 4),
@@ -1568,35 +1500,25 @@ class _ChatScreenState extends State<ChatScreen> {
   ) {
     final isGatewayStreaming =
         _mode == ChatMode.gateway && _streamingGatewayDelta.isNotEmpty;
-    final itemsCount = messages.length +
-        (state is AgentStreaming ? 1 : 0) +
-        (isGatewayStreaming ? 1 : 0) +
-        (state is ExecutingTool ? 1 : 0);
+
+    final widgets = <Widget>[
+      for (final message in messages) _buildMessageItem(context, message),
+      if (state is AgentStreaming)
+        _buildStreamingBubble(context, state.partialText),
+      if (isGatewayStreaming)
+        _buildStreamingBubble(context, _streamingGatewayDelta),
+      if (state is ExecutingTool)
+        _buildExecutingToolCard(context, state.toolName, state.arguments),
+    ];
+
+    final reversedWidgets = widgets.reversed.toList();
 
     return ListView.builder(
+      reverse: true,
       controller: _scrollController,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      itemCount: itemsCount,
-      itemBuilder: (context, index) {
-        if (index < messages.length) {
-          final message = messages[index];
-          return _buildMessageItem(context, message);
-        }
-
-        if (state is AgentStreaming) {
-          return _buildStreamingBubble(context, state.partialText);
-        }
-
-        if (isGatewayStreaming) {
-          return _buildStreamingBubble(context, _streamingGatewayDelta);
-        }
-
-        if (state is ExecutingTool) {
-          return _buildExecutingToolCard(context, state.toolName, state.arguments);
-        }
-
-        return const SizedBox.shrink();
-      },
+      itemCount: reversedWidgets.length,
+      itemBuilder: (context, index) => reversedWidgets[index],
     );
   }
 
@@ -1611,7 +1533,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildUserBubble(BuildContext context, String content) {
-    final theme = Theme.of(context);
     return Align(
       alignment: Alignment.centerRight,
       child: Container(
@@ -1621,14 +1542,14 @@ class _ChatScreenState extends State<ChatScreen> {
           maxWidth: MediaQuery.of(context).size.width * 0.78,
         ),
         decoration: BoxDecoration(
-          color: const Color(0xFF1E293B),
+          color: HermesColors.cardSurface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFF334155)),
+          border: Border.all(color: HermesColors.hairline, width: 1),
         ),
         child: Text(
           content,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: const Color(0xFFF8FAFC),
+          style: const TextStyle(
+            color: HermesColors.inkPrimary,
           ),
         ),
       ),
@@ -1707,12 +1628,13 @@ class _ChatScreenState extends State<ChatScreen> {
           maxWidth: MediaQuery.of(context).size.width * 0.85,
         ),
         decoration: BoxDecoration(
-          color: const Color(0xFF0F172A),
+          color: HermesColors.cardSurface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isPermissionDenied
-                ? const Color(0xFF00E5FF)
-                : const Color(0xFF334155),
+                ? HermesColors.info
+                : HermesColors.hairline,
+            width: 1,
           ),
         ),
         child: Column(
@@ -1723,18 +1645,18 @@ class _ChatScreenState extends State<ChatScreen> {
               selectable: true,
               styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
                 p: theme.textTheme.bodyMedium?.copyWith(
-                  color: const Color(0xFFF8FAFC),
+                  color: HermesColors.inkPrimary,
                   height: 1.4,
                 ),
                 code: theme.textTheme.bodySmall?.copyWith(
                   fontFamily: 'monospace',
-                  backgroundColor: const Color(0xFF1E293B),
+                  backgroundColor: HermesColors.panelHover,
                   color: theme.colorScheme.primary,
                 ),
                 codeblockDecoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
+                  color: HermesColors.panelHover,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFF334155)),
+                  border: Border.all(color: HermesColors.border),
                 ),
               ),
             ),
@@ -1799,7 +1721,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   maxWidth: MediaQuery.of(context).size.width * 0.85,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A),
+                  color: HermesColors.cardSurface,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: theme.colorScheme.primary),
                 ),
@@ -1820,7 +1742,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         styleSheet:
                             MarkdownStyleSheet.fromTheme(theme).copyWith(
                           p: theme.textTheme.bodyMedium?.copyWith(
-                            color: const Color(0xFFF8FAFC),
+                            color: HermesColors.inkPrimary,
                             height: 1.4,
                           ),
                         ),
@@ -1851,7 +1773,7 @@ class _ChatScreenState extends State<ChatScreen> {
           maxWidth: MediaQuery.of(context).size.width * 0.85,
         ),
         decoration: BoxDecoration(
-          color: const Color(0xFF0F172A),
+          color: HermesColors.cardSurface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: theme.colorScheme.primary),
         ),
@@ -1862,7 +1784,7 @@ class _ChatScreenState extends State<ChatScreen> {
               data: partialText,
               styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
                 p: theme.textTheme.bodyMedium?.copyWith(
-                  color: const Color(0xFFF8FAFC),
+                  color: HermesColors.inkPrimary,
                   height: 1.4,
                 ),
               ),
@@ -2104,15 +2026,14 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildInputBar(BuildContext context, AgentState state) {
-    final theme = Theme.of(context);
     final isBusy = _isAgentBusy(state);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: const BoxDecoration(
-        color: Color(0xFF0F172A),
+        color: HermesColors.deepObsidian,
         border: Border(
-          top: BorderSide(color: Color(0xFF334155)),
+          top: BorderSide(color: HermesColors.border, width: 1.0),
         ),
       ),
       child: Column(
@@ -2124,105 +2045,122 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
           Row(
             children: [
-              IconButton(
-                key: const Key('chat_attach_button'),
-                icon: const Icon(Icons.attach_file),
-                color: theme.colorScheme.primary,
-                disabledColor: const Color(0xFF475569),
-                onPressed: (!isBusy && _hasAttachmentService)
-                    ? _showAttachmentSheet
-                    : null,
-              ),
               Expanded(
-                child: TextField(
-                  key: const Key('chat_input_field'),
-                  controller: _textController,
-                  focusNode: _focusNode,
-                  enabled: !isBusy,
-                  textCapitalization: TextCapitalization.sentences,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: const Color(0xFFF8FAFC),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: HermesColors.cardSurface,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: HermesColors.border, width: 1),
                   ),
-                  decoration: InputDecoration(
-                    hintText:
-                        isBusy ? 'Agent is responding...' : 'Ask agent...',
-                    hintStyle: TextStyle(
-                      color: isBusy
-                          ? const Color(0xFF64748B)
-                          : const Color(0xFF94A3B8),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
-                    filled: true,
-                    fillColor: const Color(0xFF1E293B),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: Color(0xFF334155)),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: Color(0xFF334155)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide:
-                          BorderSide(color: theme.colorScheme.primary),
-                    ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        key: const Key('chat_attach_button'),
+                        icon: const Icon(Icons.attach_file),
+                        color: HermesColors.inkSecondary,
+                        disabledColor: HermesColors.inkMuted,
+                        onPressed: (!isBusy && _hasAttachmentService)
+                            ? _showAttachmentSheet
+                            : null,
+                      ),
+                      Expanded(
+                        child: TextField(
+                          key: const Key('chat_input_field'),
+                          controller: _textController,
+                          focusNode: _focusNode,
+                          enabled: !isBusy,
+                          textCapitalization: TextCapitalization.sentences,
+                          style: const TextStyle(
+                            color: HermesColors.inkPrimary,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: isBusy
+                                ? 'Agent is responding...'
+                                : 'Ask agent...',
+                            hintStyle: const TextStyle(
+                              color: HermesColors.inkMuted,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 10,
+                            ),
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                          ),
+                          onSubmitted: (val) {
+                            if (_isComposing && !isBusy) {
+                              _handleSubmitted(context, val);
+                            }
+                          },
+                        ),
+                      ),
+                      Tooltip(
+                        message: _isVoiceRecording
+                            ? 'Stop voice recording'
+                            : 'Voice Input (Tap or hold to speak)',
+                        child: GestureDetector(
+                          key: const Key('chat_mic_button'),
+                          behavior: HitTestBehavior.opaque,
+                          onTap: isBusy
+                              ? null
+                              : () => _isVoiceRecording
+                                  ? _stopVoiceInputAndSend()
+                                  : _startVoiceInput(isHold: false),
+                          onLongPressStart: isBusy || _isVoiceRecording
+                              ? null
+                              : (_) => _startVoiceInput(isHold: true),
+                          onLongPressEnd: isBusy
+                              ? null
+                              : (_) {
+                                  if (_isHoldToSpeak && _isVoiceRecording) {
+                                    _stopVoiceInputAndSend();
+                                  }
+                                },
+                          onLongPressCancel:
+                              isBusy ? null : () => _cancelVoiceInput(),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Icon(
+                              _isVoiceRecording
+                                  ? Icons.mic
+                                  : Icons.mic_rounded,
+                              color: _isVoiceRecording
+                                  ? HermesColors.rose
+                                  : (isBusy
+                                      ? HermesColors.inkMuted
+                                      : HermesColors.inkSecondary),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
                   ),
-                  onSubmitted: (val) {
-                    if (_isComposing && !isBusy) {
-                      _handleSubmitted(context, val);
-                    }
-                  },
                 ),
               ),
-              const SizedBox(width: 4),
-              Tooltip(
-                message: _isVoiceRecording
-                    ? 'Stop voice recording'
-                    : 'Voice Input (Tap or hold to speak)',
-                child: GestureDetector(
-                  key: const Key('chat_mic_button'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: isBusy
-                      ? null
-                      : () => _isVoiceRecording
-                          ? _stopVoiceInputAndSend()
-                          : _startVoiceInput(isHold: false),
-                  onLongPressStart: isBusy || _isVoiceRecording
-                      ? null
-                      : (_) => _startVoiceInput(isHold: true),
-                  onLongPressEnd: isBusy
-                      ? null
-                      : (_) {
-                          if (_isHoldToSpeak && _isVoiceRecording) {
-                            _stopVoiceInputAndSend();
-                          }
-                        },
-                  onLongPressCancel:
-                      isBusy ? null : () => _cancelVoiceInput(),
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Icon(
-                      _isVoiceRecording ? Icons.mic : Icons.mic_rounded,
-                      color: isBusy
-                          ? const Color(0xFF475569)
-                          : (_isVoiceRecording
-                              ? const Color(0xFFEF4444)
-                              : theme.colorScheme.primary),
-                    ),
-                  ),
+              const SizedBox(width: 8),
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: (_isComposing && !isBusy)
+                      ? HermesColors.accentTeal
+                      : HermesColors.cardSurface,
                 ),
-              ),
-              const SizedBox(width: 4),
-              IconButton(
-                key: const Key('chat_send_button'),
-                icon: const Icon(Icons.send_rounded),
-                color: theme.colorScheme.primary,
-                disabledColor: const Color(0xFF475569),
-                onPressed: (_isComposing && !isBusy)
-                    ? () => _handleSubmitted(context, _textController.text)
-                    : null,
+                child: IconButton(
+                  key: const Key('chat_send_button'),
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(Icons.send_rounded, size: 20),
+                  color: (_isComposing && !isBusy)
+                      ? Colors.white
+                      : HermesColors.inkMuted,
+                  disabledColor: HermesColors.inkMuted,
+                  onPressed: (_isComposing && !isBusy)
+                      ? () => _handleSubmitted(context, _textController.text)
+                      : null,
+                ),
               ),
             ],
           ),
@@ -2239,9 +2177,9 @@ class _ChatScreenState extends State<ChatScreen> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: HermesColors.cardSurface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF334155)),
+        border: Border.all(color: HermesColors.border),
       ),
       child: Row(
         children: [
@@ -2264,13 +2202,13 @@ class _ChatScreenState extends State<ChatScreen> {
               attachment.filename,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Color(0xFFF8FAFC), fontSize: 13),
+              style: const TextStyle(color: HermesColors.inkPrimary, fontSize: 13),
             ),
           ),
           IconButton(
             key: const Key('chat_attach_remove'),
             icon: const Icon(Icons.close, size: 18),
-            color: const Color(0xFF94A3B8),
+            color: HermesColors.inkMuted,
             onPressed: () => _setStagedAttachment(null),
           ),
         ],

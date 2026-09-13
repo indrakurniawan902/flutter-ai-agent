@@ -58,6 +58,9 @@ abstract class GatewayClientBase {
     Map<String, dynamic>? metadata,
   });
 
+  /// Sends a chat_cancel frame to abort the in-flight gateway generation.
+  void sendChatCancel();
+
   /// Disconnects the socket and disables auto-reconnection.
   Future<void> disconnect({String? reason});
 

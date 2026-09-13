@@ -436,6 +436,12 @@ class GatewayClient implements GatewayClientBase {
     ));
   }
 
+  /// Requests cancellation of the in-flight remote generation.
+  @override
+  void sendChatCancel() {
+    send(const GatewayChatCancelMessage());
+  }
+
   /// Disconnects the socket and disables auto-reconnection.
   @override
   Future<void> disconnect({String? reason}) => _teardown(_CloseCause.manualDisconnect);
