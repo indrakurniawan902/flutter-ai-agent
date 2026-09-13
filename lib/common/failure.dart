@@ -46,3 +46,11 @@ class UnsupportedEndpointFailure extends Failure {
     super.message = 'Endpoint not supported by the active server',
   ]);
 }
+
+class ListenerNotConnectedFailure extends Failure {
+  const ListenerNotConnectedFailure([
+    super.message =
+        'Notification listener service is not connected [listener_not_connected]',
+  ]);
+}
+

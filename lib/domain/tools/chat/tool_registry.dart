@@ -610,7 +610,12 @@ class ToolRegistry {
     register(
       RegisteredTool(
         name: 'read_recent_notifications',
-        description: 'Reads recent device notifications.',
+        description:
+            'Reads recent device notifications captured since the listener connected. '
+            'The buffer is in-memory: wiped on app restart and re-seeded only from '
+            'notifications currently on screen at connect time — an empty result never '
+            'means "the phone has no notifications". If the listener service is dead '
+            'the call fails with [listener_not_connected] instead of returning [].',
         parameters: const {
           'type': 'object',
           'properties': {
@@ -635,7 +640,12 @@ class ToolRegistry {
     register(
       RegisteredTool(
         name: 'extract_latest_otp',
-        description: 'Extracts the latest OTP code from notifications.',
+        description:
+            'Extracts the latest OTP code from captured notifications. Only works for '
+            'OTPs posted as visible shade notifications: an OTP consumed by the OS '
+            'autofill/OTP-reading layer may never post a notification and is '
+            'invisible to this tool by design. Fails with [listener_not_connected] '
+            'when the listener service is dead.',
         parameters: const {
           'type': 'object',
           'properties': {
