@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
@@ -38,6 +40,7 @@ class QrScannerScreen extends StatefulWidget {
 class _QrScannerScreenState extends State<QrScannerScreen> {
   QrScannerControllerBase? _controller;
   late final bool _isExternalController;
+  late final bool _isAppOwnedSingleton;
   bool _isProcessing = false;
 
   static const Color darkSurface = Color(0xFF0F172A);
@@ -48,14 +51,20 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   void initState() {
     super.initState();
     if (widget.controller != null) {
+      // Truly external caller (PairingParams/e2e) owns the lifecycle.
       _controller = widget.controller;
       _isExternalController = true;
+      _isAppOwnedSingleton = false;
     } else if (getIt.isRegistered<QrScannerControllerBase>()) {
+      // App-owned DI singleton: the screen may stop it on exit but must never
+      // dispose it, because a disposed MobileScannerController cannot restart.
       _controller = getIt<QrScannerControllerBase>();
       _isExternalController = true;
+      _isAppOwnedSingleton = true;
     } else {
       _controller = null;
       _isExternalController = false;
+      _isAppOwnedSingleton = false;
     }
   }
 
@@ -63,6 +72,13 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   void dispose() {
     if (!_isExternalController) {
       _controller?.dispose();
+    } else if (_isAppOwnedSingleton) {
+      // Stopping releases the camera between visits and resets torch state;
+      // the singleton itself outlives the screen by design.
+      final controller = _controller;
+      if (controller != null) {
+        unawaited(controller.stop());
+      }
     }
     super.dispose();
   }
@@ -189,6 +205,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   @override
   Widget build(BuildContext context) {
     final isTorchOnNotifier = _controller?.isTorchOn;
+    final native = _controller?.scannerController;
 
     return Scaffold(
       backgroundColor: darkSurface,
@@ -237,6 +254,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
             child: widget.scannerWidgetBuilder != null
                 ? widget.scannerWidgetBuilder!(context, _handleBarcode)
                 : MobileScanner(
+                    controller: native is MobileScannerController ? native : null,
                     onDetect: (capture) {
                       for (final barcode in capture.barcodes) {
                         final raw = barcode.rawValue;

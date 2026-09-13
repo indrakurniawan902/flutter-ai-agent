@@ -22,6 +22,9 @@ class MobileScannerControllerWrapper implements QrScannerControllerBase {
   ValueListenable<bool> get isTorchOn => _isTorchOnNotifier;
 
   @override
+  Object? get scannerController => controller;
+
+  @override
   Future<void> toggleTorch() async {
     try {
       await controller.toggleTorch();
@@ -46,6 +49,16 @@ class MobileScannerControllerWrapper implements QrScannerControllerBase {
       await controller.stop();
     } catch (_) {
       // Ignored
+    }
+    if (_isTorchOnNotifier.value) {
+      // Restore idle state: the camera stream is gone, so force the hardware
+      // torch off before reconciling the notifier back to false.
+      try {
+        await controller.toggleTorch();
+      } catch (_) {
+        // Ignored if hardware does not support torch or controller not initialized
+      }
+      _isTorchOnNotifier.value = false;
     }
   }
 

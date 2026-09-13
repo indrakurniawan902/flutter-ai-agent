@@ -5,6 +5,12 @@ abstract class QrScannerControllerBase {
   /// Notifier for whether the camera flashlight/torch is currently turned on.
   ValueListenable<bool> get isTorchOn;
 
+  /// The platform scanner controller instance the camera preview widget should
+  /// attach to, or `null` when the implementation drives its own preview.
+  /// Used by the QR screen to pass through to `MobileScanner`'s `controller`
+  /// parameter (typed `MobileScannerController?` there).
+  Object? get scannerController => null;
+
   /// Toggles the flashlight / torch on or off.
   Future<void> toggleTorch();
 
