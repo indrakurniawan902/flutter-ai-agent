@@ -36,13 +36,18 @@ class ChatAttachment extends Equatable {
 
   factory ChatAttachment.fromJson(Map<String, dynamic> json) {
     final rawType = json['type']?.toString().toLowerCase();
-    final type = rawType == 'image'
+    final mimeType = json['mimeType']?.toString() ?? '';
+    var type = rawType == 'image'
         ? ChatAttachmentType.image
         : ChatAttachmentType.file;
+    if (type == ChatAttachmentType.file && mimeType.startsWith('image/')) {
+      type = ChatAttachmentType.image;
+    }
+    final rawFilename = json['filename']?.toString() ?? '';
     return ChatAttachment(
-      filename: json['filename']?.toString() ?? '',
+      filename: rawFilename.isEmpty ? 'attachment' : rawFilename,
       type: type,
-      mimeType: json['mimeType']?.toString() ?? '',
+      mimeType: mimeType,
       base64Data: json['base64Data']?.toString() ?? '',
     );
   }

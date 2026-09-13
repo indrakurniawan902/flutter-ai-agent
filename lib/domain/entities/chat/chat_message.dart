@@ -98,12 +98,35 @@ class ChatMessage extends Equatable {
     final map = <String, dynamic>{
       'role': role,
     };
+    if (content != null) {
+      map['content'] = content;
+    }
+    _applyStandardFields(map);
+    if (attachments != null && attachments!.isNotEmpty) {
+      map['attachments'] = attachments!.map((a) => a.toJson()).toList();
+    }
+    return map;
+  }
+
+  /// Provider-facing serialization (OpenAI-vision shape).
+  ///
+  /// Merges any staged file attachments into the `content` text part and
+  /// emits image attachments as `image_url` parts. Does NOT include the
+  /// non-standard `attachments` key; persistence uses [toJson] instead.
+  Map<String, dynamic> toWireJson() {
+    final map = <String, dynamic>{
+      'role': role,
+    };
     if (attachments != null && attachments!.isNotEmpty) {
       map['content'] = _buildMultipartContent();
-      map['attachments'] = attachments!.map((a) => a.toJson()).toList();
     } else if (content != null) {
       map['content'] = content;
     }
+    _applyStandardFields(map);
+    return map;
+  }
+
+  void _applyStandardFields(Map<String, dynamic> map) {
     if (toolCalls != null && toolCalls!.isNotEmpty) {
       map['tool_calls'] = toolCalls!.map((tc) {
         return {
@@ -125,7 +148,6 @@ class ChatMessage extends Equatable {
     if (thoughtProcess != null) {
       map['thought_process'] = thoughtProcess;
     }
-    return map;
   }
 
   List<Map<String, dynamic>> _buildMultipartContent() {
@@ -157,7 +179,7 @@ class ChatMessage extends Equatable {
         allowMalformed: true,
       );
     } catch (_) {
-      return attachment.base64Data;
+      return '[undecodable attachment]';
     }
   }
 

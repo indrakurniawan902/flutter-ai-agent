@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_attachment.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/chat_mode.dart';
+import 'package:flutter_ai_agent/domain/entities/gateway/gateway_connection_state.dart';
+import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/file_workspace_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/chat_screen.dart';
@@ -58,10 +61,16 @@ void main() {
     await sl.reset();
   });
 
-  Widget createWidgetUnderTest() {
+  Widget createWidgetUnderTest({
+    ChatMode initialMode = ChatMode.direct,
+    GatewayClientBase? gatewayClient,
+  }) {
     return MaterialApp(
       theme: AppTheme.darkTheme,
-      home: const ChatScreen(),
+      home: ChatScreen(
+        initialMode: initialMode,
+        gatewayClient: gatewayClient,
+      ),
     );
   }
 
@@ -194,5 +203,68 @@ void main() {
       );
       expect(attachButton.onPressed, isNull);
     });
+
+    testWidgets(
+      'gateway mode with staged attachment shows snackbar and keeps chip',
+      (tester) async {
+        final galleryBase64Gateway =
+            base64Encode(utf8.encode('gateway-image-bytes'));
+        when(
+          () => mockCameraService.takePhoto(source: CameraSource.gallery),
+        ).thenAnswer((_) async => Right(galleryBase64Gateway));
+
+        final gatewayClient = MockGatewayClient();
+        when(() => gatewayClient.state)
+            .thenReturn(GatewayConnectionState.connected);
+        when(() => gatewayClient.stateStream)
+            .thenAnswer((_) => const Stream.empty());
+        when(() => gatewayClient.textDeltaStream)
+            .thenAnswer((_) => const Stream.empty());
+        when(() => gatewayClient.messageStream)
+            .thenAnswer((_) => const Stream.empty());
+        when(() => gatewayClient.sendChatMessage(any())).thenReturn(null);
+
+        await tester.pumpWidget(
+          createWidgetUnderTest(
+            initialMode: ChatMode.gateway,
+            gatewayClient: gatewayClient,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('chat_attach_button')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('chat_attach_gallery')));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('chat_attachment_chip')), findsOneWidget);
+
+        await tester.enterText(
+          find.byKey(const Key('chat_input_field')),
+          'hello',
+        );
+        await tester.pump();
+
+        await tester.tap(find.byKey(const Key('chat_send_button')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+
+        expect(
+          find.text('Attachments are only supported in direct mode'),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('chat_attachment_chip')),
+          findsOneWidget,
+          reason: 'gateway send must not clear staged attachment',
+        );
+        verifyNever(
+          () => mockAgentCubit.sendMessage(
+            any(),
+            attachments: any(named: 'attachments'),
+          ),
+        );
+      },
+    );
   });
 }

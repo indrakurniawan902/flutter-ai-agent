@@ -1064,6 +1064,17 @@ class _ChatScreenState extends State<ChatScreen> {
         setState(() => _stagedAttachment = null);
       }
     } else {
+      if (_stagedAttachment != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Attachments are only supported in direct mode'),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        _scrollToBottom();
+        return;
+      }
       final client = _resolveGatewayClient();
       if (client != null && client.state.isConnected) {
         client.sendChatMessage(prompt);

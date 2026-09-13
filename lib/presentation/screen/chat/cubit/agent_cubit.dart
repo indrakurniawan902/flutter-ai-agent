@@ -497,7 +497,7 @@ class AgentCubit extends Cubit<AgentState> {
         enabled: progressiveToolPruning,
       );
     }
-    final serializedMessages = _messages.map((m) => m.toJson()).toList();
+    final serializedMessages = _messages.map((m) => m.toWireJson()).toList();
     if (_activeMemories.isNotEmpty) {
       final memoryPrompt =
           'Relevant User & Device Memories:\n${_activeMemories.map((m) => '- ${m.key}: ${m.content}').join('\n')}';
