@@ -3,6 +3,7 @@ import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/data/datasources/tools/chat/intent_launcher_service_impl.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/contact_launcher_tools.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/intent_launcher_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/system_settings_allow_list.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -378,6 +379,99 @@ void main() {
         },
         (_) => fail('Expected Left'),
       );
+    });
+
+    // --- T18.2: special-permission CTA pages (AGENTS.md §7) ---
+    // Every value in the shared allow-list must reach the platform wrapper, so a
+    // newly added CTA cannot pass the allow-list check and then die at the
+    // Kotlin `when` (which surfaces to the user as "Failed to open ... settings").
+    test('every allow-listed value maps to a non-null platform call', () async {
+      when(() => settingsWrapper.openSystemSettings(any()))
+          .thenAnswer((_) async => true);
+
+      for (final value in SystemSettingsAllowList.values) {
+        final result = await service.launchSystemSetting(value);
+
+        expect(
+          result.isRight(),
+          isTrue,
+          reason: 'launchSystemSetting("$value") should reach the platform layer',
+        );
+        result.fold(
+          (f) => fail('Expected Right for "$value", got ${f.message}'),
+          (msg) => expect(msg, 'Opened $value settings'),
+        );
+        verify(() => settingsWrapper.openSystemSettings(value)).called(1);
+      }
+    });
+
+    test('maps the §7 permission CTA pages that have no runtime dialog', () {
+      // Guard the exact values AGENTS.md §7 depends on.
+      expect(
+        SystemSettingsAllowList.values,
+        containsAll(<String>[
+          'notification_listener',
+          'nfc',
+          'app_details',
+        ]),
+      );
+      // `notification_app_settings` is NOT a real Android action; the standard
+      // reuses app_details instead.
+      expect(
+        SystemSettingsAllowList.values,
+        isNot(contains('notification_app_settings')),
+      );
+    });
+
+    test('opens notification_listener via wrapper', () async {
+      when(() => settingsWrapper.openSystemSettings('notification_listener'))
+          .thenAnswer((_) async => true);
+
+      final result = await service.launchSystemSetting('notification_listener');
+
+      expect(result.isRight(), isTrue);
+      result.fold(
+        (_) => fail('Expected Right'),
+        (msg) => expect(msg, 'Opened notification_listener settings'),
+      );
+      verify(() => settingsWrapper.openSystemSettings('notification_listener'))
+          .called(1);
+    });
+
+    test('opens nfc via wrapper', () async {
+      when(() => settingsWrapper.openSystemSettings('nfc'))
+          .thenAnswer((_) async => true);
+
+      final result = await service.launchSystemSetting('NFC');
+
+      expect(result.isRight(), isTrue);
+      verify(() => settingsWrapper.openSystemSettings('nfc')).called(1);
+    });
+
+    test('opens app_details via wrapper', () async {
+      when(() => settingsWrapper.openSystemSettings('app_details'))
+          .thenAnswer((_) async => true);
+
+      final result = await service.launchSystemSetting('app_details');
+
+      expect(result.isRight(), isTrue);
+      result.fold(
+        (_) => fail('Expected Right'),
+        (msg) => expect(msg, 'Opened app_details settings'),
+      );
+      verify(() => settingsWrapper.openSystemSettings('app_details')).called(1);
+    });
+
+    test('returns Left for unknown type without touching wrapper', () async {
+      for (final bogus in <String>['nope', 'notification_app_settings', '']) {
+        final result = await service.launchSystemSetting(bogus);
+
+        result.fold(
+          (f) => expect(f.message, 'Unknown setting type: $bogus'),
+          (_) => fail('Expected Left for "$bogus"'),
+        );
+      }
+      verifyNever(() => settingsWrapper.openSystemSettings(any()));
     });
   });
 }

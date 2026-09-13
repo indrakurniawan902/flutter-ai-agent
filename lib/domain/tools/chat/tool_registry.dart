@@ -20,6 +20,7 @@ import 'location_service.dart';
 import 'notification_service.dart';
 import 'notification_triage_service.dart';
 import 'security_policy.dart';
+import 'system_settings_allow_list.dart';
 import 'voice_input_service.dart';
 import 'voice_output_service.dart';
 
@@ -1239,13 +1240,20 @@ class ToolRegistry {
       RegisteredTool(
         name: 'launch_system_setting',
         description:
-            'Opens a named Android system settings screen (bluetooth, wifi, battery_saver, airplane_mode, location, display, sound, apps).',
-        parameters: const {
+            'Opens a named Android system settings screen. Allowed values: '
+            '${SystemSettingsAllowList.description}. '
+            'Use notification_listener for the notification-access (listener) page, '
+            'nfc for the NFC page, and app_details for this app\'s own application '
+            'details page (per-app permissions / notifications, e.g. after the user '
+            'chose "don\'t ask again").',
+        parameters: {
           'type': 'object',
           'properties': {
             'setting_type': {
               'type': 'string',
-              'description': 'Name of the system settings screen to open',
+              'description': 'Name of the system settings screen to open. One of: '
+                  '${SystemSettingsAllowList.description}.',
+              'enum': SystemSettingsAllowList.values,
             },
           },
           'required': ['setting_type'],

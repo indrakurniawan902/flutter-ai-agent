@@ -11,6 +11,7 @@ import 'package:flutter_ai_agent/domain/tools/chat/local_memory_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/security_policy.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/system_settings_allow_list.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_input_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
@@ -968,6 +969,26 @@ void main() {
       final settingParams = registry.getTool('launch_system_setting')?.parameters;
       expect(settingParams?['properties']?.keys, contains('setting_type'));
       expect(settingParams?['required'], ['setting_type']);
+      // T18.2: an LLM must not have to guess the allowed values, and the §7
+      // special-permission CTAs must be advertised.
+      final settingTypeProperty =
+          settingParams?['properties']?['setting_type'] as Map?;
+      expect(
+        settingTypeProperty?['enum'],
+        SystemSettingsAllowList.values,
+      );
+      expect(
+        settingTypeProperty?['enum'],
+        containsAll(<String>['notification_listener', 'nfc', 'app_details']),
+      );
+      expect(
+        settingTypeProperty?['description']?.toString(),
+        contains('notification_listener'),
+      );
+      expect(
+        registry.getTool('launch_system_setting')?.description,
+        contains('app_details'),
+      );
     });
 
     test('open_map_navigation delegates typed coordinates', () async {

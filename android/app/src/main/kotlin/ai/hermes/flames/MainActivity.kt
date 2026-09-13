@@ -247,7 +247,11 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "openSystemSettings" -> {
                         val type = call.argument<String>("type")
-                        val action = when (type) {
+                        // NOTE: this `when` must stay in sync with the Dart-side
+                        // allow-list in lib/domain/tools/chat/system_settings_allow_list.dart.
+                        // test/domain/tools/chat/system_settings_allow_list_test.dart parses
+                        // this block and fails if the two sides drift.
+                        val action: String? = when (type) {
                             "bluetooth" -> Settings.ACTION_BLUETOOTH_SETTINGS
                             "wifi" -> Settings.ACTION_WIFI_SETTINGS
                             "battery_saver" -> Settings.ACTION_BATTERY_SAVER_SETTINGS
@@ -256,19 +260,44 @@ class MainActivity : FlutterActivity() {
                             "display" -> Settings.ACTION_DISPLAY_SETTINGS
                             "sound" -> Settings.ACTION_SOUND_SETTINGS
                             "apps" -> Settings.ACTION_MANAGE_ALL_APPLICATIONS_SETTINGS
+                            "notification_listener" -> Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS
+                            "nfc" -> Settings.ACTION_NFC_SETTINGS
+                            "app_details" -> Settings.ACTION_APPLICATION_DETAILS_SETTINGS
                             else -> null
                         }
                         if (action == null) {
                             result.success(false)
                         } else {
                             try {
-                                startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                // Per-app pages must target THIS package, otherwise
+                                // Android opens the generic app list (MIUI in particular).
+                                val intent = Intent(action)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    .apply {
+                                        if (type == "app_details") {
+                                            data = Uri.parse("package:$packageName")
+                                        }
+                                    }
+                                startActivity(intent)
                                 result.success(true)
                             } catch (_: Exception) {
                                 if (type == "apps") {
                                     try {
                                         startActivity(
                                             Intent(Settings.ACTION_APPLICATION_SETTINGS)
+                                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        )
+                                        result.success(true)
+                                    } catch (_: Exception) {
+                                        result.success(false)
+                                    }
+                                } else if (type == "app_details") {
+                                    // Fallback only if the package-scoped details page
+                                    // is unavailable: still app-scoped where possible.
+                                    try {
+                                        startActivity(
+                                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                                                .setData(Uri.parse("package:$packageName"))
                                                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                         )
                                         result.success(true)

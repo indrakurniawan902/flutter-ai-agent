@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart' show LaunchMode;
 import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/contact_launcher_tools.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/intent_launcher_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/system_settings_allow_list.dart';
 
 class DefaultSystemSettingsPlatformWrapper
     implements SystemSettingsPlatformWrapper {
@@ -28,16 +29,11 @@ class DefaultSystemSettingsPlatformWrapper
 
 @LazySingleton(as: IntentLauncherServiceBase)
 class IntentLauncherServiceImpl implements IntentLauncherServiceBase {
-  static const Set<String> _allowedSettings = {
-    'bluetooth',
-    'wifi',
-    'battery_saver',
-    'airplane_mode',
-    'location',
-    'display',
-    'sound',
-    'apps',
-  };
+  /// Kept in sync with the Kotlin `when` block in MainActivity.kt via the
+  /// shared [SystemSettingsAllowList] (see
+  /// test/domain/tools/chat/system_settings_allow_list_test.dart for the drift
+  /// guard).
+  static final Set<String> _allowedSettings = SystemSettingsAllowList.set;
 
   final UrlLauncherProvider _launcher;
   final SystemSettingsPlatformWrapper _settingsWrapper;
