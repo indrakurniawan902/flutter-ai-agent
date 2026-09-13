@@ -123,6 +123,17 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
   }
 
   @override
+  void toggleGeofence(String id, bool isEnabled) {
+    final index = _regions.indexWhere((r) => r.id == id);
+    if (index != -1) {
+      _regions[index] = _regions[index].copyWith(isEnabled: isEnabled);
+      if (!isEnabled) {
+        _insideState.remove(id);
+      }
+    }
+  }
+
+  @override
   void clearGeofences() {
     _regions.clear();
     _insideState.clear();
@@ -273,6 +284,7 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
       final current = now ?? DateTime.now();
       final fired = <AmbientEvent>[];
       for (final region in _regions) {
+        if (!region.isEnabled) continue;
         final distance = distanceMeters(
           latitude,
           longitude,
