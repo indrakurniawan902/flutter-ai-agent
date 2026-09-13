@@ -1,4 +1,4 @@
-import 'package:flutter_ai_agent/domain/models/share/shared_payload.dart';
+import 'package:flutter_ai_agent/domain/entities/share/shared_payload.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

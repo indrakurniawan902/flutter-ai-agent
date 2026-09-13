@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:injectable/injectable.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
-import 'package:flutter_ai_agent/domain/models/share/shared_payload.dart';
+import 'package:flutter_ai_agent/domain/entities/share/shared_payload.dart';
 
 /// Abstraction over the platform share-intent plugin for testability.
 abstract class ShareMediaProvider {

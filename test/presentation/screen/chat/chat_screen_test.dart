@@ -10,11 +10,11 @@ import 'package:flutter_ai_agent/domain/tools/chat/battery_optimization_service.
 import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
-import 'package:flutter_ai_agent/domain/models/chat/tool_call_request.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/tool_call_request.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/chat_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_approval_sheet.dart';
-import 'package:flutter_ai_agent/domain/models/chat/action_step.dart';
-import 'package:flutter_ai_agent/domain/models/chat/generative_card_data.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/action_step.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/generative_card_data.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_confirmation_card.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/live_action_stepper_card.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/reasoning_card.dart';

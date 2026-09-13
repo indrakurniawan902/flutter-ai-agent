@@ -7,7 +7,7 @@ import 'package:flutter_ai_agent/domain/tools/chat/contact_launcher_tools.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
-import 'package:flutter_ai_agent/domain/models/share/shared_payload.dart';
+import 'package:flutter_ai_agent/domain/entities/share/shared_payload.dart';
 import 'package:flutter_ai_agent/domain/services/share/share_target_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/share/cubit/share_target_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/share/cubit/share_target_state.dart';

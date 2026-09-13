@@ -10,7 +10,7 @@ import 'package:flutter_ai_agent/domain/entities/chat/chat_chunk.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_attachment.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
-import 'package:flutter_ai_agent/domain/models/chat/tool_call_request.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/tool_call_request.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/memory_item.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/session.dart';
 import 'package:flutter_ai_agent/domain/repositories/chat/chat_local_repository.dart';
