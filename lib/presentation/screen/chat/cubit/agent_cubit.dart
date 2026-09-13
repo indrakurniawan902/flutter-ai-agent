@@ -46,6 +46,7 @@ class AgentCubit extends Cubit<AgentState> {
 
   final List<ChatMessage> _messages = [];
   final List<ToolCallDelta> _pendingTurnToolCalls = [];
+  final Set<String> _discoveredToolNames = <String>{};
   ToolCallRequest? _pendingToolCall;
   int _currentTurn = 0;
   StreamSubscription<ChatChunk>? _streamSubscription;
@@ -201,6 +202,7 @@ class AgentCubit extends Cubit<AgentState> {
     _runGeneration++;
     final int generation = _runGeneration;
     _isCancelled = false;
+    _discoveredToolNames.clear();
     await refreshSettings();
     if (_localMemoryService != null) {
       final searchResult =
@@ -326,6 +328,7 @@ class AgentCubit extends Cubit<AgentState> {
     _activeMemories.clear();
     _pendingToolCall = null;
     _pendingTurnToolCalls.clear();
+    _discoveredToolNames.clear();
     final repo = _chatLocalRepository;
     if (repo != null) {
       unawaited(repo.clearMessages(activeProfileId));
@@ -426,6 +429,22 @@ class AgentCubit extends Cubit<AgentState> {
         (result) => result,
       );
 
+      if (toolName == 'tool_search') {
+        for (final name in resultStr.split('\n')) {
+          final trimmed = name.trim();
+          if (trimmed.isNotEmpty &&
+              !trimmed.startsWith('Error') &&
+              _toolRegistry.getTool(trimmed) != null) {
+            _discoveredToolNames.add(trimmed);
+          }
+        }
+      } else if (toolName == 'tool_describe') {
+        final describedName = arguments['tool_name'] as String?;
+        if (describedName != null && describedName.isNotEmpty) {
+          _discoveredToolNames.add(describedName);
+        }
+      }
+
       _messages.add(ChatMessage(
         role: 'tool',
         toolCallId: callId,
@@ -451,6 +470,7 @@ class AgentCubit extends Cubit<AgentState> {
     _streamSubscription = null;
     _pendingTurnToolCalls.clear();
     _pendingToolCall = null;
+    _discoveredToolNames.clear();
     if (!isClosed) emit(AgentIdle(messages: messages));
   }
 
@@ -496,6 +516,20 @@ class AgentCubit extends Cubit<AgentState> {
         fullToolDefinitions: toolDefs,
         enabled: progressiveToolPruning,
       );
+    }
+    final existingToolNames = toolDefs
+        .map((def) => def['function']?['name'])
+        .whereType<String>()
+        .toSet();
+    for (final name in _discoveredToolNames) {
+      if (!_toolRegistry.isToolEnabled(name)) continue;
+      final discovered = _toolRegistry.getTool(name);
+      if (discovered == null) continue;
+      final definition = discovered.toOpenAiTool();
+      final definitionName = definition['function']?['name'];
+      if (definitionName is String && existingToolNames.add(definitionName)) {
+        toolDefs.add(definition);
+      }
     }
     final serializedMessages = _messages.map((m) => m.toWireJson()).toList();
     if (_activeMemories.isNotEmpty) {
