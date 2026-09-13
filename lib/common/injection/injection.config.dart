@@ -26,6 +26,8 @@ import 'package:flutter_ai_agent/data/datasources/remote/gateway/gateway_client.
     as _i122;
 import 'package:flutter_ai_agent/data/datasources/remote/pairing/scanner_controller_wrapper.dart'
     as _i319;
+import 'package:flutter_ai_agent/data/datasources/skills/doc_builder_skill.dart'
+    as _i701;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/ambient_trigger_service.dart'
     as _i315;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/background_service.dart'
@@ -189,23 +191,27 @@ extension GetItInjectableX on _i174.GetIt {
       () => _i355.DefaultQuickActionsProvider(),
     );
     gh.lazySingleton<_i732.ToolRegistry>(
-      () => _i732.ToolRegistry(
-        clipboardService: gh<_i547.ClipboardServiceBase>(),
-        locationService: gh<_i292.LocationServiceBase>(),
-        deviceContextService: gh<_i3.DeviceContextServiceBase>(),
-        cameraVisionService: gh<_i815.CameraVisionServiceBase>(),
-        calendarService: gh<_i1020.CalendarServiceBase>(),
-        notificationService: gh<_i919.NotificationServiceBase>(),
-        fileWorkspaceService: gh<_i745.FileWorkspaceServiceBase>(),
-        notificationTriageService: gh<_i396.NotificationTriageServiceBase>(),
-        localMemoryService: gh<_i987.LocalMemoryServiceBase>(),
-        ambientTriggerService: gh<_i290.AmbientTriggerServiceBase>(),
-        voiceInputService: gh<_i652.VoiceInputServiceBase>(),
-        voiceOutputService: gh<_i45.VoiceOutputServiceBase>(),
-        backgroundService: gh<_i791.BackgroundServiceBase>(),
-        contactLauncherTools: gh<_i777.ContactLauncherTools>(),
-        intentLauncherService: gh<_i173.IntentLauncherServiceBase>(),
-      ),
+      () {
+        final registry = _i732.ToolRegistry(
+          clipboardService: gh<_i547.ClipboardServiceBase>(),
+          locationService: gh<_i292.LocationServiceBase>(),
+          deviceContextService: gh<_i3.DeviceContextServiceBase>(),
+          cameraVisionService: gh<_i815.CameraVisionServiceBase>(),
+          calendarService: gh<_i1020.CalendarServiceBase>(),
+          notificationService: gh<_i919.NotificationServiceBase>(),
+          fileWorkspaceService: gh<_i745.FileWorkspaceServiceBase>(),
+          notificationTriageService: gh<_i396.NotificationTriageServiceBase>(),
+          localMemoryService: gh<_i987.LocalMemoryServiceBase>(),
+          ambientTriggerService: gh<_i290.AmbientTriggerServiceBase>(),
+          voiceInputService: gh<_i652.VoiceInputServiceBase>(),
+          voiceOutputService: gh<_i45.VoiceOutputServiceBase>(),
+          backgroundService: gh<_i791.BackgroundServiceBase>(),
+          contactLauncherTools: gh<_i777.ContactLauncherTools>(),
+          intentLauncherService: gh<_i173.IntentLauncherServiceBase>(),
+        );
+        _i701.DocBuilderSkill.registerTools(registry);
+        return registry;
+      },
     );
     gh.lazySingleton<_i821.QrScannerControllerBase>(
       () => _i319.MobileScannerControllerWrapper(),
