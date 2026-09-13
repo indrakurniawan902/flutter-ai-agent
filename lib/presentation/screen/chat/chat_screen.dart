@@ -1234,7 +1234,7 @@ class _ChatScreenState extends State<ChatScreen> {
         borderRadius: BorderRadius.circular(12),
         onTap: () => _showConnectionDetailsDialog(context),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
             color: const Color(0xFF1E293B),
             borderRadius: BorderRadius.circular(12),
@@ -1430,7 +1430,7 @@ class _ChatScreenState extends State<ChatScreen> {
         return Scaffold(
           appBar: AppBar(
             toolbarHeight: 60,
-            titleSpacing: 8.0,
+            titleSpacing: 2.0,
             title: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1443,21 +1443,21 @@ class _ChatScreenState extends State<ChatScreen> {
                       child: Image.asset(
                         'assets/images/flames_logo.png',
                         key: const Key('chat_app_bar_logo'),
-                        width: 22,
-                        height: 22,
-                        cacheWidth: 44,
-                        cacheHeight: 44,
+                        width: 20,
+                        height: 20,
+                        cacheWidth: 40,
+                        cacheHeight: 40,
                         fit: BoxFit.contain,
                         excludeFromSemantics: true,
                         errorBuilder: (_, _, _) => const SizedBox.shrink(),
                       ),
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 4),
                     const Flexible(
                       child: Text(
                         'Flames',
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 17),
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
                       ),
                     ),
                   ],
@@ -1470,9 +1470,9 @@ class _ChatScreenState extends State<ChatScreen> {
               IconButton(
                 key: const Key('chat_speaker_toggle'),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-                visualDensity: VisualDensity.compact,
-                iconSize: 20,
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 32),
+                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                iconSize: 18,
                 icon: Icon(
                   _isSpeakerMuted ? Icons.volume_off : Icons.volume_up,
                 ),
@@ -1483,9 +1483,9 @@ class _ChatScreenState extends State<ChatScreen> {
               IconButton(
                 key: const Key('chat_mode_toggle'),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                visualDensity: VisualDensity.compact,
-                iconSize: 20,
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 32),
+                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                iconSize: 18,
                 icon: Icon(
                   _mode == ChatMode.gateway
                       ? Icons.hub_rounded
@@ -1502,9 +1502,9 @@ class _ChatScreenState extends State<ChatScreen> {
               IconButton(
                 key: const Key('chat_qr_scan_button'),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                visualDensity: VisualDensity.compact,
-                iconSize: 20,
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 32),
+                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                iconSize: 18,
                 icon: const Icon(Icons.qr_code_scanner),
                 tooltip: 'Scan Pairing QR',
                 onPressed: _openQrScanner,
@@ -1512,9 +1512,9 @@ class _ChatScreenState extends State<ChatScreen> {
               IconButton(
                 key: const Key('chat_nfc_scan_button'),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                visualDensity: VisualDensity.compact,
-                iconSize: 20,
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 32),
+                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                iconSize: 18,
                 icon: const Icon(Icons.nfc),
                 tooltip: 'Scan NFC Tag',
                 onPressed: _scanNfcTag,
@@ -1522,9 +1522,9 @@ class _ChatScreenState extends State<ChatScreen> {
               IconButton(
                 key: const Key('chat_nfc_balance_button'),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                visualDensity: VisualDensity.compact,
-                iconSize: 20,
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 32),
+                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                iconSize: 18,
                 icon: const Icon(Icons.account_balance_wallet_outlined),
                 tooltip: 'Read e-Money Balance',
                 onPressed: _scanNfcBalance,
@@ -1532,9 +1532,9 @@ class _ChatScreenState extends State<ChatScreen> {
               IconButton(
                 key: const Key('chat_reset_button'),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                visualDensity: VisualDensity.compact,
-                iconSize: 20,
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 32),
+                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                iconSize: 18,
                 icon: const Icon(Icons.refresh),
                 tooltip: 'Reset Conversation',
                 onPressed: () => _confirmReset(context),
@@ -1548,9 +1548,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   return IconButton(
                     key: const Key('chat_stop_button'),
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                    visualDensity: VisualDensity.compact,
-                    iconSize: 20,
+                    constraints: const BoxConstraints(minWidth: 26, minHeight: 32),
+                    visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                    iconSize: 18,
                     icon: const Icon(
                       Icons.stop_circle_outlined,
                       color: Colors.redAccent,
@@ -1563,9 +1563,9 @@ class _ChatScreenState extends State<ChatScreen> {
               IconButton(
                 key: const Key('chat_settings_button'),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                visualDensity: VisualDensity.compact,
-                iconSize: 20,
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 32),
+                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                iconSize: 18,
                 icon: const Icon(Icons.settings),
                 tooltip: 'Settings',
                 onPressed: () {

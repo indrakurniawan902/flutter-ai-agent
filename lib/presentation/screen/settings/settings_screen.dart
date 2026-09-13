@@ -399,15 +399,6 @@ class _SettingsViewState extends State<_SettingsView> {
                     // Server Profile Switcher Section
                     _buildServerProfileSection(context),
 
-                    if (state is SettingsLoaded) ...[
-                      const SizedBox(height: 20),
-                      _buildNfcSection(
-                        context,
-                        state.nfcPromptBindings,
-                        state.nfcAvailable,
-                      ),
-                    ],
-
                     const SizedBox(height: 20),
                     TextFormField(
                       key: const Key('settings_base_url_field'),
@@ -576,6 +567,14 @@ class _SettingsViewState extends State<_SettingsView> {
                               ),
                       ),
                     ),
+                    if (state is SettingsLoaded) ...[
+                      const SizedBox(height: 24),
+                      _buildNfcSection(
+                        context,
+                        state.nfcPromptBindings,
+                        state.nfcAvailable,
+                      ),
+                    ],
                   ],
                 ),
               ),

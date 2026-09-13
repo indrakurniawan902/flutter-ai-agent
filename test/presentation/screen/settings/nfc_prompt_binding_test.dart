@@ -64,6 +64,7 @@ void main() {
       expect(find.text('No NFC triggers yet'), findsOneWidget);
       expect(find.byKey(const Key('nfc_add_trigger_button')), findsOneWidget);
 
+      await tester.ensureVisible(find.byKey(const Key('nfc_add_trigger_button')));
       await tester.tap(find.byKey(const Key('nfc_add_trigger_button')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
@@ -113,6 +114,7 @@ void main() {
       await tester.pumpWidget(buildWidget());
       await tester.pump();
 
+      await tester.ensureVisible(find.byKey(const Key('nfc_add_trigger_button')));
       await tester.tap(find.byKey(const Key('nfc_add_trigger_button')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
@@ -163,6 +165,7 @@ void main() {
       await tester.pumpWidget(buildWidget());
       await tester.pump();
 
+      await tester.ensureVisible(find.byKey(const Key('nfc_add_trigger_button')));
       await tester.tap(find.byKey(const Key('nfc_add_trigger_button')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
