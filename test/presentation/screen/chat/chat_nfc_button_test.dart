@@ -51,6 +51,10 @@ void main() {
         .thenAnswer((_) async => const SettingsData());
     when(() => fakeStorage.getNfcPromptBindings())
         .thenAnswer((_) async => const []);
+    when(() => fakeNfc.isAvailable())
+        .thenAnswer((_) async => const Right(true));
+    when(() => fakeNfc.isEnabled())
+        .thenAnswer((_) async => const Right(true));
   });
 
   tearDown(() async {
@@ -232,5 +236,63 @@ void main() {
 
     gate.complete();
     await tester.pumpAndSettle();
+  });
+
+  group('AgentCubit NFC pre-flight checks and DI', () {
+    test('scanNfcAndDispatchPrompt returns false when NFC is not available',
+        () async {
+      when(() => fakeNfc.isAvailable())
+          .thenAnswer((_) async => const Right(false));
+
+      final result = await cubit.scanNfcAndDispatchPrompt();
+
+      expect(result, isFalse);
+      verifyNever(() => fakeNfc.readCardUid());
+    });
+
+    test('scanNfcAndDispatchPrompt returns false when NFC is disabled', () async {
+      when(() => fakeNfc.isAvailable())
+          .thenAnswer((_) async => const Right(true));
+      when(() => fakeNfc.isEnabled())
+          .thenAnswer((_) async => const Right(false));
+
+      final result = await cubit.scanNfcAndDispatchPrompt();
+
+      expect(result, isFalse);
+      verifyNever(() => fakeNfc.readCardUid());
+    });
+
+    test('scanNfcEmoneyBalance returns null when NFC is not available', () async {
+      when(() => fakeNfc.isAvailable())
+          .thenAnswer((_) async => const Right(false));
+
+      final result = await cubit.scanNfcEmoneyBalance();
+
+      expect(result, isNull);
+      verifyNever(() => fakeNfc.readEmoneyBalance());
+    });
+
+    test('scanNfcEmoneyBalance returns null when NFC is disabled', () async {
+      when(() => fakeNfc.isAvailable())
+          .thenAnswer((_) async => const Right(true));
+      when(() => fakeNfc.isEnabled())
+          .thenAnswer((_) async => const Right(false));
+
+      final result = await cubit.scanNfcEmoneyBalance();
+
+      expect(result, isNull);
+      verifyNever(() => fakeNfc.readEmoneyBalance());
+    });
+
+    test('AgentCubit.create factory wires custom storage and nfcService', () {
+      final createdCubit = AgentCubit.create(
+        llmRepository: mockLlm,
+        secureStorageService: fakeStorage,
+        nfcService: fakeNfc,
+      );
+
+      expect(createdCubit, isNotNull);
+      createdCubit.close();
+    });
   });
 }

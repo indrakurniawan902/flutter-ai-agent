@@ -32,6 +32,19 @@ class FakeNfcPlatformWrapper implements NfcPlatformWrapper {
   Future<String> availability() async => availabilityValue;
 
   @override
+  Future<T> runWithCard<T>({
+    required Set<String> pollingOptions,
+    Duration timeout = const Duration(seconds: 20),
+    required Future<T> Function(RawNfcCard card) action,
+  }) async {
+    final result = await scan(
+      pollingOptions: pollingOptions,
+      timeout: timeout,
+    );
+    return action(result.card);
+  }
+
+  @override
   Future<NfcScanResult> scan({
     required Set<String> pollingOptions,
     Duration timeout = const Duration(seconds: 20),
@@ -287,6 +300,42 @@ void main() {
       expect(NfcService.parseBalanceBytes(_bytes([0x90, 0x00])), 0);
     });
 
+    test('parseBalanceBytes reads 4 data bytes little-endian for briBrizzi', () {
+      expect(
+        NfcService.parseBalanceBytes(
+          _bytes([0x39, 0x30, 0x00, 0x00, 0x90, 0x00]),
+          EmoneyCardBrand.briBrizzi,
+        ),
+        12345,
+      );
+      expect(
+        NfcService.parseBalanceBytes(
+          _bytes([0x00, 0x00, 0x01, 0x00, 0x90, 0x00]),
+          EmoneyCardBrand.briBrizzi,
+        ),
+        65536,
+      );
+    });
+
+    test('readEmoneyBalance decodes Brizzi balance in little-endian', () async {
+      final platform = fakeCardFor(
+        wanted: _brizziSelect,
+        balancePayload: const <int>[0x39, 0x30, 0x00, 0x00],
+      );
+      final service = NfcService(platformWrapper: platform);
+
+      final result = await service.readEmoneyBalance();
+
+      expect(result.isRight(), isTrue);
+      result.fold(
+        (_) => fail('Expected Right'),
+        (balance) {
+          expect(balance.brand, EmoneyCardBrand.briBrizzi);
+          expect(balance.balanceRupiah, 12345);
+        },
+      );
+    });
+
     test('per-brand SELECT fixtures resolve to the expected profile', () async {
       final fixtures = <List<int>, EmoneyCardBrand>{
         _mandiriSelect: EmoneyCardBrand.mandiriEmoney,
@@ -415,6 +464,50 @@ void main() {
       expect(restored.recentTransactions[0].label, 'KRL');
       expect(restored.recentTransactions[1].amountRupiah, 20000);
       expect(restored.recentTransactions[1].label, isNull);
+    });
+  });
+
+  group('6Cxx APDU continuation handling', () {
+    test('Case 3 APDU appends sw2, Case 2 APDU replaces last byte with sw2', () async {
+      final platform = FakeNfcPlatformWrapper(
+        uid: const <int>[0x04, 0xAB, 0xCD, 0xEF],
+        responder: (self, apdu) async {
+          if (_sameApdu(apdu, _mandiriSelect)) {
+            return <int>[0x6C, 0x08];
+          }
+          if (apdu.length == 14 &&
+              _sameApdu(apdu.sublist(0, 13), _mandiriSelect) &&
+              apdu[13] == 0x08) {
+            return <int>[0x90, 0x00];
+          }
+          if (_sameApdu(apdu, _readBinaryBalance)) {
+            return <int>[0x6C, 0x04];
+          }
+          if (apdu.length == 5 &&
+              _sameApdu(apdu.sublist(0, 4), <int>[0x00, 0xB5, 0x00, 0x00]) &&
+              apdu[4] == 0x04) {
+            return <int>[0x00, 0x00, 0x30, 0x39, 0x90, 0x00];
+          }
+          return _failureSw();
+        },
+      );
+      final service = NfcService(platformWrapper: platform);
+
+      final result = await service.readEmoneyBalance();
+
+      expect(result.isRight(), isTrue);
+      result.fold(
+        (_) => fail('Expected Right'),
+        (balance) {
+          expect(balance.brand, EmoneyCardBrand.mandiriEmoney);
+          expect(balance.balanceRupiah, 12345);
+        },
+      );
+      expect(platform.sentApdus.length, 4);
+      expect(platform.sentApdus[0], _mandiriSelect);
+      expect(platform.sentApdus[1], [..._mandiriSelect, 0x08]);
+      expect(platform.sentApdus[2], _readBinaryBalance);
+      expect(platform.sentApdus[3], <int>[0x00, 0xB5, 0x00, 0x00, 0x04]);
     });
   });
 }

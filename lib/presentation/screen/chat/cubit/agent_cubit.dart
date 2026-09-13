@@ -61,6 +61,7 @@ class AgentCubit extends Cubit<AgentState> {
     required LlmRepository llmRepository,
     ChatLocalRepository? chatLocalRepository,
     LocalMemoryServiceBase? localMemoryService,
+    SecureStorageService? secureStorageService,
     NfcServiceBase? nfcService,
     @ignoreParam double temperature = 0.7,
   }) =>
@@ -69,9 +70,10 @@ class AgentCubit extends Cubit<AgentState> {
         toolRegistry: getIt.isRegistered<ToolRegistry>()
             ? getIt<ToolRegistry>()
             : null,
-        secureStorageService: getIt.isRegistered<SecureStorageService>()
-            ? getIt<SecureStorageService>()
-            : null,
+        secureStorageService: secureStorageService ??
+            (getIt.isRegistered<SecureStorageService>()
+                ? getIt<SecureStorageService>()
+                : null),
         skillsRegistryService: getIt.isRegistered<SkillsRegistryService>()
             ? getIt<SkillsRegistryService>()
             : null,
@@ -235,6 +237,11 @@ class AgentCubit extends Cubit<AgentState> {
   Future<bool> scanNfcAndDispatchPrompt() async {
     final service = _nfcService;
     if (service == null) return false;
+    final isAvailable = (await service.isAvailable()).getOrElse(() => false);
+    if (!isAvailable) return false;
+    final isEnabled = (await service.isEnabled()).getOrElse(() => false);
+    if (!isEnabled) return false;
+
     final uidResult = await service.readCardUid();
     if (uidResult.isLeft()) return false;
     final uid = uidResult.getOrElse(() => '');
@@ -252,6 +259,11 @@ class AgentCubit extends Cubit<AgentState> {
   Future<EmoneyBalance?> scanNfcEmoneyBalance() async {
     final service = _nfcService;
     if (service == null) return null;
+    final isAvailable = (await service.isAvailable()).getOrElse(() => false);
+    if (!isAvailable) return null;
+    final isEnabled = (await service.isEnabled()).getOrElse(() => false);
+    if (!isEnabled) return null;
+
     final result = await service.readEmoneyBalance();
     return result.fold((_) => null, (balance) => balance);
   }

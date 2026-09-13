@@ -122,13 +122,31 @@ class SettingsSuccess extends SettingsState {
 }
 
 /// NFC tag UID captured, waiting for the user to confirm prompt/label.
-class SettingsNfcScanResult extends SettingsState {
+class SettingsNfcScanResult extends SettingsLoaded {
   final String uid;
 
-  const SettingsNfcScanResult({required this.uid});
+  const SettingsNfcScanResult({
+    required this.uid,
+    super.baseUrl = '',
+    super.apiKey = '',
+    super.model = '',
+    super.temperature = 0.7,
+    super.progressiveToolPruning = true,
+    super.nfcPromptBindings = const [],
+    super.nfcAvailable = false,
+  });
 
   @override
-  List<Object?> get props => [uid];
+  List<Object?> get props => [
+        uid,
+        baseUrl,
+        apiKey,
+        model,
+        temperature,
+        progressiveToolPruning,
+        nfcPromptBindings,
+        nfcAvailable,
+      ];
 }
 
 /// An error occurred during load, validation, or save.

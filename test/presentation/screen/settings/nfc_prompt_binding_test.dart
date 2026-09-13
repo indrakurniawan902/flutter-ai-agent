@@ -1,10 +1,14 @@
 import 'dart:async';
 
 import 'package:bloc_test/bloc_test.dart';
+import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/nfc_tag_prompt_binding.dart';
 import 'package:flutter_ai_agent/domain/services/tools/nfc_prompt_resolver.dart';
+import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_state.dart';
+import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/settings_screen.dart';
 import 'package:flutter_ai_agent/utils/app_theme.dart';
@@ -12,6 +16,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import '../../../helpers/mocks.dart';
+
+class _MockNfcService extends Mock implements NfcServiceBase {}
+
+class _MockSecureStorageService extends Mock implements SecureStorageService {}
 
 void main() {
   late MockSettingsCubit mockSettingsCubit;
@@ -235,6 +243,122 @@ void main() {
 
       expect(resolver.resolve('ffffffff'), isNull);
       expect(resolver.resolve(''), isNull);
+    });
+  });
+
+  group('SettingsCubit NFC scan and binding methods', () {
+    late _MockNfcService mockNfc;
+    late _MockSecureStorageService mockStorage;
+
+    setUpAll(() {
+      registerFallbackValue(<NfcTagPromptBinding>[]);
+    });
+
+    setUp(() {
+      mockNfc = _MockNfcService();
+      mockStorage = _MockSecureStorageService();
+      when(() => mockStorage.saveNfcPromptBindings(any()))
+          .thenAnswer((_) async {});
+    });
+
+    test('scanAndBindNfcTag emits SettingsError when NFC is unavailable', () async {
+      when(() => mockNfc.isAvailable())
+          .thenAnswer((_) async => const Right(false));
+
+      final cubit = SettingsCubit(
+        secureStorageService: mockStorage,
+        nfcService: mockNfc,
+        autoLoad: false,
+      );
+      cubit.emit(loadedBase);
+
+      await cubit.scanAndBindNfcTag();
+
+      expect(cubit.state, isA<SettingsError>());
+      final error = cubit.state as SettingsError;
+      expect(error.message, contains('not supported'));
+      expect(error.baseUrl, loadedBase.baseUrl);
+      expect(error.apiKey, loadedBase.apiKey);
+      expect(error.model, loadedBase.model);
+    });
+
+    test('scanAndBindNfcTag emits SettingsError when NFC is disabled', () async {
+      when(() => mockNfc.isAvailable())
+          .thenAnswer((_) async => const Right(true));
+      when(() => mockNfc.isEnabled())
+          .thenAnswer((_) async => const Right(false));
+
+      final cubit = SettingsCubit(
+        secureStorageService: mockStorage,
+        nfcService: mockNfc,
+        autoLoad: false,
+      );
+      cubit.emit(loadedBase);
+
+      await cubit.scanAndBindNfcTag();
+
+      expect(cubit.state, isA<SettingsError>());
+      final error = cubit.state as SettingsError;
+      expect(error.message, contains('disabled'));
+      expect(error.baseUrl, loadedBase.baseUrl);
+      expect(error.apiKey, loadedBase.apiKey);
+    });
+
+    test('scanAndBindNfcTag emits SettingsNfcScanResult preserving settings fields', () async {
+      when(() => mockNfc.isAvailable())
+          .thenAnswer((_) async => const Right(true));
+      when(() => mockNfc.isEnabled())
+          .thenAnswer((_) async => const Right(true));
+      when(() => mockNfc.readCardUid())
+          .thenAnswer((_) async => const Right('04A2B3C4D5'));
+
+      final cubit = SettingsCubit(
+        secureStorageService: mockStorage,
+        nfcService: mockNfc,
+        autoLoad: false,
+      );
+      cubit.emit(loadedBase.copyWith(nfcPromptBindings: [binding]));
+
+      await cubit.scanAndBindNfcTag();
+
+      expect(cubit.state, isA<SettingsNfcScanResult>());
+      final scanResult = cubit.state as SettingsNfcScanResult;
+      expect(scanResult.uid, '04A2B3C4D5');
+      expect(scanResult.baseUrl, loadedBase.baseUrl);
+      expect(scanResult.apiKey, loadedBase.apiKey);
+      expect(scanResult.model, loadedBase.model);
+      expect(scanResult.nfcPromptBindings, [binding]);
+      expect(scanResult.nfcAvailable, isTrue);
+    });
+
+    test('confirmNfcPromptBinding preserves existing bindings and settings fields', () async {
+      final cubit = SettingsCubit(
+        secureStorageService: mockStorage,
+        nfcService: mockNfc,
+        autoLoad: false,
+      );
+      cubit.emit(SettingsNfcScanResult(
+        uid: '11223344',
+        baseUrl: loadedBase.baseUrl,
+        apiKey: loadedBase.apiKey,
+        model: loadedBase.model,
+        temperature: loadedBase.temperature,
+        progressiveToolPruning: loadedBase.progressiveToolPruning,
+        nfcPromptBindings: [binding],
+        nfcAvailable: true,
+      ));
+
+      await cubit.confirmNfcPromptBinding('11223344', 'Second trigger', label: 'Second');
+
+      expect(cubit.state, isA<SettingsLoaded>());
+      final loaded = cubit.state as SettingsLoaded;
+      expect(loaded.baseUrl, loadedBase.baseUrl);
+      expect(loaded.apiKey, loadedBase.apiKey);
+      expect(loaded.nfcPromptBindings.length, 2);
+      expect(loaded.nfcPromptBindings[0].cardUid, binding.cardUid);
+      expect(loaded.nfcPromptBindings[1].cardUid, '11223344');
+      expect(loaded.nfcPromptBindings[1].prompt, 'Second trigger');
+      expect(loaded.nfcPromptBindings[1].label, 'Second');
     });
   });
 }

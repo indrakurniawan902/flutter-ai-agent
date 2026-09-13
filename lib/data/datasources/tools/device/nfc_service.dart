@@ -39,6 +39,12 @@ abstract class NfcPlatformWrapper {
     required Set<String> pollingOptions,
     Duration timeout,
   });
+
+  Future<T> runWithCard<T>({
+    required Set<String> pollingOptions,
+    Duration timeout,
+    required Future<T> Function(RawNfcCard card) action,
+  });
 }
 
 class NfcPlatformWrapperRegistry {
@@ -60,16 +66,17 @@ class DefaultNfcPlatformWrapper implements NfcPlatformWrapper {
   }
 
   @override
-  Future<NfcScanResult> scan({
+  Future<T> runWithCard<T>({
     required Set<String> pollingOptions,
     Duration timeout = const Duration(seconds: 20),
+    required Future<T> Function(RawNfcCard card) action,
   }) async {
-    final completer = Completer<RawNfcCard>();
+    final completer = Completer<T>();
     final polling = pollingOptions.map(_mapPollingOption).toSet();
     try {
       await NfcManager.instance.startSession(
         pollingOptions: polling,
-        onDiscovered: (tag) {
+        onDiscovered: (tag) async {
           if (completer.isCompleted) return;
           final card = _toRawCard(tag);
           if (card == null) {
@@ -78,14 +85,22 @@ class DefaultNfcPlatformWrapper implements NfcPlatformWrapper {
             );
             return;
           }
-          completer.complete(card);
+          try {
+            final result = await action(card);
+            if (!completer.isCompleted) {
+              completer.complete(result);
+            }
+          } catch (e, st) {
+            if (!completer.isCompleted) {
+              completer.completeError(e, st);
+            }
+          }
         },
       );
-      final card = await completer.future.timeout(
+      return await completer.future.timeout(
         timeout,
         onTimeout: () => throw TimeoutException('NFC scan timed out', timeout),
       );
-      return NfcScanResult(card: card);
     } finally {
       try {
         await NfcManager.instance.stopSession();
@@ -93,6 +108,18 @@ class DefaultNfcPlatformWrapper implements NfcPlatformWrapper {
         // Session may already be closed; never leave callers hanging.
       }
     }
+  }
+
+  @override
+  Future<NfcScanResult> scan({
+    required Set<String> pollingOptions,
+    Duration timeout = const Duration(seconds: 20),
+  }) async {
+    return runWithCard<NfcScanResult>(
+      pollingOptions: pollingOptions,
+      timeout: timeout,
+      action: (card) async => NfcScanResult(card: card),
+    );
   }
 
   RawNfcCard? _toRawCard(NfcTag tag) {
@@ -241,32 +268,33 @@ class NfcService implements NfcServiceBase {
     String? expectedCardUid,
   }) async {
     try {
-      final result = await _platform.scan(
+      return await _platform.runWithCard<Either<Failure, EmoneyBalance>>(
         pollingOptions: const <String>{'iso14443'},
-      );
-      final card = result.card;
-      final uid = bytesToHex(card.uid);
+        action: (card) async {
+          final uid = bytesToHex(card.uid);
 
-      if (expectedCardUid != null &&
-          expectedCardUid.toLowerCase() != uid.toLowerCase()) {
-        return const Left(ServerFailure('Card UID mismatch'));
-      }
+          if (expectedCardUid != null &&
+              expectedCardUid.toLowerCase() != uid.toLowerCase()) {
+            return const Left(ServerFailure('Card UID mismatch'));
+          }
 
-      final profile = await _detectBrand(card);
-      if (profile == null) {
-        return const Left(
-          ServerFailure('Unrecognized or unsupported e-money card'),
-        );
-      }
+          final profile = await _detectBrand(card);
+          if (profile == null) {
+            return const Left(
+              ServerFailure('Unrecognized or unsupported e-money card'),
+            );
+          }
 
-      final balanceResponse = await _transceive(card, profile.balanceApdu);
-      return Right(
-        EmoneyBalance(
-          brand: profile.brand,
-          cardUid: uid,
-          balanceRupiah: parseBalanceBytes(balanceResponse),
-          recentTransactions: parseTransactions(balanceResponse),
-        ),
+          final balanceResponse = await _transceive(card, profile.balanceApdu);
+          return Right(
+            EmoneyBalance(
+              brand: profile.brand,
+              cardUid: uid,
+              balanceRupiah: parseBalanceBytes(balanceResponse, profile.brand),
+              recentTransactions: parseTransactions(balanceResponse),
+            ),
+          );
+        },
       );
     } on TimeoutException {
       return const Left(
@@ -292,20 +320,31 @@ class NfcService implements NfcServiceBase {
   /// issues a GET RESPONSE.
   Future<Uint8List> _transceive(RawNfcCard card, List<int> apdu) async {
     assertInsAllowed(apdu);
-    var response = await card.transceive(Uint8List.fromList(apdu));
+    var currentApdu = apdu;
+    var response = await card.transceive(Uint8List.fromList(currentApdu));
     var attempts = 0;
     while (response.length >= 2 && attempts < 3) {
       final sw1 = response[response.length - 2];
       final sw2 = response[response.length - 1];
-      if (sw1 == 0x6C && apdu.isNotEmpty) {
-        final corrected = List<int>.from(apdu);
-        corrected[corrected.length - 1] = sw2;
+      if (sw1 == 0x6C && currentApdu.isNotEmpty) {
+        final isCase1 = currentApdu.length == 4;
+        final isCase3 =
+            currentApdu.length > 4 && currentApdu.length == 5 + currentApdu[4];
+        final List<int> corrected;
+        if (isCase1 || isCase3) {
+          corrected = List<int>.from(currentApdu)..add(sw2);
+        } else {
+          corrected = List<int>.from(currentApdu);
+          corrected[corrected.length - 1] = sw2;
+        }
         assertInsAllowed(corrected);
-        response = await card.transceive(Uint8List.fromList(corrected));
+        currentApdu = corrected;
+        response = await card.transceive(Uint8List.fromList(currentApdu));
       } else if (sw1 == 0x61) {
         final getResponse = <int>[0x00, 0xC0, 0x00, 0x00, sw2];
         assertInsAllowed(getResponse);
-        response = await card.transceive(Uint8List.fromList(getResponse));
+        currentApdu = getResponse;
+        response = await card.transceive(Uint8List.fromList(currentApdu));
       } else {
         break;
       }
@@ -335,12 +374,20 @@ class NfcService implements NfcServiceBase {
     return sw1 == 0x61 || sw1 == 0x6C;
   }
 
-  /// Balance = first 4 data bytes, BIG-ENDIAN unsigned. The trailing SW1/SW2
-  /// are stripped first, so the offset is 0 into the data area.
+  /// Balance = first 4 data bytes. The trailing SW1/SW2 are stripped first,
+  /// so the offset is 0 into the data area.
+  /// BRI Brizzi / DESFire stores balance in Little-Endian order.
+  /// Other cards store balance in Big-Endian order.
   @visibleForTesting
-  static int parseBalanceBytes(Uint8List apduResponse) {
+  static int parseBalanceBytes(
+    Uint8List apduResponse, [
+    EmoneyCardBrand? brand,
+  ]) {
     final data = _dataArea(apduResponse);
     if (data.length < 4) return 0;
+    if (brand == EmoneyCardBrand.briBrizzi) {
+      return data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
+    }
     return (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
   }
 

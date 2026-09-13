@@ -1,4 +1,5 @@
 import 'package:flutter_ai_agent/common/constant.dart';
+import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/nfc_tag_prompt_binding.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
@@ -16,8 +17,15 @@ class SettingsCubit extends Cubit<SettingsState> {
   @factoryMethod
   factory SettingsCubit.create({
     required SecureStorageService secureStorageService,
+    NfcServiceBase? nfcService,
   }) =>
-      SettingsCubit(secureStorageService: secureStorageService);
+      SettingsCubit(
+        secureStorageService: secureStorageService,
+        nfcService: nfcService ??
+            (getIt.isRegistered<NfcServiceBase>()
+                ? getIt<NfcServiceBase>()
+                : null),
+      );
 
   SettingsCubit({
     required SecureStorageService secureStorageService,
@@ -201,27 +209,31 @@ class SettingsCubit extends Cubit<SettingsState> {
   Future<void> saveNfcPromptBindings(List<NfcTagPromptBinding> bindings) async {
     await _storageService.saveNfcPromptBindings(bindings);
     final current = state;
-    if (current is SettingsLoaded) {
-      emit(current.copyWith(nfcPromptBindings: bindings));
-    } else {
-      emit(SettingsLoaded(
-        baseUrl: current.baseUrl,
-        apiKey: current.apiKey,
-        model: current.model,
-        temperature: current.temperature,
-        progressiveToolPruning: current.progressiveToolPruning,
-        nfcPromptBindings: bindings,
-        nfcAvailable: _nfcService != null,
-      ));
-    }
+    emit(SettingsLoaded(
+      baseUrl: current.baseUrl,
+      apiKey: current.apiKey,
+      model: current.model,
+      temperature: current.temperature,
+      progressiveToolPruning: current.progressiveToolPruning,
+      nfcPromptBindings: bindings,
+      nfcAvailable: current is SettingsLoaded
+          ? current.nfcAvailable
+          : (_nfcService != null),
+    ));
   }
 
   /// Adds [binding], replacing any existing binding for the same card UID.
   Future<void> addNfcPromptBinding(NfcTagPromptBinding binding) async {
     final state = this.state;
-    final current = List<NfcTagPromptBinding>.from(
-      state is SettingsLoaded ? state.nfcPromptBindings : const [],
-    );
+    final List<NfcTagPromptBinding> existingBindings;
+    if (state is SettingsNfcScanResult) {
+      existingBindings = state.nfcPromptBindings;
+    } else if (state is SettingsLoaded) {
+      existingBindings = state.nfcPromptBindings;
+    } else {
+      existingBindings = const [];
+    }
+    final current = List<NfcTagPromptBinding>.from(existingBindings);
     final existing = current.indexWhere((b) => b.cardUid == binding.cardUid);
     if (existing >= 0) {
       current[existing] = binding;
@@ -234,7 +246,15 @@ class SettingsCubit extends Cubit<SettingsState> {
   /// Removes the binding for [cardUid], if any.
   Future<void> removeNfcPromptBinding(String cardUid) async {
     final state = this.state;
-    final current = (state is SettingsLoaded ? state.nfcPromptBindings : const <NfcTagPromptBinding>[])
+    final List<NfcTagPromptBinding> existingBindings;
+    if (state is SettingsNfcScanResult) {
+      existingBindings = state.nfcPromptBindings;
+    } else if (state is SettingsLoaded) {
+      existingBindings = state.nfcPromptBindings;
+    } else {
+      existingBindings = const [];
+    }
+    final current = existingBindings
         .where((b) => b.cardUid != cardUid)
         .toList();
     await saveNfcPromptBindings(current);
@@ -248,10 +268,49 @@ class SettingsCubit extends Cubit<SettingsState> {
       _emitNfcScanFailure('NFC service unavailable');
       return;
     }
+
+    final availableResult = await nfc.isAvailable();
+    final isAvailable = availableResult.getOrElse(() => false);
+    if (!isAvailable) {
+      final msg = availableResult.fold(
+        (failure) => failure.message,
+        (_) => 'NFC is not supported on this device',
+      );
+      _emitNfcScanFailure(msg);
+      return;
+    }
+
+    final enabledResult = await nfc.isEnabled();
+    final isEnabled = enabledResult.getOrElse(() => false);
+    if (!isEnabled) {
+      final msg = enabledResult.fold(
+        (failure) => failure.message,
+        (_) => 'NFC is disabled. Please enable it in system settings.',
+      );
+      _emitNfcScanFailure(msg);
+      return;
+    }
+
     final result = await nfc.readCardUid();
     result.fold(
       (failure) => _emitNfcScanFailure(failure.message),
-      (uid) => emit(SettingsNfcScanResult(uid: uid)),
+      (uid) {
+        final current = state;
+        emit(SettingsNfcScanResult(
+          uid: uid,
+          baseUrl: current.baseUrl,
+          apiKey: current.apiKey,
+          model: current.model,
+          temperature: current.temperature,
+          progressiveToolPruning: current.progressiveToolPruning,
+          nfcPromptBindings: current is SettingsLoaded
+              ? current.nfcPromptBindings
+              : const [],
+          nfcAvailable: current is SettingsLoaded
+              ? current.nfcAvailable
+              : true,
+        ));
+      },
     );
   }
 
