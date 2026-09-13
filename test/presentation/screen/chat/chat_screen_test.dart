@@ -1,10 +1,13 @@
 import 'dart:async';
 
+import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/battery_optimization_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
 import 'package:flutter_ai_agent/domain/models/chat/tool_call_request.dart';
@@ -659,6 +662,199 @@ void main() {
 
         expect(find.byType(PermissionRationaleModal), findsOneWidget);
         expect(find.text('Akses Lokasi'), findsWidgets);
+      });
+    });
+
+    group('Notification Listener Liveness & Banner', () {
+      late MockNotificationTriageService mockTriageService;
+      late MockBatteryOptimizationService mockBatteryService;
+
+      setUp(() {
+        mockTriageService = MockNotificationTriageService();
+        mockBatteryService = MockBatteryOptimizationService();
+
+        when(() => mockTriageService.checkPermission())
+            .thenAnswer((_) async => true);
+        when(() => mockTriageService.isListenerConnected())
+            .thenAnswer((_) async => true);
+        when(() => mockTriageService.requestRebind())
+            .thenAnswer((_) async => true);
+        when(() => mockTriageService.requestPermission())
+            .thenAnswer((_) async => true);
+
+        when(() => mockBatteryService.isBatteryOptimizationDisabled())
+            .thenAnswer((_) async => const Right(true));
+        when(() => mockBatteryService.requestDisableBatteryOptimization())
+            .thenAnswer((_) async => const Right(true));
+
+        if (!sl.isRegistered<NotificationTriageServiceBase>()) {
+          sl.registerLazySingleton<NotificationTriageServiceBase>(
+            () => mockTriageService,
+          );
+        }
+        if (!sl.isRegistered<BatteryOptimizationServiceBase>()) {
+          sl.registerLazySingleton<BatteryOptimizationServiceBase>(
+            () => mockBatteryService,
+          );
+        }
+      });
+
+      testWidgets(
+          'renders tool_result_rebind_button and tapping it calls requestRebind when content contains [listener_not_connected]',
+          (tester) async {
+        when(() => mockAgentCubit.state).thenReturn(
+          const AgentSuccess(
+            'Tool executed',
+            messages: [
+              ChatMessage(
+                role: 'tool',
+                name: 'read_recent_notifications',
+                content:
+                    'Error: [listener_not_connected] Notification listener service is disconnected',
+              ),
+            ],
+          ),
+        );
+        when(() => mockAgentCubit.messages).thenReturn([
+          const ChatMessage(
+            role: 'tool',
+            name: 'read_recent_notifications',
+            content:
+                'Error: [listener_not_connected] Notification listener service is disconnected',
+          ),
+        ]);
+
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pumpAndSettle();
+
+        final rebindBtnFinder =
+            find.byKey(const Key('tool_result_rebind_button'));
+        expect(rebindBtnFinder, findsOneWidget);
+        expect(find.text('Hubungkan Ulang Listener'), findsOneWidget);
+
+        await tester.tap(rebindBtnFinder);
+        await tester.pumpAndSettle();
+
+        verify(() => mockTriageService.requestRebind()).called(1);
+        expect(
+          find.text('Listener berhasil terhubung kembali.'),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets(
+          'renders notification_listener_warning_banner and tapping rebind button calls requestRebind when listener is not connected',
+          (tester) async {
+        when(() => mockTriageService.checkPermission())
+            .thenAnswer((_) async => true);
+        when(() => mockTriageService.isListenerConnected())
+            .thenAnswer((_) async => false);
+        when(() => mockTriageService.requestRebind())
+            .thenAnswer((_) async => true);
+
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pumpAndSettle();
+
+        final bannerFinder =
+            find.byKey(const Key('notification_listener_warning_banner'));
+        expect(bannerFinder, findsOneWidget);
+        expect(find.text('Layanan Notifikasi Terputus'), findsOneWidget);
+        expect(
+          find.text('Layanan listener tidak aktif di background.'),
+          findsOneWidget,
+        );
+
+        final bannerRebindBtn =
+            find.byKey(const Key('notification_listener_banner_rebind_button'));
+        expect(bannerRebindBtn, findsOneWidget);
+
+        await tester.tap(bannerRebindBtn);
+        await tester.pumpAndSettle();
+
+        verify(() => mockTriageService.requestRebind()).called(1);
+        expect(
+          find.text('Listener berhasil terhubung kembali.'),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('tapping dismiss button hides the notification warning banner',
+          (tester) async {
+        when(() => mockTriageService.checkPermission())
+            .thenAnswer((_) async => true);
+        when(() => mockTriageService.isListenerConnected())
+            .thenAnswer((_) async => false);
+
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pumpAndSettle();
+
+        final bannerFinder =
+            find.byKey(const Key('notification_listener_warning_banner'));
+        expect(bannerFinder, findsOneWidget);
+
+        final dismissBtn =
+            find.byKey(const Key('notification_listener_banner_dismiss_button'));
+        expect(dismissBtn, findsOneWidget);
+
+        await tester.tap(dismissBtn);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('notification_listener_warning_banner')),
+          findsNothing,
+        );
+      });
+
+      testWidgets(
+          'shows battery optimization button on warning banner when battery optimization is not exempt',
+          (tester) async {
+        when(() => mockTriageService.checkPermission())
+            .thenAnswer((_) async => true);
+        when(() => mockTriageService.isListenerConnected())
+            .thenAnswer((_) async => false);
+        when(() => mockBatteryService.isBatteryOptimizationDisabled())
+            .thenAnswer((_) async => const Right(false));
+        when(() => mockBatteryService.requestDisableBatteryOptimization())
+            .thenAnswer((_) async => const Right(true));
+
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pumpAndSettle();
+
+        final bannerFinder =
+            find.byKey(const Key('notification_listener_warning_banner'));
+        expect(bannerFinder, findsOneWidget);
+        expect(
+          find.text(
+            'Layanan listener dihentikan oleh sistem/optimasi baterai Android (MIUI).',
+          ),
+          findsOneWidget,
+        );
+
+        final batteryBtn = find
+            .byKey(const Key('notification_listener_banner_battery_button'));
+        expect(batteryBtn, findsOneWidget);
+
+        await tester.tap(batteryBtn);
+        await tester.pumpAndSettle();
+
+        verify(() => mockBatteryService.requestDisableBatteryOptimization())
+            .called(1);
+      });
+
+      testWidgets(
+          're-checks notification listener and battery state on app resumed lifecycle event',
+          (tester) async {
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pumpAndSettle();
+
+        clearInteractions(mockTriageService);
+        clearInteractions(mockBatteryService);
+
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        await tester.pumpAndSettle();
+
+        verify(() => mockTriageService.checkPermission()).called(1);
+        verify(() => mockBatteryService.isBatteryOptimizationDisabled()).called(1);
       });
     });
   });

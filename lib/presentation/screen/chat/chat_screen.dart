@@ -13,6 +13,7 @@ import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_mode.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/battery_optimization_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/file_workspace_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart';
@@ -75,12 +76,17 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _isComposing = false;
+
+  bool _notificationListenerPermissionGranted = false;
+  bool _notificationListenerConnected = true;
+  bool _batteryOptimizationExempt = true;
+  bool _notificationListenerWarningDismissed = false;
 
   VoiceInputServiceBase? _voiceService;
   VoiceOutputServiceBase? _voiceOutputService;
@@ -128,6 +134,10 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkNotificationListenerAndBatteryState();
+    });
     _mode = widget.initialMode;
     _textController.addListener(_onTextChanged);
 
@@ -334,7 +344,42 @@ class _ChatScreenState extends State<ChatScreen> {
     _textController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      _checkNotificationListenerAndBatteryState();
+    }
+  }
+
+  Future<void> _checkNotificationListenerAndBatteryState() async {
+    bool granted = _notificationListenerPermissionGranted;
+    bool connected = _notificationListenerConnected;
+    bool batteryExempt = _batteryOptimizationExempt;
+
+    if (sl.isRegistered<NotificationTriageServiceBase>()) {
+      final triage = sl<NotificationTriageServiceBase>();
+      granted = await triage.checkPermission();
+      if (granted) {
+        connected = await triage.isListenerConnected();
+      }
+    }
+    if (sl.isRegistered<BatteryOptimizationServiceBase>()) {
+      final battery = sl<BatteryOptimizationServiceBase>();
+      final res = await battery.isBatteryOptimizationDisabled();
+      batteryExempt = res.getOrElse(() => true);
+    }
+    if (mounted) {
+      setState(() {
+        _notificationListenerPermissionGranted = granted;
+        _notificationListenerConnected = connected;
+        _batteryOptimizationExempt = batteryExempt;
+      });
+    }
   }
 
   void _handleBackgroundAction(String action) {
@@ -1225,6 +1270,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 connectionColor: _indicatorColor,
                 onTapConnection: () => _showConnectionDetailsDialog(context),
               ),
+              if (_notificationListenerPermissionGranted &&
+                  !_notificationListenerConnected &&
+                  !_notificationListenerWarningDismissed)
+                _buildNotificationListenerWarningBanner(context),
               Expanded(
                 child: messages.isEmpty &&
                         state is AgentIdle &&
@@ -1858,12 +1907,142 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  Widget _buildNotificationListenerWarningBanner(BuildContext context) {
+    final subtitleText = !_batteryOptimizationExempt
+        ? 'Layanan listener dihentikan oleh sistem/optimasi baterai Android (MIUI).'
+        : 'Layanan listener tidak aktif di background.';
+
+    return Container(
+      key: const Key('notification_listener_warning_banner'),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: HermesColors.cardSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: HermesColors.amber, width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.notifications_paused_outlined,
+                color: HermesColors.amber,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Layanan Notifikasi Terputus',
+                      style: TextStyle(
+                        color: HermesColors.inkPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitleText,
+                      style: const TextStyle(
+                        color: HermesColors.inkSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                key: const Key('notification_listener_banner_rebind_button'),
+                icon: const Icon(Icons.refresh_outlined, size: 14),
+                label: const Text('Hubungkan Ulang'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: HermesColors.amber,
+                  side: const BorderSide(color: HermesColors.amber),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: () async {
+                  if (sl.isRegistered<NotificationTriageServiceBase>()) {
+                    final triage = sl<NotificationTriageServiceBase>();
+                    final success = await triage.requestRebind();
+                    if (!context.mounted) return;
+                    if (success) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content:
+                              Text('Listener berhasil terhubung kembali.'),
+                        ),
+                      );
+                      await _checkNotificationListenerAndBatteryState();
+                    } else {
+                      await triage.requestPermission();
+                    }
+                  }
+                },
+              ),
+              if (!_batteryOptimizationExempt) ...[
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  key: const Key(
+                    'notification_listener_banner_battery_button',
+                  ),
+                  icon: const Icon(Icons.battery_alert_outlined, size: 14),
+                  label: const Text('Optimasi Baterai'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: HermesColors.amber,
+                    side: const BorderSide(color: HermesColors.amber),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: () async {
+                    if (sl.isRegistered<BatteryOptimizationServiceBase>()) {
+                      await sl<BatteryOptimizationServiceBase>()
+                          .requestDisableBatteryOptimization();
+                    }
+                  },
+                ),
+              ],
+              const Spacer(),
+              IconButton(
+                key: const Key('notification_listener_banner_dismiss_button'),
+                icon: const Icon(Icons.close, size: 16),
+                color: HermesColors.inkSecondary,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () {
+                  setState(() {
+                    _notificationListenerWarningDismissed = true;
+                  });
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildToolResultCard(BuildContext context, ChatMessage message) {
     final theme = Theme.of(context);
     final name = message.name ?? 'Tool Result';
     final isPermissionIssue =
         (message.content ?? '').contains('Permission not granted') ||
             (message.content ?? '').contains('permission was denied');
+    final isListenerDisconnected =
+        (message.content ?? '').contains('listener_not_connected');
     final rationaleType = isPermissionIssue
         ? _resolvePermissionRationaleType(message.content ?? '')
         : null;
@@ -1885,6 +2064,7 @@ class _ChatScreenState extends State<ChatScreen> {
         data: theme.copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
           dense: true,
+          initiallyExpanded: isListenerDisconnected,
           leading: Icon(
             isPermissionIssue
                 ? Icons.security_outlined
@@ -1946,6 +2126,63 @@ class _ChatScreenState extends State<ChatScreen> {
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Color(0xFF00E5FF)),
                       foregroundColor: const Color(0xFF00E5FF),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            if (isListenerDisconnected)
+              Padding(
+                padding: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    key: const Key('tool_result_rebind_button'),
+                    onPressed: () async {
+                      if (sl.isRegistered<NotificationTriageServiceBase>()) {
+                        final triage = sl<NotificationTriageServiceBase>();
+                        final success = await triage.requestRebind();
+                        if (!context.mounted) return;
+                        final messenger = ScaffoldMessenger.of(context);
+                        if (success) {
+                          messenger.showSnackBar(
+                            const SnackBar(
+                              content:
+                                  Text('Listener berhasil terhubung kembali.'),
+                            ),
+                          );
+                          await _checkNotificationListenerAndBatteryState();
+                        } else {
+                          messenger.showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Membuka pengaturan akses notifikasi...',
+                              ),
+                            ),
+                          );
+                          await triage.requestPermission();
+                        }
+                      }
+                    },
+                    icon: const Icon(
+                      Icons.refresh_outlined,
+                      color: HermesColors.electricTeal,
+                      size: 16,
+                    ),
+                    label: const Text(
+                      'Hubungkan Ulang Listener',
+                      style: TextStyle(
+                        color: HermesColors.electricTeal,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: HermesColors.electricTeal),
+                      foregroundColor: HermesColors.electricTeal,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
