@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_ai_agent/domain/tools/pairing/pairing_parser.dart';
 import 'package:flutter_ai_agent/globals.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_routes.dart';
+import 'package:flutter_ai_agent/presentation/screen/action_center/action_center_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/chat_params.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/chat_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
@@ -117,6 +118,11 @@ final GoRouter appRouter = GoRouter(
           serverProfileCubit: params?.serverProfileCubit,
         );
       },
+    ),
+    GoRoute(
+      path: '/action-center',
+      name: AppRoutes.nrActionCenter,
+      builder: (context, state) => const ActionCenterScreen(),
     ),
   ],
 );
