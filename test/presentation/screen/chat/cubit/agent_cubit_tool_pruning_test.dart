@@ -304,6 +304,58 @@ void main() {
       expect(toolsPerCall[1], contains('tool_describe'));
     });
 
+    test('tool_describe with non-string tool_name does not crash the loop',
+        () async {
+      when(() => mockToolPruningService.prune(
+            prompt: any(named: 'prompt'),
+            fullToolDefinitions: any(named: 'fullToolDefinitions'),
+            enabled: any(named: 'enabled'),
+          )).thenAnswer((invocation) => invocation
+              .namedArguments[#fullToolDefinitions] as List<Map<String, dynamic>>);
+
+      when(() => mockLlmRepository.streamCompletion(
+            baseUrl: any(named: 'baseUrl'),
+            model: any(named: 'model'),
+            messages: any(named: 'messages'),
+            tools: any(named: 'tools'),
+            apiKey: any(named: 'apiKey'),
+            temperature: any(named: 'temperature'),
+          )).thenAnswer((invocation) async {
+        final messages =
+            invocation.namedArguments[#messages] as List<Map<String, dynamic>>;
+
+        final hasToolResult = messages.any((m) => m['role'] == 'tool');
+        if (!hasToolResult) {
+          return Right(Stream.fromIterable([
+            const ChatChunk(
+              toolCallDeltas: [
+                ToolCallDelta(
+                  index: 0,
+                  id: 'call_describe',
+                  name: 'tool_describe',
+                  argumentsFragment: '{"tool_name": 123}',
+                ),
+              ],
+              finishReason: 'tool_calls',
+            ),
+          ]));
+        }
+
+        return Right(Stream.fromIterable([
+          const ChatChunk(contentDelta: 'done', finishReason: 'stop'),
+        ]));
+      });
+
+      await cubit.sendMessage('describe tool 123');
+
+      expect(cubit.state, isA<AgentSuccess>());
+      expect(
+        cubit.messages
+            .any((m) => m.role == 'tool' && m.name == 'tool_describe'),
+        isTrue,
+      );
+    });
+
     test('discovered tools are not duplicated and are dropped on a fresh send',
         () async {
       registerCalendarTool();

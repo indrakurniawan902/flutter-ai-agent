@@ -439,8 +439,10 @@ class AgentCubit extends Cubit<AgentState> {
           }
         }
       } else if (toolName == 'tool_describe') {
-        final describedName = arguments['tool_name'] as String?;
-        if (describedName != null && describedName.isNotEmpty) {
+        final rawName = arguments['tool_name'];
+        final describedName =
+            rawName is String ? rawName : (rawName?.toString() ?? '');
+        if (describedName.isNotEmpty) {
           _discoveredToolNames.add(describedName);
         }
       }
