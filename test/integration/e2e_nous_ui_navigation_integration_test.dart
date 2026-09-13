@@ -127,11 +127,10 @@ void main() {
         // 2. Tab 0: ChatScreen Verification
         expect(find.byType(ChatScreen), findsOneWidget);
         expect(find.byType(HeaderConsoleBar), findsOneWidget);
-        expect(find.byType(GatewayStatusChip), findsOneWidget);
+        expect(find.byKey(const Key('gateway_status_chip')), findsOneWidget);
         expect(find.byType(PulsingDot), findsOneWidget);
-        expect(find.byType(AchievementTierBadge), findsOneWidget);
-        expect(find.textContaining('Running 8644'), findsOneWidget);
-        expect(find.textContaining('Olympian'), findsOneWidget);
+        expect(find.textContaining('Running 8644'), findsNothing);
+        expect(find.textContaining('Olympian'), findsNothing);
 
         // 3. Tab 0 -> Tab 1: Skills Hub
         await tester.tap(find.byKey(const Key('nav_item_skills')));

@@ -50,129 +50,78 @@ void main() {
     });
   });
 
-  group('GatewayStatusChip Widget', () {
-    testWidgets('renders pulsing dot and port running label by default', (tester) async {
-      await tester.pumpWidget(
-        createTestApp(
-          const GatewayStatusChip(
-            port: 8644,
-            isRunning: true,
-          ),
-        ),
-      );
-
-      expect(find.byKey(const Key('gateway_status_chip')), findsOneWidget);
-      expect(find.byType(PulsingDot), findsOneWidget);
-      expect(find.text('Running 8644'), findsOneWidget);
-    });
-
-    testWidgets('renders offline state when isRunning is false', (tester) async {
-      await tester.pumpWidget(
-        createTestApp(
-          const GatewayStatusChip(
-            port: 8644,
-            isRunning: false,
-          ),
-        ),
-      );
-
-      expect(find.text('Offline'), findsOneWidget);
-    });
-
-    testWidgets('renders custom label when provided', (tester) async {
-      await tester.pumpWidget(
-        createTestApp(
-          const GatewayStatusChip(
-            customLabel: '● Running 8644',
-          ),
-        ),
-      );
-
-      expect(find.text('● Running 8644'), findsOneWidget);
-    });
-
-    testWidgets('triggers onTap callback when tapped', (tester) async {
-      var tapped = false;
-      await tester.pumpWidget(
-        createTestApp(
-          GatewayStatusChip(
-            port: 8644,
-            onTap: () => tapped = true,
-          ),
-        ),
-      );
-
-      await tester.tap(find.byKey(const Key('gateway_status_chip')));
-      expect(tapped, isTrue);
-    });
-  });
-
-  group('AchievementTierBadge Widget', () {
-    testWidgets('renders lightning bolt icon and default tier progress', (tester) async {
-      await tester.pumpWidget(
-        createTestApp(
-          const AchievementTierBadge(
-            tier: 'Olympian',
-            progress: '47/60 Badges',
-          ),
-        ),
-      );
-
-      expect(find.byKey(const Key('achievement_tier_badge')), findsOneWidget);
-      expect(find.byIcon(Icons.bolt), findsOneWidget);
-      expect(find.text('Olympian • 47/60 Badges'), findsOneWidget);
-    });
-
-    testWidgets('renders custom label when provided', (tester) async {
-      await tester.pumpWidget(
-        createTestApp(
-          const AchievementTierBadge(
-            customLabel: '⚡ Olympian • 47/60 Badges',
-          ),
-        ),
-      );
-
-      expect(find.text('⚡ Olympian • 47/60 Badges'), findsOneWidget);
-    });
-
-    testWidgets('triggers onTap callback when tapped', (tester) async {
-      var tapped = false;
-      await tester.pumpWidget(
-        createTestApp(
-          AchievementTierBadge(
-            onTap: () => tapped = true,
-          ),
-        ),
-      );
-
-      await tester.tap(find.byKey(const Key('achievement_tier_badge')));
-      expect(tapped, isTrue);
-    });
-  });
-
-  group('HeaderConsoleBar Composite Widget', () {
-    testWidgets('renders both GatewayStatusChip and AchievementTierBadge in status bar', (tester) async {
+  group('HeaderConsoleBar connection pill', () {
+    testWidgets('gateway connected mode renders Connected pill in emerald',
+        (tester) async {
       await tester.pumpWidget(
         createTestApp(
           const HeaderConsoleBar(
-            port: 8644,
-            tier: 'Olympian',
-            badgeProgress: '47/60 Badges',
+            connectionLabel: 'Connected',
+            connectionColor: HermesColors.emerald,
           ),
         ),
       );
 
       expect(find.byKey(const Key('header_console_bar')), findsOneWidget);
       expect(find.byKey(const Key('gateway_status_chip')), findsOneWidget);
-      expect(find.byKey(const Key('achievement_tier_badge')), findsOneWidget);
-      expect(find.text('Running 8644'), findsOneWidget);
-      expect(find.text('Olympian • 47/60 Badges'), findsOneWidget);
+      expect(find.byType(PulsingDot), findsOneWidget);
+      expect(find.text('Connected'), findsOneWidget);
+      expect(find.text('Running 8644'), findsNothing);
     });
 
-    testWidgets('does not overflow on narrow mobile screens (320px)', (tester) async {
+    testWidgets('disconnected state renders Disconnected pill', (tester) async {
       await tester.pumpWidget(
         createTestApp(
-          const HeaderConsoleBar(),
+          const HeaderConsoleBar(
+            connectionLabel: 'Disconnected',
+            connectionColor: HermesColors.inkMuted,
+          ),
+        ),
+      );
+
+      expect(find.byKey(const Key('gateway_status_chip')), findsOneWidget);
+      expect(find.text('Disconnected'), findsOneWidget);
+      expect(find.text('Running 8644'), findsNothing);
+    });
+
+    testWidgets('direct mode renders Standalone pill and triggers tap',
+        (tester) async {
+      var tapped = false;
+      await tester.pumpWidget(
+        createTestApp(
+          HeaderConsoleBar(
+            connectionLabel: 'Standalone',
+            connectionColor: const Color(0xFF94A3B8),
+            onTapConnection: () => tapped = true,
+          ),
+        ),
+      );
+
+      expect(find.text('Standalone'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('gateway_status_chip')));
+      expect(tapped, isTrue);
+    });
+
+    testWidgets('null connectionLabel renders no fabricated status text',
+        (tester) async {
+      await tester.pumpWidget(createTestApp(const HeaderConsoleBar()));
+
+      expect(find.byKey(const Key('header_console_bar')), findsOneWidget);
+      expect(find.byKey(const Key('gateway_status_chip')), findsOneWidget);
+      expect(find.text('Running 8644'), findsNothing);
+      expect(find.text('Olympian'), findsNothing);
+      expect(find.text('Connected'), findsNothing);
+      expect(find.text('Standalone'), findsNothing);
+    });
+
+    testWidgets('does not overflow on narrow mobile screens (320px)',
+        (tester) async {
+      await tester.pumpWidget(
+        createTestApp(
+          const HeaderConsoleBar(
+            connectionLabel: 'Connected',
+            connectionColor: HermesColors.emerald,
+          ),
           size: const Size(320, 600),
         ),
       );
