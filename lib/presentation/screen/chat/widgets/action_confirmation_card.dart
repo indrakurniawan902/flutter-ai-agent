@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/utils/hermes_theme.dart';
-import 'package:flutter_ai_agent/domain/models/chat/generative_card_data.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/generative_card_data.dart';
 
 /// Generative Micro-UI card for user action confirmation, authorizations,
 /// and interactive CTA confirmations in chat stream.

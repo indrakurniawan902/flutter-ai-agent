@@ -1,33 +1,34 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_ai_agent/common/constant.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/nfc_tag_prompt_binding.dart';
 import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
-import 'package:flutter_ai_agent/domain/services/gateway/gateway_url.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_routes.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_state.dart';
+import 'package:flutter_ai_agent/presentation/screen/settings/settings_params.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 /// Screen for viewing and configuring LLM endpoint, credentials, and parameters.
 class SettingsScreen extends StatelessWidget {
   final SettingsCubit? cubit;
   final ServerProfileCubit? serverProfileCubit;
+  final VoidCallback? onAddProfile;
 
   const SettingsScreen({
     super.key,
     this.cubit,
     this.serverProfileCubit,
+    this.onAddProfile,
   });
 
   @override
   Widget build(BuildContext context) {
-    Widget view = const _SettingsView();
+    Widget view = _SettingsView(onAddProfile: onAddProfile);
 
     if (serverProfileCubit != null) {
       view = BlocProvider<ServerProfileCubit>.value(
@@ -82,7 +83,9 @@ class SettingsScreen extends StatelessWidget {
 }
 
 class _SettingsView extends StatefulWidget {
-  const _SettingsView();
+  final VoidCallback? onAddProfile;
+
+  const _SettingsView({this.onAddProfile});
 
   @override
   State<_SettingsView> createState() => _SettingsViewState();
@@ -176,16 +179,20 @@ class _SettingsViewState extends State<_SettingsView> {
     }
   }
 
-  Future<void> _showAddProfileDialog(BuildContext parentContext) async {
-    final cubit = parentContext.read<ServerProfileCubit>();
-    await showDialog<void>(
-      context: parentContext,
-      builder: (dialogContext) {
-        return BlocProvider.value(
-          value: cubit,
-          child: const _AddProfileDialog(),
-        );
-      },
+  Future<void> _openAddProfile(BuildContext parentContext) async {
+    if (widget.onAddProfile != null) {
+      widget.onAddProfile!();
+      return;
+    }
+    ServerProfileCubit? cubit;
+    try {
+      cubit = parentContext.read<ServerProfileCubit>();
+    } catch (_) {}
+    await parentContext.pushNamed(
+      AppRoutes.nrAddProfile,
+      extra: cubit == null
+          ? const SettingsParams()
+          : SettingsParams(serverProfileCubit: cubit),
     );
   }
 
@@ -629,7 +636,7 @@ class _SettingsViewState extends State<_SettingsView> {
                     ),
                     icon: const Icon(Icons.add, size: 16),
                     label: const Text('Add Profile'),
-                    onPressed: () => _showAddProfileDialog(context),
+                    onPressed: () => _openAddProfile(context),
                   ),
                 ],
               ),
@@ -1052,169 +1059,3 @@ class _NfcScanSheetState extends State<_NfcScanSheet> {
   }
 }
 
-class _AddProfileDialog extends StatefulWidget {
-  const _AddProfileDialog();
-
-  @override
-  State<_AddProfileDialog> createState() => _AddProfileDialogState();
-}
-
-class _AddProfileDialogState extends State<_AddProfileDialog> {
-  final _dialogFormKey = GlobalKey<FormState>();
-  late final TextEditingController _nameController;
-  late final TextEditingController _urlController;
-  late final TextEditingController _tokenController;
-  late final TextEditingController _modelController;
-  late final TextEditingController _temperatureController;
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController = TextEditingController();
-    _urlController = TextEditingController();
-    _tokenController = TextEditingController();
-    _modelController = TextEditingController(text: AppConstants.defaultModel);
-    _temperatureController = TextEditingController(
-      text: AppConstants.defaultTemperature.toString(),
-    );
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _urlController.dispose();
-    _tokenController.dispose();
-    _modelController.dispose();
-    _temperatureController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: const Color(0xFF1E293B),
-      title: const Text(
-        'Add Server Profile',
-        style: TextStyle(color: Colors.white),
-      ),
-      content: Form(
-        key: _dialogFormKey,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                key: const Key('add_profile_name_field'),
-                controller: _nameController,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Profile Name',
-                  hintText: 'VPS Oracle',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) =>
-                    (v?.trim().isEmpty ?? true) ? 'Name cannot be empty' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                key: const Key('add_profile_url_field'),
-                controller: _urlController,
-                keyboardType: TextInputType.url,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Gateway URL',
-                  hintText: 'wss://hermes.indra-developer.my.id/device/ws',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) {
-                  final val = v?.trim() ?? '';
-                  if (val.isEmpty) return 'URL cannot be empty';
-                  if (!isAcceptableGatewayUrl(val)) {
-                    return 'Enter a valid HTTP/HTTPS/WS/WSS URL';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                key: const Key('add_profile_token_field'),
-                controller: _tokenController,
-                obscureText: true,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Auth Token / API Key',
-                  hintText: 'sk-...',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) =>
-                    (v?.trim().isEmpty ?? true) ? 'Token cannot be empty' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                key: const Key('add_profile_model_field'),
-                controller: _modelController,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Model Name',
-                  hintText: 'ag-glm',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) =>
-                    (v?.trim().isEmpty ?? true) ? 'Model cannot be empty' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                key: const Key('add_profile_temperature_field'),
-                controller: _temperatureController,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Temperature',
-                  hintText: '0.7',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) {
-                  final d = double.tryParse(v?.trim() ?? '');
-                  if (d == null || d < 0.0 || d > 2.0) {
-                    return 'Temperature must be between 0.0 and 2.0';
-                  }
-                  return null;
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          key: const Key('add_profile_submit_button'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF008080),
-            foregroundColor: Colors.white,
-          ),
-          onPressed: () {
-            if (_dialogFormKey.currentState?.validate() ?? false) {
-              final temp =
-                  double.tryParse(_temperatureController.text.trim()) ?? 0.7;
-              context.read<ServerProfileCubit>().addProfile(
-                    name: _nameController.text.trim(),
-                    gatewayUrl: _urlController.text.trim(),
-                    token: _tokenController.text.trim(),
-                    makeActive: true,
-                    model: _modelController.text.trim(),
-                    temperature: temp.clamp(0.0, 2.0),
-                  );
-              Navigator.of(context).pop();
-            }
-          },
-          child: const Text('Save Profile'),
-        ),
-      ],
-    );
-  }
-}

@@ -50,16 +50,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Flames'), findsOneWidget);
-    expect(find.byKey(const Key('chat_settings_button')), findsOneWidget);
+    expect(find.byKey(const Key('nav_item_settings')), findsOneWidget);
   });
 
-  testWidgets('App navigates from Chat to SettingsScreen on settings button tap', (tester) async {
+  testWidgets('App switches to SettingsScreen via bottom nav settings item', (tester) async {
     await tester.pumpWidget(const MyApp());
     await tester.pump(const Duration(milliseconds: 2500));
     await tester.pumpAndSettle();
 
-    final settingsButton = find.byKey(const Key('chat_settings_button'));
-    await tester.tap(settingsButton);
+    final settingsNavItem = find.byKey(const Key('nav_item_settings'));
+    await tester.tap(settingsNavItem);
     await tester.pumpAndSettle();
 
     expect(find.text('LLM Settings'), findsOneWidget);

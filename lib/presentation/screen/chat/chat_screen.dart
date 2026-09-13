@@ -27,7 +27,7 @@ import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
 import 'package:flutter_ai_agent/domain/entities/gateway/gateway_connection_state.dart';
 import 'package:flutter_ai_agent/domain/entities/gateway/gateway_message.dart';
 import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
-import 'package:flutter_ai_agent/domain/models/share/shared_payload.dart';
+import 'package:flutter_ai_agent/domain/entities/share/shared_payload.dart';
 import 'package:flutter_ai_agent/presentation/screen/share/cubit/share_target_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/share/cubit/share_target_state.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
@@ -178,7 +178,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _mode = widget.initialMode;
     _textController.addListener(_onTextChanged);
 
-    WidgetsBinding.instance.addObserver(this);
     _permissionGate = widget.permissionGate ?? PermissionGate();
     if (_permissionGateCanRun) {
       unawaited(_refreshPermissionStatuses());
@@ -407,7 +406,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _textController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
-    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -1564,8 +1562,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 height: 0,
                 child: BlocBuilder<AgentCubit, AgentState>(
                   builder: (context, _) {
-                    final title =
-                        context.read<AgentCubit>().activeSessionTitle;
+                    String title = '';
+                    try {
+                      title = context.read<AgentCubit>().activeSessionTitle;
+                    } catch (_) {}
                     return Text('· $title');
                   },
                 ),
@@ -1816,18 +1816,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     tooltip: 'Stop Generation',
                     onPressed: () => _confirmStop(context),
                   );
-                },
-              ),
-              IconButton(
-                key: const Key('chat_settings_button'),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 26, minHeight: 32),
-                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
-                iconSize: 18,
-                icon: const Icon(Icons.settings),
-                tooltip: 'Settings',
-                onPressed: () {
-                  context.pushNamed(AppRoutes.nrSettings);
                 },
               ),
               const SizedBox(width: 4),

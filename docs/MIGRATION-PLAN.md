@@ -97,9 +97,9 @@ lib/
 | `lib/features/chat/data/tools/notification_service.dart` | `lib/data/tools/chat/notification_service.dart` | [DONE] |
 | `lib/features/chat/domain/agent_cubit.dart` | `—` | [DONE] re-export shim -> DELETE (update imports, no replacement path) |
 | `lib/features/chat/domain/agent_state.dart` | `—` | [DONE] re-export shim -> DELETE (update imports, no replacement path) |
-| `lib/features/chat/domain/models/action_step.dart` | `lib/domain/models/chat/action_step.dart` | [DONE] |
-| `lib/features/chat/domain/models/generative_card_data.dart` | `lib/domain/models/chat/generative_card_data.dart` | [DONE] |
-| `lib/features/chat/domain/models/tool_call_request.dart` | `lib/domain/models/chat/tool_call_request.dart` | [DONE] |
+| `lib/features/chat/domain/models/action_step.dart` | `lib/domain/entities/chat/action_step.dart` | [DONE] |
+| `lib/features/chat/domain/models/generative_card_data.dart` | `lib/domain/entities/chat/generative_card_data.dart` | [DONE] |
+| `lib/features/chat/domain/models/tool_call_request.dart` | `lib/domain/entities/chat/tool_call_request.dart` | [DONE] |
 | `lib/features/chat/domain/tools/security_policy.dart` | `lib/domain/tools/chat/security_policy.dart` | [DONE] |
 | `lib/features/chat/domain/tools/tool_registry.dart` | `lib/domain/tools/chat/tool_registry.dart` | [DONE] |
 | `lib/features/chat/presentation/cubits/agent_cubit.dart` | `lib/presentation/screen/chat/cubit/agent_cubit.dart` | [DONE] |
@@ -151,8 +151,8 @@ lib/
 | `test/features/chat/data/tools/device_context_service_test.dart` | `test/data/tools/chat/device_context_service_test.dart` | [DONE] |
 | `test/features/chat/data/tools/location_service_test.dart` | `test/data/tools/chat/location_service_test.dart` | [DONE] |
 | `test/features/chat/data/tools/notification_service_test.dart` | `test/data/tools/chat/notification_service_test.dart` | [DONE] |
-| `test/features/chat/domain/models/action_step_test.dart` | `test/domain/models/chat/action_step_test.dart` | [DONE] |
-| `test/features/chat/domain/models/generative_card_data_test.dart` | `test/domain/models/chat/generative_card_data_test.dart` | [DONE] |
+| `test/features/chat/domain/models/action_step_test.dart` | `test/domain/entities/chat/action_step_test.dart` | [DONE] |
+| `test/features/chat/domain/models/generative_card_data_test.dart` | `test/domain/entities/chat/generative_card_data_test.dart` | [DONE] |
 | `test/features/chat/domain/tools/tool_registry_test.dart` | `test/domain/tools/chat/tool_registry_test.dart` | [DONE] |
 | `test/features/chat/presentation/cubits/agent_cubit_test.dart` | `test/presentation/screen/chat/cubit/agent_cubit_test.dart` | [DONE] |
 | `test/features/chat/presentation/screens/chat_screen_test.dart` | `test/presentation/screen/chat/chat_screen_test.dart` | [DONE] |
