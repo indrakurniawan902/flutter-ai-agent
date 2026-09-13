@@ -15,4 +15,9 @@ abstract class CameraVisionServiceBase {
   Future<Either<Failure, String>> takePhoto({
     required CameraSource source,
   });
+
+  /// Recovers a capture lost to an Activity recreation (image_picker lost-data API).
+  /// Right(null) when there is nothing to recover; Right(base64) on recovered capture;
+  /// Left(CameraLostResultFailure) when recovery itself failed. Never throws.
+  Future<Either<Failure, String?>> recoverLostCapture();
 }
