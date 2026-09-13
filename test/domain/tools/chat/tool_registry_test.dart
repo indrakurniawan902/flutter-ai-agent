@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dartz/dartz.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/ambient_event.dart';
@@ -606,6 +608,8 @@ void main() {
           speed: any(named: 'speed'),
         ),
       ).thenAnswer((_) async => const Right(unit));
+      when(() => mockVoiceOutputService.lastEngineUsed)
+          .thenReturn(TtsEngine.androidTts);
 
       final result = await voiceRegistry.executeTool('speak_text', {
         'text': 'Halo dunia',
@@ -616,6 +620,9 @@ void main() {
       verify(
         () => mockVoiceOutputService.speakText('Halo dunia', voice: 'alloy'),
       ).called(1);
+      final json =
+          jsonDecode(result.getOrElse(() => '{}')) as Map<String, dynamic>;
+      expect(json['engine'], 'android_tts');
     });
 
     test('fails validation when text parameter is empty or missing', () async {

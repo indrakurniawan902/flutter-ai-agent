@@ -299,6 +299,9 @@ extension GetItInjectableX on _i174.GetIt {
         gh<_i348.SecureStorageService>(),
       ),
     );
+    gh.lazySingleton<_i45.PlatformTtsEngine>(
+      () => _i753.FlutterTtsPlatformEngine(),
+    );
     gh.lazySingletonAsync<_i474.ActionCenterRepository>(
       () async => _i634.ActionCenterRepositoryImpl(
         datasource: await getAsync<_i561.ActionCenterDatasource>(),
@@ -341,7 +344,10 @@ extension GetItInjectableX on _i174.GetIt {
       ),
     );
     gh.lazySingleton<_i45.VoiceOutputServiceBase>(
-      () => _i753.VoiceOutputService.create(gh<_i753.TtsClient>()),
+      () => _i753.VoiceOutputService.create(
+        gh<_i753.TtsClient>(),
+        gh<_i45.PlatformTtsEngine>(),
+      ),
     );
     gh.lazySingleton<_i806.GatewayRpcReceiverBase>(
       () => gatewayModule.provideGatewayRpcReceiver(
