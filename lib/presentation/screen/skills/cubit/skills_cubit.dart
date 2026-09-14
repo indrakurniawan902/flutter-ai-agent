@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:injectable/injectable.dart';
 
 import 'package:flutter_ai_agent/domain/entities/skills/skill.dart';
+import 'package:flutter_ai_agent/domain/services/skills/skill_import_service.dart';
 import 'package:flutter_ai_agent/domain/services/skills/skills_registry_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/skills/cubit/skills_state.dart';
 
@@ -9,11 +10,14 @@ import 'package:flutter_ai_agent/presentation/screen/skills/cubit/skills_state.d
 @injectable
 class SkillsCubit extends Cubit<SkillsState> {
   final SkillsRegistryService _skillsRegistryService;
+  final SkillImportService? _skillImportService;
 
   SkillsCubit({
     required SkillsRegistryService skillsRegistryService,
+    SkillImportService? skillImportService,
     @ignoreParam bool autoLoad = true,
   })  : _skillsRegistryService = skillsRegistryService,
+        _skillImportService = skillImportService,
         super(const SkillsInitial()) {
     if (autoLoad) {
       loadSkills();
@@ -24,6 +28,7 @@ class SkillsCubit extends Cubit<SkillsState> {
   Future<void> loadSkills() async {
     emit(const SkillsLoading());
     try {
+      await _skillsRegistryService.hydrateFromStorage();
       final all = _skillsRegistryService.getAllSkills();
       emit(SkillsLoaded(
         allSkills: all,
@@ -109,6 +114,102 @@ class SkillsCubit extends Cubit<SkillsState> {
   void registerSkill(Skill skill) {
     _skillsRegistryService.registerSkill(skill);
     loadSkills();
+  }
+
+  /// Fetches and security-scans the remote SKILL.md at [url],
+  /// then publishes a preview. Never registers anything.
+  Future<void> importSkillFromUrl(String url) async {
+    if (state is! SkillsLoaded) return;
+    final service = _skillImportService;
+    if (service == null) {
+      final current = state as SkillsLoaded;
+      emit(current.copyWith(
+        importBusy: false,
+        importError: 'Remote skill import is unavailable.',
+      ));
+      return;
+    }
+    final current = state as SkillsLoaded;
+    emit(SkillsLoaded(
+      allSkills: current.allSkills,
+      filteredSkills: current.filteredSkills,
+      selectedCategory: current.selectedCategory,
+      searchQuery: current.searchQuery,
+      activeCount: current.activeCount,
+      importBusy: true,
+    ));
+    final res = await service.buildPreview(url);
+    if (state is! SkillsLoaded) return;
+    final latest = state as SkillsLoaded;
+    res.fold(
+      (f) => emit(latest.copyWith(
+        importBusy: false,
+        importError: f.message,
+      )),
+      (preview) => emit(SkillsLoaded(
+        allSkills: latest.allSkills,
+        filteredSkills: latest.filteredSkills,
+        selectedCategory: latest.selectedCategory,
+        searchQuery: latest.searchQuery,
+        activeCount: latest.activeCount,
+        importBusy: false,
+        importPreview: preview,
+      )),
+    );
+  }
+
+  /// Registers the pending preview when it is safe; clears pending state.
+  /// Returns the registered skill, or null when nothing was registered.
+  Future<Skill?> confirmSkillImport() async {
+    if (state is! SkillsLoaded) return null;
+    final current = state as SkillsLoaded;
+    final preview = current.importPreview;
+    if (preview == null) return null;
+    final service = _skillImportService;
+    if (service == null) {
+      emit(current.copyWith(
+        importBusy: false,
+        importError: 'Remote skill import is unavailable.',
+      ));
+      return null;
+    }
+    if (!preview.canImport) {
+      emit(current.copyWith(
+        importBusy: false,
+        importError: preview.scan.rejectionReason ??
+            'Skill rejected by security scan',
+      ));
+      return null;
+    }
+    final res = await service.confirmImport(preview);
+    Skill? ok;
+    res.fold(
+      (f) {
+        if (state is! SkillsLoaded) return;
+        final latest = state as SkillsLoaded;
+        emit(latest.copyWith(
+          importBusy: false,
+          importError: f.message,
+        ));
+      },
+      (skill) => ok = skill,
+    );
+    if (ok == null) return null;
+    await loadSkills();
+    return ok;
+  }
+
+  /// Drops the pending preview / error without registering.
+  void clearSkillImport() {
+    if (state is! SkillsLoaded) return;
+    final current = state as SkillsLoaded;
+    emit(SkillsLoaded(
+      allSkills: current.allSkills,
+      filteredSkills: current.filteredSkills,
+      selectedCategory: current.selectedCategory,
+      searchQuery: current.searchQuery,
+      activeCount: current.activeCount,
+    ));
   }
 
   List<Skill> _filter(

@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 
 import 'package:flutter_ai_agent/domain/entities/skills/skill.dart';
+import 'package:flutter_ai_agent/domain/entities/skills/skill_import_preview.dart';
 
 abstract class SkillsState extends Equatable {
   const SkillsState();
@@ -23,6 +24,9 @@ class SkillsLoaded extends SkillsState {
   final String selectedCategory;
   final String searchQuery;
   final int activeCount;
+  final bool importBusy;
+  final SkillImportPreview? importPreview;
+  final String? importError;
 
   const SkillsLoaded({
     required this.allSkills,
@@ -30,6 +34,9 @@ class SkillsLoaded extends SkillsState {
     this.selectedCategory = 'all',
     this.searchQuery = '',
     required this.activeCount,
+    this.importBusy = false,
+    this.importPreview,
+    this.importError,
   });
 
   SkillsLoaded copyWith({
@@ -38,6 +45,10 @@ class SkillsLoaded extends SkillsState {
     String? selectedCategory,
     String? searchQuery,
     int? activeCount,
+    bool? importBusy,
+    bool clearImportPreview = false,
+    SkillImportPreview? importPreview,
+    String? importError,
   }) {
     return SkillsLoaded(
       allSkills: allSkills ?? this.allSkills,
@@ -45,6 +56,10 @@ class SkillsLoaded extends SkillsState {
       selectedCategory: selectedCategory ?? this.selectedCategory,
       searchQuery: searchQuery ?? this.searchQuery,
       activeCount: activeCount ?? this.activeCount,
+      importBusy: importBusy ?? this.importBusy,
+      importPreview:
+          clearImportPreview ? null : (importPreview ?? this.importPreview),
+      importError: importError ?? this.importError,
     );
   }
 
@@ -55,6 +70,9 @@ class SkillsLoaded extends SkillsState {
         selectedCategory,
         searchQuery,
         activeCount,
+        importBusy,
+        importPreview,
+        importError,
       ];
 }
 

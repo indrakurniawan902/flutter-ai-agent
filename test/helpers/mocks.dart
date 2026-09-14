@@ -41,6 +41,9 @@ import 'package:flutter_ai_agent/domain/tools/chat/url_reader_service.dart';
 import 'package:flutter_ai_agent/data/datasources/remote/gateway/gateway_socket.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_rpc_receiver.dart';
+import 'package:flutter_ai_agent/domain/services/skills/skill_import_service.dart';
+import 'package:flutter_ai_agent/domain/services/skills/skill_remote_loader.dart';
+import 'package:flutter_ai_agent/domain/services/skills/skills_local_datasource.dart';
 import 'package:flutter_ai_agent/domain/services/tools/tool_pruning_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_rpc_cubit.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -200,5 +203,13 @@ class MockToolPruningService extends Mock implements ToolPruningService {}
 
 // URL Reader
 class MockUrlReaderService extends Mock implements UrlReaderServiceBase {}
+
+// Skills import
+class MockSkillImportService extends Mock implements SkillImportService {}
+
+class MockSkillRemoteLoader extends Mock implements SkillRemoteLoaderBase {}
+
+class MockSkillsLocalDatasource extends Mock
+    implements SkillsLocalDatasourceBase {}
 
 
