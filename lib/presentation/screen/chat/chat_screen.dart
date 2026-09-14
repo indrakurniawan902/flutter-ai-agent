@@ -120,6 +120,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   StreamSubscription<ShareTargetState>? _shareTargetSub;
   String _streamingGatewayDelta = '';
   bool _gatewayBusy = false;
+
+  /// Display-only telemetry for the current gateway turn: server-side
+  /// `tool_event` lifecycle frames rendered as tool cards. Never consumed as a
+  /// command and never replied to.
+  final List<GatewayToolEventMessage> _gatewayToolEvents = [];
   final List<String> _openElicitationSheets = [];
   GatewayRpcCubit? _rpcCubit;
   GatewayLinkCubit? _linkCubit;
@@ -297,6 +302,23 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           setState(() {
             _streamingGatewayDelta = '';
             if (_gatewayBusy) _gatewayBusy = false;
+            // The assistant's final message closes the turn: settle any tool
+            // event still spinning so no card can outlive the answer. The
+            // entries stay visible, only their phase flips to completed.
+            if (message.role == 'assistant') {
+              for (var i = 0; i < _gatewayToolEvents.length; i++) {
+                final event = _gatewayToolEvents[i];
+                if (event.phase == 'running') {
+                  _gatewayToolEvents[i] = GatewayToolEventMessage(
+                    phase: 'completed',
+                    tool: event.tool,
+                    label: event.label,
+                    toolCallId: event.toolCallId,
+                    sessionId: event.sessionId,
+                  );
+                }
+              }
+            }
           });
           _agentCubit?.addMessage(
             ChatMessage(
@@ -304,6 +326,24 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               content: message.content,
             ),
           );
+          _scrollToBottom();
+        } else if (message is GatewayToolEventMessage) {
+          setState(() {
+            if (message.phase == 'completed' && message.toolCallId.isNotEmpty) {
+              // A completed frame settles the matching running spinner.
+              _gatewayToolEvents.removeWhere(
+                (event) =>
+                    event.phase == 'running' &&
+                    event.toolCallId == message.toolCallId,
+              );
+            }
+            _gatewayToolEvents.add(message);
+            // Cap the list so a long server-side tool loop cannot grow it
+            // without bound.
+            if (_gatewayToolEvents.length > 20) {
+              _gatewayToolEvents.removeRange(0, _gatewayToolEvents.length - 20);
+            }
+          });
           _scrollToBottom();
         } else if (message is GatewayErrorMessage) {
           setState(() {
@@ -1462,6 +1502,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       }
       final client = _resolveGatewayClient();
       if (client != null && client.state.isConnected) {
+        // A new turn starts with an empty tool list.
+        setState(() => _gatewayToolEvents.clear());
         client.sendChatMessage(prompt);
         if (mounted) {
           setState(() => _gatewayBusy = true);
@@ -1582,7 +1624,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               Expanded(
                 child: messages.isEmpty &&
                         state is AgentIdle &&
-                        _streamingGatewayDelta.isEmpty
+                        _streamingGatewayDelta.isEmpty &&
+                        _gatewayToolEvents.isEmpty
                     ? _buildEmptyState(context)
                     : _buildMessageList(context, messages, state),
               ),
@@ -1898,6 +1941,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _buildStreamingBubble(context, state.partialText),
       if (isGatewayStreaming)
         _buildStreamingBubble(context, _streamingGatewayDelta),
+      if (_mode == ChatMode.gateway)
+        for (var i = 0; i < _gatewayToolEvents.length; i++)
+          _buildGatewayToolEventCard(context, _gatewayToolEvents[i], i),
       if (state is ExecutingTool)
         _buildExecutingToolCard(context, state.toolName, state.arguments),
     ];
@@ -2245,6 +2291,29 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Renders a gateway `tool_event` frame by reusing the standalone-mode tool
+  /// cards. Server-side tool arguments are not on the wire, so the
+  /// server-provided [GatewayToolEventMessage.label] preview occupies the card
+  /// body that arguments normally fill.
+  Widget _buildGatewayToolEventCard(
+    BuildContext context,
+    GatewayToolEventMessage event,
+    int index,
+  ) {
+    if (event.phase == 'running') {
+      return _buildExecutingToolCard(context, event.tool, const {});
+    }
+    return _buildToolCallCard(
+      context,
+      ToolCallDelta(
+        index: index,
+        id: event.toolCallId.isEmpty ? null : event.toolCallId,
+        name: event.tool,
+        argumentsFragment: event.label,
       ),
     );
   }
