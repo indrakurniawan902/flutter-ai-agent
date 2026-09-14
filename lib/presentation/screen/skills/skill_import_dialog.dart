@@ -197,7 +197,7 @@ class _SkillImportDialogBodyState extends State<_SkillImportDialogBody> {
                       )
                     else
                       Container(
-                        key: const Key('skill_import_scan_verdict'),
+                        key: const Key('skill_import_scan_verdict_icon'),
                         child: Text(
                           'SECURITY SCAN: REJECTED - '
                           '${preview.scan.rejectionReason ?? 'Skill rejected by security scan'}',
@@ -227,7 +227,7 @@ class _SkillImportDialogBodyState extends State<_SkillImportDialogBody> {
                           child: const Text('Import'),
                         ),
                         TextButton(
-                          key: const Key('skill_import_cancel_button'),
+                          key: const Key('skill_import_preview_cancel_button'),
                           onPressed: () {
                             widget.cubit.clearSkillImport();
                             Navigator.of(context).pop();

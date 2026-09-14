@@ -14,12 +14,14 @@ import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 class SkillsRegistryService {
   final Map<String, Skill> _skills = {};
   final SkillsLocalDatasourceBase? _localDatasource;
+  final void Function(Object error, StackTrace stack)? _onStorageError;
   bool _hydrated = false;
 
   SkillsRegistryService({
     @ignoreParam bool loadDefaults = true,
     SkillsLocalDatasourceBase? localDatasource,
-  }) : _localDatasource = localDatasource {
+    @ignoreParam void Function(Object error, StackTrace stack)? onStorageError,
+  }) : _localDatasource = localDatasource, _onStorageError = onStorageError {
     if (loadDefaults) {
       _initializeBundledSkills();
     }
@@ -121,6 +123,9 @@ class SkillsRegistryService {
   /// Loads persisted imported skills + enabled overrides once. Idempotent
   /// and failure-tolerant: returns false when storage is unavailable,
   /// never throws.
+  ///
+  /// Re-entrancy: concurrent callers share one hydration; a failed
+  /// hydration may be retried.
   Future<bool> hydrateFromStorage() async {
     final datasource = _localDatasource;
     if (datasource == null) {
@@ -129,6 +134,7 @@ class SkillsRegistryService {
     if (_hydrated) {
       return true;
     }
+    _hydrated = true;
     try {
       final imported = await datasource.loadImportedSkills();
       for (final skill in imported) {
@@ -142,9 +148,10 @@ class SkillsRegistryService {
               existing.copyWith(isEnabled: entry.value);
         }
       }
-      _hydrated = true;
       return true;
-    } catch (_) {
+    } catch (error, stack) {
+      _hydrated = false;
+      _onStorageError?.call(error, stack);
       return false;
     }
   }
@@ -183,7 +190,9 @@ class SkillsRegistryService {
         sourceUrl: sourceUrl,
       );
       await datasource.saveSkillState(stored.id, stored.isEnabled);
-    } catch (_) {}
+    } catch (error, stack) {
+      _onStorageError?.call(error, stack);
+    }
   }
 
   /// Parses and registers a skill directly from a YAML/Markdown string.
@@ -229,13 +238,17 @@ class SkillsRegistryService {
   Future<void> _persistSkillState(String id, bool isEnabled) async {
     try {
       await _localDatasource?.saveSkillState(id, isEnabled);
-    } catch (_) {}
+    } catch (error, stack) {
+      _onStorageError?.call(error, stack);
+    }
   }
 
   Future<void> _deletePersisted(String id) async {
     try {
       await _localDatasource?.deleteImportedSkill(id);
-    } catch (_) {}
+    } catch (error, stack) {
+      _onStorageError?.call(error, stack);
+    }
   }
 
   /// Checks if a skill is enabled.

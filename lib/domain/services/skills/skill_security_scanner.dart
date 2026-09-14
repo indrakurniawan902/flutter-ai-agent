@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:injectable/injectable.dart';
 
 import 'package:flutter_ai_agent/domain/entities/skills/skill.dart';
@@ -21,6 +23,7 @@ class SkillSecurityScanner {
   static const String patternHiddenHtmlInstructions =
       'hidden_html_instructions';
   static const String patternBase64Blob = 'base64_blob';
+  static const String patternBase64EncodedPayload = 'base64_encoded_payload';
 
   static final RegExp _formatCharacters = RegExp(
     '[\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]',
@@ -29,6 +32,7 @@ class SkillSecurityScanner {
     r'(?<!\w)[*_~`]+|[*_~`]+(?!\w)',
   );
   static final RegExp _whitespaceRuns = RegExp(r'\s+');
+  static final RegExp _base64Candidate = RegExp(r'[A-Za-z0-9+/]{40,}={0,2}');
 
   static final List<_ScanPattern> _patterns = [
     _ScanPattern(
@@ -159,6 +163,10 @@ class SkillSecurityScanner {
         );
       }
     }
+    final encodedFinding = _scanBase64Payloads(surface);
+    if (encodedFinding != null) {
+      findings.add(encodedFinding);
+    }
     final unknownTools = <String>[];
     for (final name in skill.tools) {
       if (!registeredToolNames.contains(name) && !unknownTools.contains(name)) {
@@ -167,6 +175,59 @@ class SkillSecurityScanner {
     }
     return SkillScanResult(findings: findings, unknownTools: unknownTools);
   }
+
+  /// Decodes base64-looking runs from [haystack] and reports at most one
+  /// critical finding when a decoded payload matches an injection pattern.
+  ///
+  /// Candidates come from the case-preserving [haystack] rather than the
+  /// normalised surface: normalisation lowercases, which would corrupt the
+  /// base64 alphabet before decoding.
+  static SkillScanFinding? _scanBase64Payloads(String haystack) {
+    for (final candidate in _base64Candidate.allMatches(haystack)) {
+      final decoded = _decodeBase64Text(candidate.group(0)!);
+      if (decoded == null) {
+        continue;
+      }
+      final decodedText = _normalise(decoded);
+      for (final pattern in _patterns) {
+        if (!pattern.regexp.hasMatch(decodedText)) {
+          continue;
+        }
+        return SkillScanFinding(
+          patternId: patternBase64EncodedPayload,
+          description: 'Contains a base64-encoded instruction payload',
+          severity: SkillScanSeverity.critical,
+          excerpt: decodedText.length > 120
+              ? decodedText.substring(0, 120)
+              : decodedText,
+        );
+      }
+    }
+    return null;
+  }
+
+  static String? _decodeBase64Text(String candidate) {
+    final stripped = candidate.replaceAll(_whitespaceRuns, '');
+    final remainder = stripped.length % 4;
+    final padded = remainder == 0
+        ? stripped
+        : stripped.padRight(stripped.length + (4 - remainder), '=');
+    try {
+      final bytes = base64Decode(padded);
+      if (bytes.length < 8 || !bytes.every(_isPrintableByte)) {
+        return null;
+      }
+      return String.fromCharCodes(bytes);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static bool _isPrintableByte(int byte) =>
+      byte == 0x09 ||
+      byte == 0x0a ||
+      byte == 0x0d ||
+      (byte >= 0x20 && byte <= 0x7e);
 
   /// Returns [skill] with the import policy applied: a Tier 3 (HITL)
   /// skill can never be enabled by an import, and every imported skill
