@@ -223,7 +223,7 @@ void main() {
   group('SecureStorageService - Server Profiles CRUD', () {
     final profile1 = ServerProfile(
       id: 'profile-1',
-      name: 'VPS Oracle',
+      name: 'Remote Node',
       gatewayUrl: 'https://example.com/v1',
       token: 'sk-token-1',
       isActive: true,
@@ -282,7 +282,7 @@ void main() {
 
       verify(() => mockStorage.write(
             key: SecureStorageService.keyServerProfiles,
-            value: any(that: contains('VPS Oracle'), named: 'value'),
+            value: any(that: contains('Remote Node'), named: 'value'),
           )).called(1);
     });
 
@@ -348,7 +348,7 @@ void main() {
             value: any(named: 'value'),
           )).thenAnswer((_) async {});
 
-      final updated = profile1.copyWith(name: 'Renamed VPS');
+      final updated = profile1.copyWith(name: 'Renamed Node');
       await service.saveServerProfile(updated);
 
       final captured = verify(() => mockStorage.write(
@@ -361,7 +361,7 @@ void main() {
           .toList();
 
       expect(savedList.length, 1);
-      expect(savedList.first.name, 'Renamed VPS');
+      expect(savedList.first.name, 'Renamed Node');
     });
 
     test('deleteServerProfile removes profile by id', () async {

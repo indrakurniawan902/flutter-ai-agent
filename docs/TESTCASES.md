@@ -3,7 +3,6 @@
 **Document:** `docs/TESTCASES.md`  
 **Project:** Flutter AI Agent (Personal Action-Oriented Mobile Agent)  
 **Author:** PM Bot (`default`)  
-**Stakeholder:** Eryushin (Indra)  
 **Architecture:** Cubit + Clean Architecture (`presentation → domain ← data`)  
 **Standard:** Positive & Negative Scenarios with Observable Verification Criteria
 

@@ -9,7 +9,7 @@ void main() {
   final tPairingPayload = PairingPayload(
     gatewayUrl: 'https://gateway.example.com',
     token: 'secret_token_123',
-    profileName: 'VPS Oracle',
+    profileName: 'Remote Node',
     timestamp: testTimestamp,
     expiresAt: testExpiresAt,
   );
@@ -17,7 +17,7 @@ void main() {
   final tPairingPayloadModel = PairingPayloadModel(
     gatewayUrl: 'https://gateway.example.com',
     token: 'secret_token_123',
-    profileName: 'VPS Oracle',
+    profileName: 'Remote Node',
     timestamp: testTimestamp,
     expiresAt: testExpiresAt,
   );
@@ -39,7 +39,7 @@ void main() {
         final jsonMap = {
           'gatewayUrl': 'https://gateway.example.com',
           'token': 'secret_token_123',
-          'profileName': 'VPS Oracle',
+          'profileName': 'Remote Node',
           'timestamp': '2026-09-11T08:00:00.000Z',
           'expiresAt': '2026-09-11T08:15:00.000Z',
         };
@@ -53,7 +53,7 @@ void main() {
         final jsonMap = {
           'gateway_url': 'https://gateway.example.com',
           'token': 'secret_token_123',
-          'profile_name': 'VPS Oracle',
+          'profile_name': 'Remote Node',
           'timestamp': testTimestamp.millisecondsSinceEpoch,
           'expires_at': testExpiresAt.millisecondsSinceEpoch,
         };
@@ -99,7 +99,7 @@ void main() {
         final expectedMap = {
           'gatewayUrl': 'https://gateway.example.com',
           'token': 'secret_token_123',
-          'profileName': 'VPS Oracle',
+          'profileName': 'Remote Node',
           'timestamp': testTimestamp.toIso8601String(),
           'expiresAt': testExpiresAt.toIso8601String(),
         };

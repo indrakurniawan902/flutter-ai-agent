@@ -495,7 +495,7 @@ void main() {
       act: (cubit) => cubit.updateFromProfile(
         const ServerProfile(
           id: 'p1',
-          name: 'VPS Oracle',
+          name: 'Remote Node',
           gatewayUrl: 'https://profile-url.com/v1',
           token: 'sk-profile-token',
           model: 'profile-model',

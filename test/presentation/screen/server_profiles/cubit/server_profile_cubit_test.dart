@@ -14,7 +14,7 @@ void main() {
 
   final profile1 = ServerProfile(
     id: 'profile-1',
-    name: 'VPS Oracle',
+    name: 'Remote Node',
     gatewayUrl: 'https://example.com/v1',
     token: 'sk-token-1',
     isActive: true,
@@ -182,7 +182,7 @@ void main() {
       },
       act: (cubit) async {
         await cubit.addProfile(
-          name: 'VPS Oracle',
+          name: 'Remote Node',
           gatewayUrl: 'https://example.com/v1',
           token: 'sk-token-1',
         );

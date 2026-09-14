@@ -18,7 +18,7 @@ void main() {
         final rawJson = jsonEncode({
           'gatewayUrl': 'https://vps.example.com:18789',
           'token': 'secret-token-abc',
-          'profileName': 'VPS Oracle Hermes',
+          'profileName': 'Remote Node Hermes',
           'timestamp': '2026-09-11T08:05:00.000Z',
         });
 
@@ -30,7 +30,7 @@ void main() {
           (payload) {
             expect(payload.gatewayUrl, 'https://vps.example.com:18789');
             expect(payload.token, 'secret-token-abc');
-            expect(payload.profileName, 'VPS Oracle Hermes');
+            expect(payload.profileName, 'Remote Node Hermes');
             expect(
               payload.timestamp,
               DateTime.parse('2026-09-11T08:05:00.000Z'),
@@ -120,7 +120,7 @@ void main() {
       test('returns ParseFailure when gatewayUrl is missing', () {
         final json = jsonEncode({
           'token': 'secret-token-abc',
-          'profileName': 'VPS',
+          'profileName': 'Remote Node',
           'timestamp': testNow.toIso8601String(),
         });
 
@@ -140,7 +140,7 @@ void main() {
         final json = jsonEncode({
           'gatewayUrl': 'not_a_valid_url',
           'token': 'secret-token-abc',
-          'profileName': 'VPS',
+          'profileName': 'Remote Node',
           'timestamp': testNow.toIso8601String(),
         });
 
@@ -160,7 +160,7 @@ void main() {
         final json = jsonEncode({
           'gatewayUrl': 'https://gateway.example.com',
           'token': '   ',
-          'profileName': 'VPS',
+          'profileName': 'Remote Node',
           'timestamp': testNow.toIso8601String(),
         });
 
@@ -203,7 +203,7 @@ void main() {
         final json = jsonEncode({
           'gatewayUrl': 'https://gateway.example.com',
           'token': 'expired-token',
-          'profileName': 'VPS',
+          'profileName': 'Remote Node',
           'timestamp': oldTimestamp.toIso8601String(),
         });
 
@@ -223,7 +223,7 @@ void main() {
         final json = jsonEncode({
           'gatewayUrl': 'https://gateway.example.com',
           'token': 'expired-token',
-          'profileName': 'VPS',
+          'profileName': 'Remote Node',
           'timestamp': testNow.subtract(const Duration(minutes: 5)).toIso8601String(),
           'expiresAt': testNow.subtract(const Duration(seconds: 10)).toIso8601String(),
         });
@@ -245,7 +245,7 @@ void main() {
         final json = jsonEncode({
           'gatewayUrl': 'https://gateway.example.com',
           'token': 'expired-token',
-          'profileName': 'VPS',
+          'profileName': 'Remote Node',
           'timestamp': oldTimestamp.toIso8601String(),
         });
 
