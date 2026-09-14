@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:injectable/injectable.dart';
 import 'package:yaml/yaml.dart';
 
 import 'package:flutter_ai_agent/domain/entities/skills/doc_builder_skill_descriptor.dart';
 import 'package:flutter_ai_agent/domain/entities/skills/skill.dart';
+import 'package:flutter_ai_agent/domain/services/skills/skills_local_datasource.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 
 /// Manages registration, parsing, lifecycle, prompt injection, and tool registry sync
@@ -10,8 +13,13 @@ import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 @lazySingleton
 class SkillsRegistryService {
   final Map<String, Skill> _skills = {};
+  final SkillsLocalDatasourceBase? _localDatasource;
+  bool _hydrated = false;
 
-  SkillsRegistryService({@ignoreParam bool loadDefaults = true}) {
+  SkillsRegistryService({
+    @ignoreParam bool loadDefaults = true,
+    SkillsLocalDatasourceBase? localDatasource,
+  }) : _localDatasource = localDatasource {
     if (loadDefaults) {
       _initializeBundledSkills();
     }
@@ -110,6 +118,57 @@ class SkillsRegistryService {
     _skills[skill.id] = skill;
   }
 
+  /// Loads persisted imported skills + enabled overrides once. Idempotent
+  /// and failure-tolerant: returns false when storage is unavailable,
+  /// never throws.
+  Future<bool> hydrateFromStorage() async {
+    final datasource = _localDatasource;
+    if (datasource == null) {
+      return false;
+    }
+    if (_hydrated) {
+      return true;
+    }
+    try {
+      final imported = await datasource.loadImportedSkills();
+      for (final skill in imported) {
+        registerSkill(skill);
+      }
+      final states = await datasource.loadSkillStates();
+      for (final entry in states.entries) {
+        final existing = _skills[entry.key];
+        if (existing != null) {
+          _skills[entry.key] =
+              existing.copyWith(isEnabled: entry.value);
+        }
+      }
+      _hydrated = true;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Registers an imported community skill and persists it so it survives
+  /// a restart.
+  Future<void> registerImportedSkill(
+    Skill skill, {
+    String? sourceUrl,
+  }) async {
+    registerSkill(skill);
+    final datasource = _localDatasource;
+    if (datasource == null) {
+      return;
+    }
+    try {
+      await datasource.saveImportedSkill(
+        skill,
+        sourceUrl: sourceUrl,
+      );
+      await datasource.saveSkillState(skill.id, skill.isEnabled);
+    } catch (_) {}
+  }
+
   /// Parses and registers a skill directly from a YAML/Markdown string.
   Skill registerSkillFromMarkdown(String markdownContent) {
     final skill = parseSkillFromMarkdown(markdownContent);
@@ -119,8 +178,24 @@ class SkillsRegistryService {
 
   /// Removes a skill from the registry.
   void unregisterSkill(String skillIdOrName) {
+    final removedIds = <String>[];
+    final direct = _skills[skillIdOrName];
+    if (direct != null) {
+      removedIds.add(direct.id);
+    }
+    for (final s in _skills.values.toList()) {
+      if (s.name == skillIdOrName && !removedIds.contains(s.id)) {
+        removedIds.add(s.id);
+      }
+    }
     _skills.remove(skillIdOrName);
     _skills.removeWhere((_, s) => s.name == skillIdOrName);
+    final datasource = _localDatasource;
+    if (datasource != null) {
+      for (final id in removedIds) {
+        unawaited(_deletePersisted(id));
+      }
+    }
   }
 
   /// Enables or disables a skill.
@@ -128,7 +203,22 @@ class SkillsRegistryService {
     final skill = getSkill(skillIdOrName);
     if (skill != null) {
       _skills[skill.id] = skill.copyWith(isEnabled: isEnabled);
+      if (_localDatasource != null) {
+        unawaited(_persistSkillState(skill.id, isEnabled));
+      }
     }
+  }
+
+  Future<void> _persistSkillState(String id, bool isEnabled) async {
+    try {
+      await _localDatasource?.saveSkillState(id, isEnabled);
+    } catch (_) {}
+  }
+
+  Future<void> _deletePersisted(String id) async {
+    try {
+      await _localDatasource?.deleteImportedSkill(id);
+    } catch (_) {}
   }
 
   /// Checks if a skill is enabled.

@@ -67,8 +67,10 @@ class SkillImportService {
       );
     }
     final applied = _scanner.applyImportPolicy(preview.skill);
-    // TODO(T20.5-S2): persist
-    _registry.registerSkill(applied);
+    await _registry.registerImportedSkill(
+      applied,
+      sourceUrl: preview.sourceUrl,
+    );
     return Right(applied);
   }
 }
