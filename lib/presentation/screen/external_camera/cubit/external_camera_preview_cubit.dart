@@ -166,10 +166,19 @@ class ExternalCameraPreviewCubit extends Cubit<ExternalCameraPreviewState> {
   /// button so both share one recovery path.
   Future<void> refresh() => loadDevices();
 
+  /// True while the stream is live and a capture may be requested.
+  ///
+  /// `captured` and `captureFailed` both keep the stream running, so retrying
+  /// from either state must be allowed or the retake control dead-ends.
+  bool get _canCaptureNow =>
+      state.status == ExternalCameraPreviewStatus.previewing ||
+      state.status == ExternalCameraPreviewStatus.captured ||
+      state.status == ExternalCameraPreviewStatus.captureFailed;
+
   /// Captures a still from the live preview.
   Future<void> capture({int quality = 90}) async {
     if (isClosed) return;
-    if (state.status != ExternalCameraPreviewStatus.previewing) return;
+    if (!_canCaptureNow) return;
 
     emit(state.copyWith(isCapturing: true));
 
