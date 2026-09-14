@@ -60,6 +60,8 @@ import 'package:flutter_ai_agent/data/datasources/tools/chat/notification_servic
     as _i89;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/notification_triage_service.dart'
     as _i447;
+import 'package:flutter_ai_agent/data/datasources/tools/chat/overlay_bubble_service.dart'
+    as _i771;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/url_reader_service.dart'
     as _i840;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/piper_tts_engine.dart'
@@ -138,6 +140,8 @@ import 'package:flutter_ai_agent/domain/tools/chat/notification_service.dart'
     as _i919;
 import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.dart'
     as _i396;
+import 'package:flutter_ai_agent/domain/tools/chat/overlay_bubble_service.dart'
+    as _i772;
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart' as _i732;
 import 'package:flutter_ai_agent/domain/tools/chat/url_reader_service.dart'
     as _i14;
@@ -312,6 +316,9 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i348.SecureStorageService>(
       () =>
           _i348.SecureStorageService(storage: gh<_i558.FlutterSecureStorage>()),
+    );
+    gh.lazySingleton<_i772.OverlayBubbleServiceBase>(
+      () => _i771.OverlayBubbleService.create(gh<_i348.SecureStorageService>()),
     );
     gh.lazySingleton<_i292.LocationServiceBase>(
       () => _i320.LocationService.create(),

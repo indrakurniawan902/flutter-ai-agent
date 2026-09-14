@@ -7,6 +7,7 @@ import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dar
 import 'package:flutter_ai_agent/domain/services/voice/voice_prompt_dispatcher.dart';
 import 'package:flutter_ai_agent/domain/services/voice/voice_turn_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/overlay_bubble_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/voice/chat_voice_prompt_dispatcher.dart';
 
@@ -16,13 +17,15 @@ import 'package:flutter_ai_agent/presentation/voice/chat_voice_prompt_dispatcher
 /// "Voice Input" notification action runs one voice turn without ChatScreen
 /// ever being mounted. It also registers the headless prompt transport; a
 /// mounted ChatScreen later registers its own transport, which wins because the
-/// registry prefers the newest READY entry.
+/// registry prefers the newest READY entry. While a turn runs, the overlay
+/// bubble's recording indicator mirrors the turn phase stream.
 class VoiceTurnActionListener extends StatefulWidget {
   const VoiceTurnActionListener({
     super.key,
     required this.child,
     this.backgroundService,
     this.voiceTurnService,
+    this.overlayBubbleService,
     this.registry,
     this.agentCubit,
   });
@@ -30,6 +33,10 @@ class VoiceTurnActionListener extends StatefulWidget {
   final Widget child;
   final BackgroundServiceBase? backgroundService;
   final VoiceTurnServiceBase? voiceTurnService;
+
+  /// Overlay bubble seam; resolved from DI when omitted.
+  final OverlayBubbleServiceBase? overlayBubbleService;
+
   final VoicePromptDispatcherRegistry? registry;
   final AgentCubit? agentCubit;
 
@@ -41,8 +48,10 @@ class VoiceTurnActionListener extends StatefulWidget {
 class _VoiceTurnActionListenerState extends State<VoiceTurnActionListener> {
   BackgroundServiceBase? _backgroundService;
   VoiceTurnServiceBase? _voiceTurnService;
+  OverlayBubbleServiceBase? _overlayBubbleService;
   VoicePromptDispatcherRegistry? _registry;
   StreamSubscription<String>? _actionSub;
+  StreamSubscription<VoiceTurnPhase>? _phaseSub;
   AgentCubit? _cachedHeadlessCubit;
 
   @override
@@ -50,6 +59,7 @@ class _VoiceTurnActionListenerState extends State<VoiceTurnActionListener> {
     super.initState();
     _backgroundService = _resolveBackgroundService();
     _voiceTurnService = _resolveVoiceTurnService();
+    _overlayBubbleService = _resolveOverlayBubbleService();
     _registry = _resolveRegistry();
     // Headless fallback stays registered while no screen exists; a mounted
     // ChatScreen registers 'chat' later and wins as the newest READY entry.
@@ -62,7 +72,9 @@ class _VoiceTurnActionListenerState extends State<VoiceTurnActionListener> {
     );
     // Subscribe synchronously so one pump() in widget tests observes actions.
     _actionSub = _backgroundService?.actionStream.listen(_handleAction);
+    _phaseSub = _voiceTurnService?.phaseStream.listen(_handlePhase);
     unawaited(_checkPendingAction());
+    unawaited(_restoreBubble());
   }
 
   BackgroundServiceBase? _resolveBackgroundService() {
@@ -85,6 +97,19 @@ class _VoiceTurnActionListenerState extends State<VoiceTurnActionListener> {
     try {
       return sl.isRegistered<VoiceTurnServiceBase>()
           ? sl<VoiceTurnServiceBase>()
+          : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  OverlayBubbleServiceBase? _resolveOverlayBubbleService() {
+    if (widget.overlayBubbleService != null) {
+      return widget.overlayBubbleService;
+    }
+    try {
+      return sl.isRegistered<OverlayBubbleServiceBase>()
+          ? sl<OverlayBubbleServiceBase>()
           : null;
     } catch (_) {
       return null;
@@ -138,6 +163,9 @@ class _VoiceTurnActionListenerState extends State<VoiceTurnActionListener> {
       case 'voice_input':
         unawaited(_voiceTurnService?.runTurn());
         break;
+      case 'cancel_voice':
+        unawaited(_voiceTurnService?.cancelTurn());
+        break;
       case 'quick_status':
         unawaited(
           _registry?.active?.dispatch(
@@ -145,6 +173,38 @@ class _VoiceTurnActionListenerState extends State<VoiceTurnActionListener> {
           ),
         );
         break;
+    }
+  }
+
+  // The bubble indicator follows the turn phase stream; the native tap only
+  // optimistically flips it, this stream is the authoritative correction.
+  void _handlePhase(VoiceTurnPhase phase) {
+    final recording = phase == VoiceTurnPhase.listening ||
+        phase == VoiceTurnPhase.dispatching;
+    unawaited(_setBubbleRecording(recording));
+  }
+
+  Future<void> _setBubbleRecording(bool recording) async {
+    try {
+      await _overlayBubbleService?.setRecording(recording);
+    } catch (_) {
+      // A broken overlay seam must never break a voice turn.
+    }
+  }
+
+  // The user enabled the bubble from Settings, so a process restart must bring
+  // it back; a false preference (or missing seam) keeps the feature OFF.
+  Future<void> _restoreBubble() async {
+    try {
+      final overlay = _overlayBubbleService;
+      if (overlay == null) {
+        return;
+      }
+      if (await overlay.isBubbleEnabled()) {
+        await overlay.setBubbleEnabled(true);
+      }
+    } catch (_) {
+      // A broken overlay seam must never block startup.
     }
   }
 
@@ -159,6 +219,7 @@ class _VoiceTurnActionListenerState extends State<VoiceTurnActionListener> {
   @override
   void dispose() {
     unawaited(_actionSub?.cancel());
+    unawaited(_phaseSub?.cancel());
     _registry?.unregister('headless');
     super.dispose();
   }
