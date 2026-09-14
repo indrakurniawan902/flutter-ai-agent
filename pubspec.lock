@@ -486,6 +486,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "9.1.1"
+  flutter_ffi_uvc:
+    dependency: "direct main"
+    description:
+      name: flutter_ffi_uvc
+      sha256: "068071696cb22949f50de2a3fcd0f2a97b27a6586a48e3bd2ff51d2736e73e0d"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.0"
   flutter_lints:
     dependency: "direct dev"
     description:

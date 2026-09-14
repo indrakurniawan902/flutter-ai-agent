@@ -32,7 +32,7 @@
 | Networking | `dio` — injected directly into datasources, no wrapper client class; custom `SseParser` for streaming SSE completions |
 | Realtime gateway | `web_socket_channel` for bidirectional RPC transport |
 | Local storage | `flutter_secure_storage` (credentials, tokens, profiles) + `hive_ce_flutter` (cache) |
-| Device tools | `battery_plus`, `connectivity_plus`, `device_info_plus`, `geolocator`, `image_picker`, `device_calendar`, `flutter_local_notifications` |
+| Device tools | `battery_plus`, `connectivity_plus`, `device_info_plus`, `geolocator`, `image_picker`, `device_calendar`, `flutter_local_notifications`, `flutter_ffi_uvc` (USB/UVC external camera) |
 | Functional error handling | `dartz` (`Either<Failure, T>`) |
 | Equality | `equatable` |
 | Design & theme | Dark surface `#0F172A`, surface container `#1E293B`, border `#334155`, accent teal `#008080`; **0 emoji icons** in chrome (`Icons.*` only) |
@@ -730,7 +730,16 @@ for a Flames-specific requirement.
   `SecurityPolicy` (Tier 1 auto / Tier 2 permission / Tier 3 HITL).
 - Backed by plugins: `battery_plus`, `connectivity_plus`, `device_info_plus`,
   `geolocator`, `image_picker`, `device_calendar`,
-  `flutter_local_notifications`.
+  `flutter_local_notifications`, `flutter_ffi_uvc` (USB/UVC external camera,
+  FFI plugin over libuvc).
+- **External USB camera (flutter_ffi_uvc).** It is an FFI plugin (no
+  platform-channel Dart API) wrapping libuvc, and it is the only USB/UVC engine
+  — do not add a second one. License chain: BSD-3-Clause (flutter_ffi_uvc) +
+  libuvc (BSD) + libusb (LGPL-2.1) + libjpeg-turbo (IJG/BSD-style); the package
+  ships its own NOTICES/THIRD_PARTY_NOTICES.md so Flutter's license collector
+  (`showLicensePage`) picks them up automatically, no manual attribution file
+  needed. The Android manifest declares `android.hardware.usb.host` as
+  `required="false"`.
 - Rationale: template has no device-tool concept; the ReAct agent loop needs
   a dedicated execution surface with a security gate.
 
