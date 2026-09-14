@@ -29,6 +29,7 @@ class MainActivity : FlutterActivity() {
     private val BATTERY_CHANNEL = "ai.hermes.flames/battery_optimization"
     private val INTENT_SETTINGS_CHANNEL = "ai.hermes.flames/intent_settings"
     private val EXACT_ALARM_CHANNEL = "ai.hermes.flames/exact_alarm"
+    private val ACCESSIBILITY_CHANNEL = "ai.hermes.flames/accessibility_inspector"
 
     private val CONTACTS_PERMISSION_REQUEST_CODE = 1001
     private var pendingContactsResult: MethodChannel.Result? = null
@@ -136,6 +137,37 @@ class MainActivity : FlutterActivity() {
                         } catch (e: Exception) {
                             result.success(false)
                         }
+                    }
+                    else -> {
+                        result.notImplemented()
+                    }
+                }
+            }
+
+        // Accessibility Inspector Channel
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ACCESSIBILITY_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "isPermissionGranted" -> {
+                        result.success(FlamesAccessibilityService.isEnabledInSettings(this))
+                    }
+                    "isServiceConnected" -> {
+                        result.success(FlamesAccessibilityService.isConnected())
+                    }
+                    "requestPermission" -> {
+                        try {
+                            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            startActivity(intent)
+                            result.success(true)
+                        } catch (_: Exception) {
+                            result.success(false)
+                        }
+                    }
+                    "getScreenTree" -> {
+                        val maxNodes = call.argument<Int>("maxNodes") ?: 40
+                        val maxDepth = call.argument<Int>("maxDepth") ?: 8
+                        result.success(FlamesAccessibilityService.captureTree(maxNodes, maxDepth))
                     }
                     else -> {
                         result.notImplemented()
@@ -329,6 +361,7 @@ class MainActivity : FlutterActivity() {
                             "notification_listener" -> Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS
                             "nfc" -> Settings.ACTION_NFC_SETTINGS
                             "app_details" -> Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+                            "accessibility" -> Settings.ACTION_ACCESSIBILITY_SETTINGS
                             else -> null
                         }
                         if (action == null) {

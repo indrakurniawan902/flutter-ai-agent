@@ -110,6 +110,27 @@ const List<_ToolCategory> _categories = [
     ['background', 'service', 'headless'],
     ['manage_background_service'],
   ),
+  _ToolCategory(
+    [
+      'screen',
+      'ui',
+      'element',
+      'elements',
+      'button',
+      'click',
+      'tap',
+      'accessibility',
+      'reader',
+      'visible',
+      'field',
+      'form',
+      'label',
+      'widget',
+      'menu',
+      'dialog',
+    ],
+    ['ui_find_elements'],
+  ),
 ];
 
 @LazySingleton(as: ToolPruningService)

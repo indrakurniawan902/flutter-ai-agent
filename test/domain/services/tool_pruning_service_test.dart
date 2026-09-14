@@ -40,6 +40,7 @@ void main() {
     def('search_contacts'),
     def('manage_background_service'),
     def('unknown_tool'),
+    def('ui_find_elements'),
     ToolPruningServiceImpl.toolSearchDefinition,
     ToolPruningServiceImpl.toolDescribeDefinition,
   ];
@@ -246,6 +247,45 @@ void main() {
       expect((describe['function'] as Map)['name'], 'tool_describe');
       final describeParams = (describe['function'] as Map)['parameters'] as Map;
       expect((describeParams['properties'] as Map).containsKey('tool_name'), isTrue);
+    });
+
+    test('screen-reading prompt keeps ui_find_elements', () {
+      // Arrange
+      const prompt = 'tap the send button on the screen';
+
+      // Act
+      final result = service.prune(
+          prompt: prompt, fullToolDefinitions: fullTools, enabled: true);
+      final names = namesOf(result);
+
+      // Assert
+      expect(names, contains('ui_find_elements'));
+    });
+
+    test('accessibility prompt keeps ui_find_elements', () {
+      // Arrange
+      const prompt = 'use accessibility to read what is visible';
+
+      // Act
+      final result = service.prune(
+          prompt: prompt, fullToolDefinitions: fullTools, enabled: true);
+      final names = namesOf(result);
+
+      // Assert
+      expect(names, contains('ui_find_elements'));
+    });
+
+    test('unrelated prompt drops ui_find_elements', () {
+      // Arrange
+      const prompt = 'what is my battery level';
+
+      // Act
+      final result = service.prune(
+          prompt: prompt, fullToolDefinitions: fullTools, enabled: true);
+      final names = namesOf(result);
+
+      // Assert
+      expect(names, isNot(contains('ui_find_elements')));
     });
   });
 }

@@ -7,6 +7,7 @@ import 'package:injectable/injectable.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/ambient_event.dart';
 import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
+import 'accessibility_inspector_service.dart';
 import 'ambient_trigger_service.dart';
 import 'calendar_service.dart';
 import 'background_service.dart';
@@ -88,6 +89,7 @@ class ToolRegistry {
     IntentLauncherServiceBase? intentLauncherService,
     UrlReaderServiceBase? urlReaderService,
     NfcServiceBase? nfcService,
+    AccessibilityInspectorServiceBase? accessibilityInspectorService,
   }) {
     if (clipboardService != null) registerClipboardTools(clipboardService);
     if (locationService != null) registerLocationTools(locationService);
@@ -120,6 +122,9 @@ class ToolRegistry {
     }
     if (urlReaderService != null) registerUrlReaderTools(urlReaderService);
     if (nfcService != null) registerNfcTools(nfcService);
+    if (accessibilityInspectorService != null) {
+      registerAccessibilityTools(accessibilityInspectorService);
+    }
     registerMetaTools();
   }
 
@@ -1452,6 +1457,68 @@ class ToolRegistry {
           );
           return result.map((balance) => jsonEncode(balance.toJson()));
         },
+      ),
+    );
+  }
+
+  void registerAccessibilityTools(AccessibilityInspectorServiceBase service) {
+    register(
+      RegisteredTool(
+        name: 'ui_find_elements',
+        description:
+            'Reads the CURRENT screen as a structured text tree (role, text, '
+            'content description, clickable/focusable/editable, bounds, depth) so '
+            'you can pick an element by meaning instead of by coordinates. '
+            'READ-ONLY: it never taps, swipes or types. Requires the "Flames '
+            'Screen Reader" accessibility service; while that service is off it '
+            'fails with [accessibility_not_enabled] plus a one-tap fix '
+            '(launch_system_setting with setting_type "accessibility"). Results '
+            'are capped by max_nodes/max_depth and end with a marker when '
+            'elements were cut.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'text_filter': {
+              'type': 'string',
+              'description':
+                  'Keep elements whose text OR content description contains '
+                      'this, case-insensitive.',
+            },
+            'package_filter': {
+              'type': 'string',
+              'description':
+                  'Keep elements whose package contains this, case-insensitive.',
+            },
+            'clickable_only': {
+              'type': 'boolean',
+              'description': 'Only clickable elements.',
+            },
+            'max_nodes': {
+              'type': 'integer',
+              'description': 'Maximum elements to return (default 40, clamped '
+                  '1-200).',
+            },
+            'max_depth': {
+              'type': 'integer',
+              'description':
+                  'Maximum tree depth to include (default 8, clamped 1-20).',
+            },
+          },
+          'required': <String>[],
+        },
+        securityTier: SecurityTier.tier2Permission,
+        // No checkPermission: the registry gate would return a generic
+        // PermissionFailure, while the service returns the actionable
+        // [accessibility_not_enabled] message the model needs.
+        execute: (args) => service.findElementsFormatted(
+          textFilter: args['text_filter']?.toString(),
+          packageFilter: args['package_filter']?.toString(),
+          clickableOnly: args['clickable_only'] as bool? ?? false,
+          maxNodes: (args['max_nodes'] as num?)?.toInt() ??
+              AccessibilityTreeSerializer.defaultMaxNodes,
+          maxDepth: (args['max_depth'] as num?)?.toInt() ??
+              AccessibilityTreeSerializer.defaultMaxDepth,
+        ),
       ),
     );
   }
