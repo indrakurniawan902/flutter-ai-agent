@@ -87,7 +87,8 @@ class MockIosDeviceInfo extends Mock implements IosDeviceInfo {}
 
 class MockLinuxDeviceInfo extends Mock implements LinuxDeviceInfo {}
 
-class MockDeviceContextService extends Mock implements DeviceContextServiceBase {}
+class MockDeviceContextService extends Mock
+    implements DeviceContextServiceBase {}
 
 // Clipboard
 class MockClipboardService extends Mock implements ClipboardServiceBase {}
@@ -128,7 +129,8 @@ class MockNotificationListenerPlatformWrapper extends Mock
     implements NotificationListenerPlatformWrapper {}
 
 // File Workspace
-class MockFileWorkspaceService extends Mock implements FileWorkspaceServiceBase {}
+class MockFileWorkspaceService extends Mock
+    implements FileWorkspaceServiceBase {}
 
 class MockFileSystemWrapper extends Mock implements FileSystemWrapper {}
 
@@ -162,6 +164,10 @@ class MockTtsClient extends Mock implements TtsClient {}
 
 class MockVoiceOutputService extends Mock implements VoiceOutputServiceBase {}
 
+class MockPiperTtsEngine extends Mock implements PiperTtsEngineBase {}
+
+class MockPiperVoiceStore extends Mock implements PiperVoiceStoreBase {}
+
 // Background service
 class MockBackgroundServicePlatformWrapper extends Mock
     implements BackgroundServicePlatformWrapper {}
@@ -189,7 +195,13 @@ class MockWorkmanagerPlatformWrapper extends Mock
     implements WorkmanagerPlatformWrapper {}
 
 class MockAmbientTriggerService extends Mock
-    implements AmbientTriggerServiceBase {}
+    implements AmbientTriggerServiceBase {
+  MockAmbientTriggerService() {
+    // The Pocket Node screen reads `regions` to render geofence status;
+    // default the getter so tests that don't stub it don't hit a null cast.
+    when(() => regions).thenReturn(const []);
+  }
+}
 
 // Battery Optimization
 class MockBatteryOptimizationPlatformWrapper extends Mock
@@ -216,5 +228,4 @@ class MockVoiceTurnService extends Mock implements VoiceTurnServiceBase {}
 
 class MockVoicePromptDispatcher extends Mock
     implements VoicePromptDispatcherBase {}
-
 

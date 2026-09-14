@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/action_center/action_center_datasource.dart';
 import 'package:flutter_ai_agent/domain/repositories/action_center/action_center_repository.dart';
@@ -35,11 +36,33 @@ import 'package:flutter_ai_agent/domain/services/shortcuts/quick_actions_service
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  // `initDependencies()` resolves `VoiceOutputService`, whose ctor constructs a
+  // real `AudioPlayer()`. That schedules an unawaited `GlobalAudioScope.init`
+  // MethodChannel call on `xyz.luan/audioplayers.global` which otherwise rejects
+  // post-test with `MissingPluginException` and is attributed as a
+  // "test failed after it had already completed" error. Stub both channels so
+  // the async init settles during the test window. Same guard as
+  // `injection_di_graph_test.dart`.
+  const audioGlobalChannel = MethodChannel('xyz.luan/audioplayers.global');
+  const audioPlayerChannel = MethodChannel('xyz.luan/audioplayers');
+
   setUp(() async {
     await sl.reset();
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(audioGlobalChannel, (call) async => null);
+    messenger.setMockMethodCallHandler(audioPlayerChannel, (call) async => null);
   });
 
   tearDown(() async {
+    // Let unawaited `AudioPlayer._create()` (global init + create + event
+    // stream) settle while mocks are still active; otherwise it rejects
+    // post-teardown with MissingPluginException.
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(audioGlobalChannel, null);
+    messenger.setMockMethodCallHandler(audioPlayerChannel, null);
     await sl.reset();
   });
 

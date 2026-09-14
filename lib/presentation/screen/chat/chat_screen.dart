@@ -244,8 +244,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       if (mounted) {
         setState(() {
           _gatewayConnectionState = state;
-          if (state == GatewayConnectionState.disconnected && _gatewayBusy) {
+          if (state == GatewayConnectionState.disconnected) {
             _gatewayBusy = false;
+            // A dropped link can never deliver a settling frame: flip any
+            // still-running tool card so no spinner outlives the connection.
+            _settleRunningToolEvents();
           }
         });
       }
@@ -302,18 +305,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             // event still spinning so no card can outlive the answer. The
             // entries stay visible, only their phase flips to completed.
             if (message.role == 'assistant') {
-              for (var i = 0; i < _gatewayToolEvents.length; i++) {
-                final event = _gatewayToolEvents[i];
-                if (event.phase == 'running') {
-                  _gatewayToolEvents[i] = GatewayToolEventMessage(
-                    phase: 'completed',
-                    tool: event.tool,
-                    label: event.label,
-                    toolCallId: event.toolCallId,
-                    sessionId: event.sessionId,
-                  );
-                }
-              }
+              _settleRunningToolEvents();
             }
           });
           _agentCubit?.addMessage(
@@ -325,15 +317,29 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           _scrollToBottom();
         } else if (message is GatewayToolEventMessage) {
           setState(() {
-            if (message.phase == 'completed' && message.toolCallId.isNotEmpty) {
-              // A completed frame settles the matching running spinner.
-              _gatewayToolEvents.removeWhere(
-                (event) =>
-                    event.phase == 'running' &&
-                    event.toolCallId == message.toolCallId,
-              );
+            // Only 'running' is in-flight; every other phase is settled, so an
+            // unknown upstream phase can never leave a spinner behind.
+            if (message.phase == 'running') {
+              _gatewayToolEvents.add(message);
+            } else if (!_settleRunningToolEvents(source: message)) {
+              // No running entry to settle: keep an already-settled card for
+              // the same call instead of appending a duplicate.
+              final settledIndex = _settledToolEventIndexFor(message);
+              if (settledIndex >= 0) {
+                final existing = _gatewayToolEvents[settledIndex];
+                if (existing.label.isEmpty && message.label.isNotEmpty) {
+                  _gatewayToolEvents[settledIndex] = GatewayToolEventMessage(
+                    phase: existing.phase,
+                    tool: existing.tool,
+                    label: message.label,
+                    toolCallId: existing.toolCallId,
+                    sessionId: existing.sessionId,
+                  );
+                }
+              } else {
+                _gatewayToolEvents.add(message);
+              }
             }
-            _gatewayToolEvents.add(message);
             // Cap the list so a long server-side tool loop cannot grow it
             // without bound.
             if (_gatewayToolEvents.length > 20) {
@@ -344,6 +350,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         } else if (message is GatewayErrorMessage) {
           setState(() {
             if (_gatewayBusy) _gatewayBusy = false;
+            // A cancelled or errored turn sends no settling frame: flip any
+            // still-running tool card so no spinner outlives the turn.
+            _settleRunningToolEvents();
           });
           if (message.code != 'chat_cancelled') {
             AppToast.error(context, message.message);
@@ -1096,6 +1105,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       setState(() {
         _mode = ChatMode.direct;
         _gatewayBusy = false;
+        // Server tool cards belong to a gateway turn; do not let them linger
+        // (and blank the pane) once the screen is back in Direct mode.
+        _gatewayToolEvents.clear();
       });
       _rpcCubit?.stopListening();
 
@@ -1113,6 +1125,75 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         );
       }
     }
+  }
+
+  /// Settles running gateway tool events so a server-side spinner can never
+  /// outlive its turn.
+  ///
+  /// With no [source] every still-running entry flips to 'completed' in place
+  /// (final assistant message, cancellation/error, dropped connection). With a
+  /// [source] settle frame only the OLDEST running entry matching its
+  /// `toolCallId` - or, when that id is empty, its tool name - is replaced.
+  /// The running entry's label is carried forward whenever the settling source
+  /// has none of its own, so the server preview is not lost. Returns true when
+  /// a running entry was settled.
+  bool _settleRunningToolEvents({GatewayToolEventMessage? source}) {
+    if (source == null) {
+      for (var i = 0; i < _gatewayToolEvents.length; i++) {
+        final event = _gatewayToolEvents[i];
+        if (event.phase != 'running') continue;
+        _gatewayToolEvents[i] = GatewayToolEventMessage(
+          phase: 'completed',
+          tool: event.tool,
+          label: event.label,
+          toolCallId: event.toolCallId,
+          sessionId: event.sessionId,
+        );
+      }
+      return true;
+    }
+
+    final index = _runningToolEventIndexFor(source);
+    if (index < 0) return false;
+
+    final running = _gatewayToolEvents[index];
+    _gatewayToolEvents[index] = GatewayToolEventMessage(
+      phase: source.phase.isEmpty ? 'completed' : source.phase,
+      tool: source.tool.isNotEmpty ? source.tool : running.tool,
+      label: source.label.isNotEmpty ? source.label : running.label,
+      toolCallId:
+          source.toolCallId.isNotEmpty ? source.toolCallId : running.toolCallId,
+      sessionId: source.sessionId ?? running.sessionId,
+    );
+    return true;
+  }
+
+  int _runningToolEventIndexFor(GatewayToolEventMessage frame) {
+    for (var i = 0; i < _gatewayToolEvents.length; i++) {
+      final event = _gatewayToolEvents[i];
+      if (event.phase != 'running') continue;
+      if (frame.toolCallId.isNotEmpty) {
+        if (event.toolCallId == frame.toolCallId) return i;
+      } else if (frame.tool.isNotEmpty) {
+        if (event.tool == frame.tool) return i;
+      } else {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  int _settledToolEventIndexFor(GatewayToolEventMessage frame) {
+    for (var i = 0; i < _gatewayToolEvents.length; i++) {
+      final event = _gatewayToolEvents[i];
+      if (event.phase == 'running') continue;
+      if (frame.toolCallId.isNotEmpty) {
+        if (event.toolCallId == frame.toolCallId) return i;
+      } else if (frame.tool.isNotEmpty && event.tool == frame.tool) {
+        return i;
+      }
+    }
+    return -1;
   }
 
   Future<void> _openQrScanner() async {
@@ -1547,7 +1628,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 child: messages.isEmpty &&
                         state is AgentIdle &&
                         _streamingGatewayDelta.isEmpty &&
-                        _gatewayToolEvents.isEmpty
+                        (_mode != ChatMode.gateway ||
+                            _gatewayToolEvents.isEmpty)
                     ? _buildEmptyState(context)
                     : _buildMessageList(context, messages, state),
               ),

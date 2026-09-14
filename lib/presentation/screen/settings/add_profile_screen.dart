@@ -195,7 +195,7 @@ class _AddProfileViewState extends State<_AddProfileView> {
                   key: const Key('add_profile_name_field'),
                   controller: _nameController,
                   style: const TextStyle(color: Colors.white),
-                  decoration: _inputDecoration('Profile Name', 'e.g. Default'),
+                  decoration: _inputDecoration('Profile Name', 'e.g. Work'),
                   validator: (value) =>
                       (value ?? '').trim().isEmpty ? 'Name cannot be empty' : null,
                 ),

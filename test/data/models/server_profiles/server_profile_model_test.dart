@@ -8,9 +8,9 @@ void main() {
   final testDate = DateTime.utc(2026, 9, 11, 10, 0, 0);
 
   final tServerProfile = ServerProfile(
-    id: 'vps-oracle',
-    name: 'VPS Oracle',
-    gatewayUrl: 'https://indra-9router.my.id/v1',
+    id: 'node-1',
+    name: 'Remote Node',
+    gatewayUrl: 'https://example.com/v1',
     token: 'sk-test-token-123',
     isActive: true,
     lastConnected: testDate,
@@ -43,13 +43,13 @@ void main() {
 
     test('copyWith copies and overrides fields', () {
       final updated = tServerProfile.copyWith(
-        name: 'Oracle Cloud',
+        name: 'Office Node',
         isActive: false,
       );
 
-      expect(updated.id, 'vps-oracle');
-      expect(updated.name, 'Oracle Cloud');
-      expect(updated.gatewayUrl, 'https://indra-9router.my.id/v1');
+      expect(updated.id, 'node-1');
+      expect(updated.name, 'Office Node');
+      expect(updated.gatewayUrl, 'https://example.com/v1');
       expect(updated.token, 'sk-test-token-123');
       expect(updated.isActive, isFalse);
       expect(updated.lastConnected, testDate);
@@ -99,9 +99,9 @@ void main() {
 
     test('fromJson parses camelCase JSON with ISO-8601 date', () {
       final json = {
-        'id': 'vps-oracle',
-        'name': 'VPS Oracle',
-        'gatewayUrl': 'https://indra-9router.my.id/v1',
+        'id': 'node-1',
+        'name': 'Remote Node',
+        'gatewayUrl': 'https://example.com/v1',
         'token': 'sk-test-token-123',
         'isActive': true,
         'lastConnected': testDate.toIso8601String(),
@@ -111,9 +111,9 @@ void main() {
 
       final result = ServerProfileModel.fromJson(json);
 
-      expect(result.id, 'vps-oracle');
-      expect(result.name, 'VPS Oracle');
-      expect(result.gatewayUrl, 'https://indra-9router.my.id/v1');
+      expect(result.id, 'node-1');
+      expect(result.name, 'Remote Node');
+      expect(result.gatewayUrl, 'https://example.com/v1');
       expect(result.token, 'sk-test-token-123');
       expect(result.isActive, isTrue);
       expect(result.lastConnected, testDate);
@@ -123,9 +123,9 @@ void main() {
 
     test('fromJson parses snake_case JSON with integer millis timestamp', () {
       final json = {
-        'id': 'vps-oracle',
-        'name': 'VPS Oracle',
-        'gateway_url': 'https://indra-9router.my.id/v1',
+        'id': 'node-1',
+        'name': 'Remote Node',
+        'gateway_url': 'https://example.com/v1',
         'token': 'sk-test-token-123',
         'is_active': true,
         'last_connected': testDate.millisecondsSinceEpoch,
@@ -133,9 +133,9 @@ void main() {
 
       final result = ServerProfileModel.fromJson(json);
 
-      expect(result.id, 'vps-oracle');
-      expect(result.name, 'VPS Oracle');
-      expect(result.gatewayUrl, 'https://indra-9router.my.id/v1');
+      expect(result.id, 'node-1');
+      expect(result.name, 'Remote Node');
+      expect(result.gatewayUrl, 'https://example.com/v1');
       expect(result.token, 'sk-test-token-123');
       expect(result.isActive, isTrue);
       expect(result.lastConnected, testDate);
@@ -144,9 +144,9 @@ void main() {
     test('fromJson parses integer seconds timestamp', () {
       final seconds = testDate.millisecondsSinceEpoch ~/ 1000;
       final json = {
-        'id': 'vps-oracle',
-        'name': 'VPS Oracle',
-        'gatewayUrl': 'https://indra-9router.my.id/v1',
+        'id': 'node-1',
+        'name': 'Remote Node',
+        'gatewayUrl': 'https://example.com/v1',
         'token': 'sk-test-token-123',
         'isActive': false,
         'lastConnected': seconds,
@@ -209,9 +209,9 @@ void main() {
       final json = model.toJson();
 
       expect(json, {
-        'id': 'vps-oracle',
-        'name': 'VPS Oracle',
-        'gatewayUrl': 'https://indra-9router.my.id/v1',
+        'id': 'node-1',
+        'name': 'Remote Node',
+        'gatewayUrl': 'https://example.com/v1',
         'token': 'sk-test-token-123',
         'isActive': true,
         'lastConnected': testDate.toIso8601String(),

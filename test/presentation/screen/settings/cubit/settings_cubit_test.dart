@@ -1,6 +1,8 @@
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter_ai_agent/common/constant.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/piper_voice.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_state.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -216,7 +218,7 @@ void main() {
   });
 
   group('SettingsCubit - saveSettings', () {
-    const validUrl = 'https://indra-9router.my.id/v1';
+    const validUrl = 'https://example.com/v1';
     const validApiKey = 'sk-valid-key-12345';
     const validModel = 'ag-glm';
     const validTemp = 0.7;
@@ -495,7 +497,7 @@ void main() {
       act: (cubit) => cubit.updateFromProfile(
         const ServerProfile(
           id: 'p1',
-          name: 'VPS Oracle',
+          name: 'Remote Node',
           gatewayUrl: 'https://profile-url.com/v1',
           token: 'sk-profile-token',
           model: 'profile-model',
@@ -510,6 +512,234 @@ void main() {
           temperature: 1.2,
         ),
       ],
+    );
+  });
+
+  group('SettingsCubit - voice settings', () {
+    late MockPiperVoiceStore mockVoiceStore;
+    late MockVoiceOutputService mockVoiceService;
+
+    setUp(() {
+      mockVoiceStore = MockPiperVoiceStore();
+      mockVoiceService = MockVoiceOutputService();
+      registerFallbackValue(
+        const PiperVoiceDescriptor(
+          id: 'fallback',
+          label: 'fallback',
+          language: 'en_US',
+          modelFileName: 'fallback.onnx',
+          tarballName: 'fallback.tar.bz2',
+          tarballMd5: 'md5',
+          tarballSizeBytes: 1,
+          downloadUrl: 'https://example.com/fallback',
+        ),
+      );
+      registerFallbackValue(TtsEngineMode.system);
+    });
+
+    blocTest<SettingsCubit, SettingsState>(
+      'loadVoiceSettings maps stored piper and probes every catalog id',
+      setUp: () {
+        when(() => mockStorageService.getTtsEngineMode())
+            .thenAnswer((_) async => 'piper');
+        when(() => mockStorageService.getPiperVoiceId())
+            .thenAnswer((_) async => 'en_US-lessac-medium');
+        when(() => mockVoiceStore.isVoiceReady(any()))
+            .thenAnswer((_) async => false);
+      },
+      build: () => SettingsCubit(
+        secureStorageService: mockStorageService,
+        piperVoiceStore: mockVoiceStore,
+        voiceOutputService: mockVoiceService,
+        autoLoad: false,
+      ),
+      seed: () => const SettingsLoaded(
+        baseUrl: 'https://example.com/v1',
+        apiKey: 'sk-key',
+        model: 'ag-glm',
+        temperature: 0.7,
+      ),
+      act: (cubit) => cubit.loadVoiceSettings(),
+      expect: () => [
+        predicate<SettingsState>((state) {
+          if (state is! SettingsLoaded) return false;
+          if (state.ttsEngineMode != TtsEngineMode.piper) return false;
+          if (state.piperVoiceId != 'en_US-lessac-medium') return false;
+          for (final descriptor in kPiperVoiceCatalog) {
+            if (!state.piperVoiceReady.containsKey(descriptor.id)) {
+              return false;
+            }
+          }
+          return state.piperError == null;
+        }),
+      ],
+      verify: (_) {
+        for (final descriptor in kPiperVoiceCatalog) {
+          verify(() => mockVoiceStore.isVoiceReady(descriptor.id)).called(1);
+        }
+      },
+    );
+
+    blocTest<SettingsCubit, SettingsState>(
+      'downloadPiperVoice emits progress then loaded with id marked ready',
+      setUp: () {
+        when(
+          () => mockVoiceStore.downloadVoice(
+            any(),
+            onProgress: any(named: 'onProgress'),
+          ),
+        ).thenAnswer((_) async {});
+        when(() => mockVoiceStore.isVoiceReady(any()))
+            .thenAnswer((_) async => true);
+      },
+      build: () => SettingsCubit(
+        secureStorageService: mockStorageService,
+        piperVoiceStore: mockVoiceStore,
+        voiceOutputService: mockVoiceService,
+        autoLoad: false,
+      ),
+      seed: () => const SettingsLoaded(
+        baseUrl: 'https://example.com/v1',
+        apiKey: 'sk-key',
+        model: 'ag-glm',
+        temperature: 0.7,
+      ),
+      act: (cubit) =>
+          cubit.downloadPiperVoice('id_ID-news_tts-medium'),
+      expect: () => [
+        predicate<SettingsState>((state) {
+          return state is SettingsVoiceDownloadInProgress &&
+              state.downloadingVoiceId == 'id_ID-news_tts-medium' &&
+              state.progress == 0;
+        }),
+        predicate<SettingsState>((state) {
+          return state is SettingsLoaded &&
+              state is! SettingsVoiceDownloadInProgress &&
+              state.piperVoiceReady['id_ID-news_tts-medium'] == true &&
+              state.piperError == null;
+        }),
+      ],
+    );
+
+    blocTest<SettingsCubit, SettingsState>(
+      'downloadPiperVoice on integrity exception sets piperError and does not throw',
+      setUp: () {
+        when(
+          () => mockVoiceStore.downloadVoice(
+            any(),
+            onProgress: any(named: 'onProgress'),
+          ),
+        ).thenThrow(
+          const VoiceModelIntegrityException('MD5 mismatch'),
+        );
+        when(() => mockVoiceStore.isVoiceReady(any()))
+            .thenAnswer((_) async => false);
+      },
+      build: () => SettingsCubit(
+        secureStorageService: mockStorageService,
+        piperVoiceStore: mockVoiceStore,
+        voiceOutputService: mockVoiceService,
+        autoLoad: false,
+      ),
+      seed: () => const SettingsLoaded(
+        baseUrl: 'https://example.com/v1',
+        apiKey: 'sk-key',
+        model: 'ag-glm',
+        temperature: 0.7,
+      ),
+      act: (cubit) =>
+          cubit.downloadPiperVoice('id_ID-news_tts-medium'),
+      expect: () => [
+        isA<SettingsVoiceDownloadInProgress>(),
+        predicate<SettingsState>((state) {
+          return state is SettingsLoaded &&
+              state is! SettingsVoiceDownloadInProgress &&
+              state.piperError ==
+                  'Voice model checksum mismatch - download rejected';
+        }),
+      ],
+    );
+
+    blocTest<SettingsCubit, SettingsState>(
+      'deletePiperVoice marks the id not ready again',
+      setUp: () {
+        when(() => mockVoiceStore.deleteVoice(any()))
+            .thenAnswer((_) async {});
+        when(() => mockVoiceStore.isVoiceReady(any()))
+            .thenAnswer((_) async => false);
+      },
+      build: () => SettingsCubit(
+        secureStorageService: mockStorageService,
+        piperVoiceStore: mockVoiceStore,
+        voiceOutputService: mockVoiceService,
+        autoLoad: false,
+      ),
+      seed: () => const SettingsLoaded(
+        baseUrl: 'https://example.com/v1',
+        apiKey: 'sk-key',
+        model: 'ag-glm',
+        temperature: 0.7,
+        piperVoiceReady: {'id_ID-news_tts-medium': true},
+      ),
+      act: (cubit) => cubit.deletePiperVoice('id_ID-news_tts-medium'),
+      expect: () => [
+        predicate<SettingsState>((state) {
+          return state is SettingsLoaded &&
+              state.piperVoiceReady['id_ID-news_tts-medium'] == false;
+        }),
+      ],
+      verify: (_) {
+        verify(
+          () => mockVoiceStore.deleteVoice('id_ID-news_tts-medium'),
+        ).called(1);
+      },
+    );
+
+    blocTest<SettingsCubit, SettingsState>(
+      'setTtsEngineMode persists piper and forwards to voice service',
+      setUp: () {
+        when(() => mockStorageService.saveTtsEngineMode(any()))
+            .thenAnswer((_) async {});
+        when(() => mockVoiceService.setPreferredEngineMode(any()))
+            .thenAnswer((_) {});
+      },
+      build: () => SettingsCubit(
+        secureStorageService: mockStorageService,
+        piperVoiceStore: mockVoiceStore,
+        voiceOutputService: mockVoiceService,
+        autoLoad: false,
+      ),
+      seed: () => const SettingsLoaded(
+        baseUrl: 'https://example.com/v1',
+        apiKey: 'sk-key',
+        model: 'ag-glm',
+        temperature: 0.7,
+      ),
+      act: (cubit) => cubit.setTtsEngineMode(TtsEngineMode.piper),
+      expect: () => [
+        predicate<SettingsState>((state) {
+          return state is SettingsLoaded &&
+              state.ttsEngineMode == TtsEngineMode.piper;
+        }),
+      ],
+      verify: (_) {
+        verify(() => mockStorageService.saveTtsEngineMode('piper')).called(1);
+        verify(
+          () => mockVoiceService.setPreferredEngineMode(TtsEngineMode.piper),
+        ).called(1);
+      },
+    );
+
+    test(
+      'cubit built WITHOUT a voice store: loadVoiceSettings is a no-op that does not throw',
+      () async {
+        final cubit = SettingsCubit(
+          secureStorageService: mockStorageService,
+          autoLoad: false,
+        );
+        await expectLater(cubit.loadVoiceSettings(), completes);
+        await cubit.close();
+      },
     );
   });
 }

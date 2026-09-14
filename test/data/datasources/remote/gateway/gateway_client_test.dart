@@ -106,8 +106,8 @@ void main() {
     test('passes through URLs that already carry a path without double-append', () {
       final testCases = [
         {
-          'input': 'https://hermes.indra-developer.my.id/device/ws',
-          'expected': 'wss://hermes.indra-developer.my.id/device/ws',
+          'input': 'https://example.com/device/ws',
+          'expected': 'wss://example.com/device/ws',
         },
         {'input': 'ws://example.com/custom/ws', 'expected': 'ws://example.com/custom/ws'},
       ];
@@ -661,7 +661,7 @@ void main() {
       final manifestClient = GatewayClient(
         socketFactory: mockSocketFactory,
         toolManifestProvider: () => fixtureTools,
-        clientId: 'pixel-8-indra',
+        clientId: 'pixel-8-test',
         options: const GatewayClientOptions(
           heartbeatInterval: Duration(milliseconds: 50),
           heartbeatTimeout: Duration(milliseconds: 100),
@@ -679,7 +679,7 @@ void main() {
       // The auth frame is the only frame before auth_success.
       final authJson = jsonDecode(sentFrames.single) as Map<String, dynamic>;
       expect(authJson['type'], 'auth');
-      expect(authJson['client_id'], 'pixel-8-indra');
+      expect(authJson['client_id'], 'pixel-8-test');
 
       socketStreamController.add(jsonEncode({'type': 'auth_success'}));
       await pumpEventQueue();
@@ -692,7 +692,7 @@ void main() {
       final manifest = manifests.single;
       expect(manifest['type'], 'tool_manifest');
       expect(manifest['version'], 'v1');
-      expect(manifest['device_id'], 'pixel-8-indra');
+      expect(manifest['device_id'], 'pixel-8-test');
       expect(manifest['tools'], fixtureTools);
       // Nested function.parameters map survives verbatim.
       final tools = manifest['tools'] as List<dynamic>;
@@ -704,7 +704,7 @@ void main() {
       final manifestClient = GatewayClient(
         socketFactory: mockSocketFactory,
         toolManifestProvider: () => fixtureTools,
-        clientId: 'pixel-8-indra',
+        clientId: 'pixel-8-test',
         options: const GatewayClientOptions(
           heartbeatInterval: Duration(milliseconds: 50),
           heartbeatTimeout: Duration(milliseconds: 100),
