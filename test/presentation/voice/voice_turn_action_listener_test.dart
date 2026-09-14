@@ -6,6 +6,7 @@ import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/domain/services/voice/voice_prompt_dispatcher.dart';
 import 'package:flutter_ai_agent/domain/services/voice/voice_turn_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/overlay_bubble_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/chat_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
 import 'package:flutter_ai_agent/presentation/voice/voice_turn_action_listener.dart';
@@ -56,6 +57,7 @@ void main() {
   );
 
   setUp(() {
+    registerFallbackValue(QuickTileState.inactive);
     mockBackgroundService = MockBackgroundService();
     mockVoiceTurnService = MockVoiceTurnService();
     mockOverlay = MockOverlayBubbleService();
@@ -71,6 +73,8 @@ void main() {
     when(() => mockBackgroundService.clearPendingAction())
         .thenAnswer((_) async {});
     when(() => mockBackgroundService.dispose()).thenReturn(null);
+    when(() => mockBackgroundService.setTileState(any()))
+        .thenAnswer((_) async => const Right<Failure, bool>(true));
 
     when(() => mockVoiceTurnService.runTurn())
         .thenAnswer((_) async => const Right<Failure, VoiceTurnResult>(
@@ -145,6 +149,160 @@ void main() {
     // Assert
     verify(() => mockVoiceTurnService.runTurn()).called(1);
     verify(() => mockBackgroundService.clearPendingAction()).called(1);
+    verify(() => mockBackgroundService.setTileState(QuickTileState.active))
+        .called(1);
+    verify(() => mockBackgroundService.setTileState(QuickTileState.inactive))
+        .called(1);
+  });
+
+  testWidgets(
+      'voice_input sets the tile active before the turn and inactive after',
+      (tester) async {
+    // Arrange
+    final calls = <String>[];
+    when(() => mockBackgroundService.setTileState(any()))
+        .thenAnswer((invocation) async {
+      final state = invocation.positionalArguments.first as QuickTileState;
+      calls.add(state == QuickTileState.active ? 'tile:active' : 'tile:inactive');
+      return const Right<Failure, bool>(true);
+    });
+    when(() => mockVoiceTurnService.runTurn()).thenAnswer((_) async {
+      calls.add('turn');
+      return const Right<Failure, VoiceTurnResult>(turnResult);
+    });
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pump();
+
+    // Act
+    actionController.add('voice_input');
+    await tester.pump();
+    await tester.pump();
+
+    // Assert
+    verify(() => mockBackgroundService.setTileState(QuickTileState.active))
+        .called(1);
+    verify(() => mockBackgroundService.setTileState(QuickTileState.inactive))
+        .called(1);
+    expect(calls, ['tile:active', 'turn', 'tile:inactive']);
+  });
+
+  testWidgets('a second tap while a turn records does not clear the tile',
+      (tester) async {
+    // Arrange
+    final calls = <String>[];
+    final turnCompleter = Completer<Either<Failure, VoiceTurnResult>>();
+    var runTurnCalls = 0;
+    when(() => mockBackgroundService.setTileState(any()))
+        .thenAnswer((invocation) async {
+      final state = invocation.positionalArguments.first as QuickTileState;
+      calls.add(state == QuickTileState.active ? 'active' : 'inactive');
+      return const Right<Failure, bool>(true);
+    });
+    when(() => mockVoiceTurnService.runTurn()).thenAnswer((_) {
+      runTurnCalls++;
+      if (runTurnCalls == 1) {
+        return turnCompleter.future;
+      }
+      return Future.value(
+        const Left<Failure, VoiceTurnResult>(VoiceTurnBusyFailure()),
+      );
+    });
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pump();
+
+    // Act
+    actionController.add('voice_input');
+    await tester.pump();
+    actionController.add('voice_input');
+    await tester.pump();
+    await tester.pump();
+
+    // Assert
+    // The busy second tap must not push any tile state: the in-flight turn
+    // still owns the tile, so there is exactly one 'active' and no 'inactive'.
+    expect(calls, ['active']);
+    verify(() => mockVoiceTurnService.runTurn()).called(2);
+
+    // Act
+    turnCompleter.complete(const Right<Failure, VoiceTurnResult>(turnResult));
+    await tester.pump();
+    await tester.pump();
+
+    // Assert
+    expect(calls, ['active', 'inactive']);
+  });
+
+  testWidgets('a failing turn still resets the tile to inactive once',
+      (tester) async {
+    // Arrange
+    when(() => mockVoiceTurnService.runTurn()).thenAnswer(
+      (_) async => const Left<Failure, VoiceTurnResult>(
+        ServerFailure('boom'),
+      ),
+    );
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pump();
+
+    // Act
+    actionController.add('voice_input');
+    await tester.pump();
+    await tester.pump();
+
+    // Assert
+    verify(() => mockVoiceTurnService.runTurn()).called(1);
+    verify(() => mockBackgroundService.setTileState(QuickTileState.inactive))
+        .called(1);
+  });
+
+  testWidgets('quick_status never pushes tile state', (tester) async {
+    // Arrange
+    final recorder = _RecordingDispatcher();
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pump();
+    registry.register(recorder);
+
+    // Act
+    actionController.add('quick_status');
+    await tester.pump();
+
+    // Assert
+    expect(recorder.dispatched, hasLength(1));
+    verifyNever(() => mockBackgroundService.setTileState(any()));
+  });
+
+  testWidgets('a throwing setTileState never breaks the turn',
+      (tester) async {
+    // Arrange
+    when(() => mockBackgroundService.setTileState(any()))
+        .thenThrow(Exception('tile channel down'));
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pump();
+
+    // Act
+    actionController.add('voice_input');
+    await tester.pump();
+    await tester.pump();
+
+    // Assert
+    verify(() => mockVoiceTurnService.runTurn()).called(1);
+  });
+
+  testWidgets('cancel_voice cancels the turn and resets the tile',
+      (tester) async {
+    // Arrange
+    when(() => mockVoiceTurnService.cancelTurn()).thenAnswer((_) async {});
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pump();
+
+    // Act
+    actionController.add('cancel_voice');
+    await tester.pump();
+    await tester.pump();
+
+    // Assert
+    verify(() => mockVoiceTurnService.cancelTurn()).called(1);
+    verify(() => mockBackgroundService.setTileState(QuickTileState.inactive))
+        .called(1);
   });
 
   testWidgets('quick_status dispatches through the registry, not a turn',

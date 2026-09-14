@@ -1,6 +1,5 @@
 package ai.hermes.flames
 
-import android.app.PendingIntent
 import android.content.Intent
 import android.os.Build
 import android.service.quicksettings.Tile
@@ -26,6 +25,9 @@ class FlamesQuickTile : TileService() {
             currentInstance?.let { service ->
                 val tile = service.qsTile ?: return@let
                 tile.state = if (active) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    tile.subtitle = if (active) "Listening" else "Tap for one voice turn"
+                }
                 tile.updateTile()
             }
         }
@@ -64,51 +66,49 @@ class FlamesQuickTile : TileService() {
     override fun onTileRemoved() {
         super.onTileRemoved()
         currentInstance = null
+
+        if (FlamesBackgroundService.isServiceRunning || isTileActive) {
+            val intent = Intent(this, FlamesBackgroundService::class.java).apply {
+                action = FlamesBackgroundService.ACTION_CANCEL_VOICE
+            }
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(intent)
+                } else {
+                    startService(intent)
+                }
+            } catch (_: Exception) {
+            }
+        }
+
+        _isTileActive = false
     }
 
     override fun onClick() {
         super.onClick()
-        val tile = qsTile ?: return
+        if (qsTile == null) return
 
-        // Toggle state
-        val willBeActive = tile.state != Tile.STATE_ACTIVE
-        _isTileActive = willBeActive
-        tile.state = if (willBeActive) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-        tile.updateTile()
-
-        // 1-Tap Activation: Bring Flames Agent to foreground or start voice interaction
-        val intent = Intent(this, MainActivity::class.java).apply {
-            action = ACTION_QUICK_TILE_TRIGGER
-            putExtra(EXTRA_ACTION, "voice_input")
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        val intent = Intent(this, FlamesBackgroundService::class.java).apply {
+            action = FlamesBackgroundService.ACTION_VOICE_INPUT
         }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            val pendingIntent = PendingIntent.getActivity(
-                this,
-                1001,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            startActivityAndCollapse(pendingIntent)
-        } else {
-            @Suppress("DEPRECATION")
-            startActivityAndCollapse(intent)
-        }
-
-        // Keep background service in sync if active
-        if (willBeActive && !FlamesBackgroundService.isServiceRunning) {
-            FlamesBackgroundService.startService(this, "Flames Agent Active", "Activated via Quick Settings Tile")
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+        } catch (_: Exception) {
+            FlamesQuickTile.updateTileState(false)
         }
     }
 
     private fun syncTileAppearance() {
         val tile = qsTile ?: return
-        val isActive = _isTileActive || FlamesBackgroundService.isServiceRunning
+        val isActive = _isTileActive
         tile.state = if (isActive) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
         tile.label = "Flames Agent"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            tile.subtitle = if (isActive) "Ready / Active" else "Tap to Activate"
+            tile.subtitle = if (isActive) "Listening" else "Tap for one voice turn"
         }
         tile.updateTile()
     }
