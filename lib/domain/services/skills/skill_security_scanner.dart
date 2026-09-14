@@ -38,14 +38,38 @@ class SkillSecurityScanner {
   /// hostile document cannot force a huge decode (decode bomb).
   static const int _maxBase64CandidateLength = 64 * 1024;
 
+  /// Verbs that turn an override phrase into an instruction.
+  static const String _directiveVerb =
+      r'(?:obey(?:ing|s)?|follow(?:ing|s)?|do|execute|apply|'
+      r'comply\s+with|act\s+on)';
+
+  /// Objects that complete a directive, such as `the text below` or `me`.
+  static const String _directiveObject =
+      r'(?:the\s+text\s+below|what\s+follows|these\s+rules|this\s+text|'
+      r'the\s+following|me)';
+
+  /// A directive verb plus an object, tolerating punctuation between them.
+  static const String _directiveVerbPhrase =
+      '(?:$_directiveVerb\\b[\\s,]*'
+      '(?:$_directiveObject|'
+      '(?:the\\s+|this\\s+|these\\s+|what\\s+|a\\s+|an\\s+|your\\s+|my\\s+)'
+      '\\w+))';
+
   /// Requires an override verb phrase to read as an instruction: followed by
-  /// end of sentence/line, a punctuation stop, `now`, `and`/`then` plus a
-  /// verb, or a "with the following" / "as follows" continuation. A bare
+  /// end of sentence/line, a punctuation stop, `now`, a heading or list
+  /// marker, `and`/`then` plus a following word, a directive verb plus
+  /// object, or a "with the following" / "as follows" continuation. A bare
   /// conditional continuation (`when ...`, `if ...`, `only when ...`) never
   /// matches, which is what keeps prose about ignoring things benign.
   static const String _directiveTail =
-      r'(?=\s*(?:[:.!?;]|$|now\b|(?:and|then)\s+\w+|'
-      r'with\s+the\s+following|as\s+follows))';
+      '(?=\\s*(?:[:.!?;]|\$|now\\b|'
+      '#\\s+\\w+|'
+      '\\d+[.)]\\s+$_directiveVerbPhrase|'
+      '[\\s,;:\\-]*(?:and|then)[\\s,;:\\-]*\\w+|'
+      'with\\s+$_directiveObject|'
+      'using\\s+(?:the\\s+text\\s+below|the\\s+following|this\\s+text)|'
+      'as\\s+follows|'
+      '[\\s,;:\\-]*$_directiveVerbPhrase))';
 
   static final List<_ScanPattern> _patterns = [
     _ScanPattern(
@@ -459,7 +483,7 @@ class _ScanPattern {
     this.severity,
     String source, {
     this.negatable = false,
-  }) : regexp = RegExp(source, multiLine: false, caseSensitive: false);
+  }) : regexp = RegExp(source, multiLine: true, caseSensitive: false);
 
   /// First match of [regexp] in [text] that is not preceded by a negation
   /// such as `do not` or `never`. Non-negatable patterns return the first
