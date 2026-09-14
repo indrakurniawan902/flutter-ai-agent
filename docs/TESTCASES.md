@@ -29,7 +29,7 @@
 - **Objective**: Verify that valid endpoint parameters (Base URL, API Key, Model, Temperature) are stored securely and retrieved accurately.
 - **Preconditions**: App is running; user navigates to `SettingsScreen`.
 - **Steps**:
-  1. Input Base URL: `https://indra-9router.my.id/v1`.
+  1. Input Base URL: `https://example.com/v1`.
   2. Input API Key: `sk-valid-key-12345`.
   3. Input Model: `ag-glm`.
   4. Set Temperature: `0.7`.
@@ -46,7 +46,7 @@
 - **Objective**: Prevent saving malformed or unsupported URLs.
 - **Preconditions**: User is on `SettingsScreen`.
 - **Steps**:
-  1. Input Base URL: `not-a-valid-url` or `ftp://indra-9router.my.id`.
+  1. Input Base URL: `not-a-valid-url` or `ftp://example.com`.
   2. Input valid API Key and Model.
   3. Tap `Save Settings`.
 - **Expected Outcome**:

@@ -19,7 +19,7 @@ void main() {
 
   final testPackageInfo = PackageInfo(
     appName: 'Flutter AI Agent',
-    packageName: 'id.indra.flutter_ai_agent',
+    packageName: 'ai.hermes.flames',
     version: '1.0.0',
     buildNumber: '1',
   );

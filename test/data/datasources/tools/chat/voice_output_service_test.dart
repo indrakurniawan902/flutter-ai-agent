@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter_ai_agent/common/constant.dart';
 import 'package:flutter_ai_agent/common/exception.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/data/datasources/tools/chat/voice_output_service.dart';
@@ -468,7 +469,7 @@ void main() {
       final client = DioTtsClient(dio: mockDio);
       when(
         () => mockDio.post<List<int>>(
-          'https://indra-9router.my.id/v1/audio/speech',
+          '${AppConstants.defaultBaseUrl}/audio/speech',
           data: any(named: 'data'),
           options: any(named: 'options'),
         ),

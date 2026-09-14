@@ -48,7 +48,7 @@ void main() {
 
     when(() => mockSettingsCubit.state).thenReturn(
       const SettingsLoaded(
-        baseUrl: 'https://indra-9router.my.id/v1',
+        baseUrl: 'https://example.com/v1',
         apiKey: 'sk-test',
         model: 'ag-glm',
         temperature: 0.7,

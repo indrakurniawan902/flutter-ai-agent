@@ -18,8 +18,8 @@ void main() {
 
   group('isAcceptableGatewayUrl - accepts', () {
     const accepted = <String>[
-      'wss://hermes.indra-developer.my.id/device/ws',
-      'https://hermes.indra-developer.my.id',
+      'wss://example.com/device/ws',
+      'https://example.com',
       'http://192.168.1.10:8644',
       'ws://192.168.1.10:18789/device/ws',
       'ws://example.com/custom',
@@ -36,7 +36,7 @@ void main() {
 
     test('accepts input surrounded by whitespace', () {
       expect(
-        isAcceptableGatewayUrl('  wss://hermes.indra-developer.my.id/device/ws  '),
+        isAcceptableGatewayUrl('  wss://example.com/device/ws  '),
         isTrue,
       );
     });
@@ -60,7 +60,7 @@ void main() {
       // Scheme-relative and scheme-less forms: the transport layer would
       // happily prepend ws:// to these, but the UI must not accept them.
       '//host',
-      'hermes.indra-developer.my.id/device/ws',
+      'example.com/device/ws',
       'localhost:8080',
       'http://',
       'https://',
@@ -79,8 +79,8 @@ void main() {
   group('isAcceptableGatewayUrl <-> normalizeGatewayUri drift guard', () {
     const inputs = <String>[
       // Accepted
-      'wss://hermes.indra-developer.my.id/device/ws',
-      'https://hermes.indra-developer.my.id',
+      'wss://example.com/device/ws',
+      'https://example.com',
       'http://192.168.1.10:8644',
       'ws://192.168.1.10:18789/device/ws',
       '  http://localhost:8080  ',
@@ -92,7 +92,7 @@ void main() {
       'ftp://host',
       'httpx://host',
       '//host',
-      'hermes.indra-developer.my.id/device/ws',
+      'example.com/device/ws',
       'http://',
     ];
 

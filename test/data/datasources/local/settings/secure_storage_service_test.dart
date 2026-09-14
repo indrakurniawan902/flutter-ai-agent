@@ -20,7 +20,7 @@ void main() {
   });
 
   group('SecureStorageService - Base URL', () {
-    const testBaseUrl = 'https://indra-9router.my.id/v1';
+    const testBaseUrl = 'https://example.com/v1';
 
     test('saveBaseUrl writes to storage with key llm_base_url', () async {
       when(() => mockStorage.write(
@@ -165,7 +165,7 @@ void main() {
           )).thenAnswer((_) async {});
 
       await service.saveSettings(
-        baseUrl: 'https://indra-9router.my.id/v1',
+        baseUrl: 'https://example.com/v1',
         apiKey: 'sk-12345',
         model: 'ag-glm',
         temperature: 0.5,
@@ -173,7 +173,7 @@ void main() {
 
       verify(() => mockStorage.write(
             key: SecureStorageService.keyBaseUrl,
-            value: 'https://indra-9router.my.id/v1',
+            value: 'https://example.com/v1',
           )).called(1);
       verify(() => mockStorage.write(
             key: SecureStorageService.keyApiKey,
@@ -191,7 +191,7 @@ void main() {
 
     test('getSettings retrieves all settings in a SettingsData bundle', () async {
       when(() => mockStorage.read(key: SecureStorageService.keyBaseUrl))
-          .thenAnswer((_) async => 'https://indra-9router.my.id/v1');
+          .thenAnswer((_) async => 'https://example.com/v1');
       when(() => mockStorage.read(key: SecureStorageService.keyApiKey))
           .thenAnswer((_) async => 'sk-12345');
       when(() => mockStorage.read(key: SecureStorageService.keyModel))
@@ -204,7 +204,7 @@ void main() {
 
       final settings = await service.getSettings();
 
-      expect(settings.baseUrl, 'https://indra-9router.my.id/v1');
+      expect(settings.baseUrl, 'https://example.com/v1');
       expect(settings.apiKey, 'sk-12345');
       expect(settings.model, 'ag-glm');
       expect(settings.temperature, 0.8);
@@ -224,7 +224,7 @@ void main() {
     final profile1 = ServerProfile(
       id: 'profile-1',
       name: 'VPS Oracle',
-      gatewayUrl: 'https://indra-9router.my.id/v1',
+      gatewayUrl: 'https://example.com/v1',
       token: 'sk-token-1',
       isActive: true,
       lastConnected: DateTime.utc(2026, 9, 11, 10, 0),

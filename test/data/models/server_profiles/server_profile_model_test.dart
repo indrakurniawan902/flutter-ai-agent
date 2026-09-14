@@ -10,7 +10,7 @@ void main() {
   final tServerProfile = ServerProfile(
     id: 'vps-oracle',
     name: 'VPS Oracle',
-    gatewayUrl: 'https://indra-9router.my.id/v1',
+    gatewayUrl: 'https://example.com/v1',
     token: 'sk-test-token-123',
     isActive: true,
     lastConnected: testDate,
@@ -49,7 +49,7 @@ void main() {
 
       expect(updated.id, 'vps-oracle');
       expect(updated.name, 'Oracle Cloud');
-      expect(updated.gatewayUrl, 'https://indra-9router.my.id/v1');
+      expect(updated.gatewayUrl, 'https://example.com/v1');
       expect(updated.token, 'sk-test-token-123');
       expect(updated.isActive, isFalse);
       expect(updated.lastConnected, testDate);
@@ -101,7 +101,7 @@ void main() {
       final json = {
         'id': 'vps-oracle',
         'name': 'VPS Oracle',
-        'gatewayUrl': 'https://indra-9router.my.id/v1',
+        'gatewayUrl': 'https://example.com/v1',
         'token': 'sk-test-token-123',
         'isActive': true,
         'lastConnected': testDate.toIso8601String(),
@@ -113,7 +113,7 @@ void main() {
 
       expect(result.id, 'vps-oracle');
       expect(result.name, 'VPS Oracle');
-      expect(result.gatewayUrl, 'https://indra-9router.my.id/v1');
+      expect(result.gatewayUrl, 'https://example.com/v1');
       expect(result.token, 'sk-test-token-123');
       expect(result.isActive, isTrue);
       expect(result.lastConnected, testDate);
@@ -125,7 +125,7 @@ void main() {
       final json = {
         'id': 'vps-oracle',
         'name': 'VPS Oracle',
-        'gateway_url': 'https://indra-9router.my.id/v1',
+        'gateway_url': 'https://example.com/v1',
         'token': 'sk-test-token-123',
         'is_active': true,
         'last_connected': testDate.millisecondsSinceEpoch,
@@ -135,7 +135,7 @@ void main() {
 
       expect(result.id, 'vps-oracle');
       expect(result.name, 'VPS Oracle');
-      expect(result.gatewayUrl, 'https://indra-9router.my.id/v1');
+      expect(result.gatewayUrl, 'https://example.com/v1');
       expect(result.token, 'sk-test-token-123');
       expect(result.isActive, isTrue);
       expect(result.lastConnected, testDate);
@@ -146,7 +146,7 @@ void main() {
       final json = {
         'id': 'vps-oracle',
         'name': 'VPS Oracle',
-        'gatewayUrl': 'https://indra-9router.my.id/v1',
+        'gatewayUrl': 'https://example.com/v1',
         'token': 'sk-test-token-123',
         'isActive': false,
         'lastConnected': seconds,
@@ -211,7 +211,7 @@ void main() {
       expect(json, {
         'id': 'vps-oracle',
         'name': 'VPS Oracle',
-        'gatewayUrl': 'https://indra-9router.my.id/v1',
+        'gatewayUrl': 'https://example.com/v1',
         'token': 'sk-test-token-123',
         'isActive': true,
         'lastConnected': testDate.toIso8601String(),
