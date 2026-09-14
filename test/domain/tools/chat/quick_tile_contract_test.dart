@@ -205,8 +205,39 @@ void main() {
         'ACTION_CANCEL_VOICE ->',
       ]) {
         final branch = bracedBlock(backgroundServiceKt, anchor);
-        expect(branch, contains('startForeground('), reason: anchor);
+        // Must go through the typed helper: a 2-arg startForeground() defaults
+        // to every manifest type, so the microphone type's RECORD_AUDIO
+        // prerequisite would be asserted on a tap that never touches the mic.
+        expect(
+          branch,
+          contains('startForegroundTyped('),
+          reason: anchor,
+        );
       }
+    });
+
+    test('every startForeground call site goes through the typed helper', () {
+      if (!ready) return;
+
+      // A raw 2-arg startForeground() outside the helper reintroduces the
+      // SecurityException. The helper itself owns both raw 2-arg calls (the
+      // pre-API-29 fallback and the last resort) plus the typed 3-arg call.
+      final raw2Arg = countOf(
+        backgroundServiceKt,
+        'startForeground(NOTIFICATION_ID, notification)',
+      );
+      expect(
+        raw2Arg,
+        2,
+        reason: 'only the helper may call the 2-arg overload directly '
+            '(pre-Q fallback + last-resort), found $raw2Arg',
+      );
+      final raw3Arg = countOf(
+        backgroundServiceKt,
+        'startForeground(NOTIFICATION_ID, notification, types)',
+      );
+      expect(raw3Arg, 1, reason: 'the typed overload belongs in the helper');
+      expect(backgroundServiceKt, contains('startForegroundTyped('));
     });
 
     test('manifest binds the quick settings tile', () {

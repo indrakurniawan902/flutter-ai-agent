@@ -180,7 +180,7 @@ class FlamesBackgroundService : Service() {
                     val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
                     notificationManager?.notify(NOTIFICATION_ID, notification)
                 } else {
-                    startForeground(NOTIFICATION_ID, notification)
+                    startForegroundTyped(notification)
                     isServiceRunning = true
                 }
                 return START_STICKY
@@ -217,7 +217,7 @@ class FlamesBackgroundService : Service() {
                 // Runs the turn inside this service: no MainActivity, no ChatScreen.
                 // The Dart seam only exists while a Flutter engine is alive, so an
                 // engine-less tap is reported honestly instead of opening the app.
-                startForeground(NOTIFICATION_ID, buildForegroundNotification(currentTitle, currentContent))
+                startForegroundTyped(buildForegroundNotification(currentTitle, currentContent))
                 isServiceRunning = true
                 val channel = dartChannel
                 if (channel != null) {
@@ -239,7 +239,7 @@ class FlamesBackgroundService : Service() {
                 // Removing the tile mid-turn must not leave the microphone hanging.
                 // The Dart seam only exists while a Flutter engine is alive, so an
                 // engine-less cancel is reported honestly instead of opening the app.
-                startForeground(NOTIFICATION_ID, buildForegroundNotification(currentTitle, currentContent))
+                startForegroundTyped(buildForegroundNotification(currentTitle, currentContent))
                 isServiceRunning = true
                 val channel = dartChannel
                 if (channel != null) {
