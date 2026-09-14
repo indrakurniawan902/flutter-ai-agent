@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart' as url_launcher;
 import 'package:url_launcher/url_launcher.dart' show LaunchMode;
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 
 abstract class ContactsPlatformWrapper {
   Future<bool> isPermissionGranted();
@@ -107,7 +108,8 @@ class ContactLauncherTools {
       final contacts = await _contactsProvider.searchContacts(query);
       return Right(jsonEncode(contacts));
     } catch (e) {
-      return Left(ServerFailure('Failed to search contacts: $e'));
+      return Left(ServerFailure(
+          FailureMessage.humanize(e, context: 'Failed to search contacts')));
     }
   }
 
@@ -145,7 +147,8 @@ class ContactLauncherTools {
       }
       return Right('WhatsApp chat opened for $phone');
     } catch (e) {
-      return Left(ServerFailure('Error opening WhatsApp: $e'));
+      return Left(ServerFailure(
+          FailureMessage.humanize(e, context: 'Error opening WhatsApp')));
     }
   }
 
@@ -171,7 +174,8 @@ class ContactLauncherTools {
       }
       return Right('Opened URL: $url');
     } catch (e) {
-      return Left(ServerFailure('Error launching URL: $e'));
+      return Left(ServerFailure(
+          FailureMessage.humanize(e, context: 'Error launching URL')));
     }
   }
 
@@ -197,7 +201,8 @@ class ContactLauncherTools {
       }
       return Right('Phone dialer opened for $phone');
     } catch (e) {
-      return Left(ServerFailure('Error opening phone dialer: $e'));
+      return Left(ServerFailure(
+          FailureMessage.humanize(e, context: 'Error opening phone dialer')));
     }
   }
 }

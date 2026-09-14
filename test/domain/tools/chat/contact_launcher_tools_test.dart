@@ -108,7 +108,8 @@ void main() {
       result.fold(
         (failure) {
           expect(failure, isA<ServerFailure>());
-          expect(failure.message, contains('Contacts DB error'));
+          expect(failure.message, contains('Failed to search contacts'));
+          expect(failure.message, isNot(contains('Exception')));
         },
         (_) => fail('Expected Left but got Right'),
       );
@@ -234,7 +235,8 @@ void main() {
       result.fold(
         (failure) {
           expect(failure, isA<ServerFailure>());
-          expect(failure.message, contains('Platform launch error'));
+          expect(failure.message, contains('Error opening WhatsApp'));
+          expect(failure.message, isNot(contains('Exception')));
         },
         (_) => fail('Expected Left but got Right'),
       );
@@ -362,7 +364,8 @@ void main() {
       result.fold(
         (failure) {
           expect(failure, isA<ServerFailure>());
-          expect(failure.message, contains('Browser failure'));
+          expect(failure.message, contains('Error launching URL'));
+          expect(failure.message, isNot(contains('Exception')));
         },
         (_) => fail('Expected Left but got Right'),
       );
@@ -466,7 +469,8 @@ void main() {
       result.fold(
         (failure) {
           expect(failure, isA<ServerFailure>());
-          expect(failure.message, contains('Dialer launch failure'));
+          expect(failure.message, contains('Error opening phone dialer'));
+          expect(failure.message, isNot(contains('Exception')));
         },
         (_) => fail('Expected Left but got Right'),
       );

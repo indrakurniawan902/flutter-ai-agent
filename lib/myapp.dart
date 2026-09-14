@@ -5,8 +5,10 @@ import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:flutter_ai_agent/common/flavor_config.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/common/constant.dart';
+import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/domain/repositories/action_center/action_center_repository.dart';
 import 'package:flutter_ai_agent/domain/services/skills/skills_registry_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart';
 import 'package:flutter_ai_agent/utils/app_theme.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_router.dart';
 
@@ -16,8 +18,26 @@ Future<void> bootstrap(FlavorConfig flavor) async {
   await _initHiveAdapters();
   configureInjection();
   await _primeSkillsRegistry();
+  await _hydrateGeofenceEngine();
   await _primeActionCenterStore();
   runApp(MyApp(flavor: flavor));
+}
+
+/// Seeds the ambient trigger engine with the geofences persisted by the
+/// Geofence Management screen so they are honored from the first frame after
+/// a restart. Unsupported/failing platforms are swallowed.
+Future<void> _hydrateGeofenceEngine() async {
+  try {
+    if (!getIt.isRegistered<SecureStorageService>()) return;
+    if (!getIt.isRegistered<AmbientTriggerServiceBase>()) return;
+    final stored = await getIt<SecureStorageService>().getGeofences();
+    final engine = getIt<AmbientTriggerServiceBase>();
+    for (final region in stored) {
+      engine.addGeofence(region);
+    }
+  } catch (e) {
+    debugPrint('Geofence hydration skipped: $e');
+  }
 }
 
 /// Opens Hive against a sub directory of the app documents path so the

@@ -1,4 +1,5 @@
 import 'package:flutter_ai_agent/common/constant.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
@@ -51,7 +52,8 @@ class ServerProfileCubit extends Cubit<ServerProfileState> {
       emit(ServerProfileError(
         profiles: state.profiles,
         activeProfile: state.activeProfile,
-        message: 'Failed to load server profiles: $e',
+        message:
+            FailureMessage.humanize(e, context: 'Failed to load server profiles'),
       ));
     }
   }
@@ -160,7 +162,8 @@ class ServerProfileCubit extends Cubit<ServerProfileState> {
       emit(ServerProfileError(
         profiles: state.profiles,
         activeProfile: state.activeProfile,
-        message: 'Failed to save server profile: $e',
+        message:
+            FailureMessage.humanize(e, context: 'Failed to save server profile'),
       ));
     }
   }
@@ -205,7 +208,8 @@ class ServerProfileCubit extends Cubit<ServerProfileState> {
       emit(ServerProfileError(
         profiles: state.profiles,
         activeProfile: state.activeProfile,
-        message: 'Failed to switch server profile: $e',
+        message: FailureMessage.humanize(
+            e, context: 'Failed to switch server profile'),
       ));
     }
   }
@@ -258,7 +262,8 @@ class ServerProfileCubit extends Cubit<ServerProfileState> {
       emit(ServerProfileError(
         profiles: state.profiles,
         activeProfile: state.activeProfile,
-        message: 'Failed to update active profile: $e',
+        message: FailureMessage.humanize(
+            e, context: 'Failed to update active profile'),
       ));
     }
   }
@@ -298,7 +303,8 @@ class ServerProfileCubit extends Cubit<ServerProfileState> {
       emit(ServerProfileError(
         profiles: state.profiles,
         activeProfile: state.activeProfile,
-        message: 'Failed to delete server profile: $e',
+        message: FailureMessage.humanize(
+            e, context: 'Failed to delete server profile'),
       ));
     }
   }

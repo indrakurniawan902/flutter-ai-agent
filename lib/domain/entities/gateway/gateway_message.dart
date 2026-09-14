@@ -53,6 +53,9 @@ abstract class GatewayMessage extends Equatable {
       case 'tool_result':
         return GatewayToolCallResponseMessage.fromJson(json);
 
+      case 'tool_event':
+        return GatewayToolEventMessage.fromJson(json);
+
       case 'elicitation_request':
         return GatewayElicitationRequestMessage.fromJson(json);
 
@@ -570,4 +573,48 @@ class GatewayElicitationResponseMessage extends GatewayMessage {
 
   @override
   List<Object?> get props => [type, requestId, status, biometricVerified];
+}
+
+/// Server-side tool lifecycle telemetry forwarded by the device bridge.
+///
+/// Additive frame, display-only (no reply expected).
+/// No emoji is carried by the protocol.
+class GatewayToolEventMessage extends GatewayMessage {
+  final String phase;
+  final String tool;
+  final String label;
+  final String toolCallId;
+  final String? sessionId;
+
+  const GatewayToolEventMessage({
+    this.phase = '',
+    this.tool = '',
+    this.label = '',
+    this.toolCallId = '',
+    this.sessionId,
+  }) : super('tool_event');
+
+  factory GatewayToolEventMessage.fromJson(Map<String, dynamic> json) {
+    final rawSessionId = json['session_id'] ?? json['sessionId'];
+    return GatewayToolEventMessage(
+      phase: (json['phase'] ?? '').toString(),
+      tool: (json['tool'] ?? '').toString(),
+      label: (json['label'] ?? '').toString(),
+      toolCallId: (json['tool_call_id'] ?? json['toolCallId'] ?? '').toString(),
+      sessionId: rawSessionId?.toString(),
+    );
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': type,
+        'phase': phase,
+        'tool': tool,
+        'label': label,
+        'tool_call_id': toolCallId,
+        if (sessionId != null) 'session_id': sessionId,
+      };
+
+  @override
+  List<Object?> get props => [type, phase, tool, label, toolCallId, sessionId];
 }

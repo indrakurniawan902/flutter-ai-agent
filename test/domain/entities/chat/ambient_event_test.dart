@@ -67,7 +67,7 @@ void main() {
   });
 
   group('GeofenceRegion', () {
-    test('supports value equality', () {
+    test('supports value equality and defaults', () {
       const a = GeofenceRegion(
         id: 'home',
         latitude: 1.0,
@@ -81,8 +81,24 @@ void main() {
         radiusMeters: 100.0,
       );
       expect(a, equals(b));
-      expect(a.props, ['home', 1.0, 2.0, 100.0]);
+      expect(a.props, ['home', 'home', 1.0, 2.0, 100.0, true]);
+      expect(a.name, 'home');
+      expect(a.displayName, 'home');
+      expect(a.isEnabled, isTrue);
       expect(a.copyWith(), equals(a));
+
+      const custom = GeofenceRegion(
+        id: 'work',
+        name: 'Workplace',
+        latitude: 1.0,
+        longitude: 2.0,
+        radiusMeters: 100.0,
+        isEnabled: false,
+      );
+      expect(custom.name, 'Workplace');
+      expect(custom.displayName, 'Workplace');
+      expect(custom.isEnabled, isFalse);
+      expect(custom.props, ['work', 'Workplace', 1.0, 2.0, 100.0, false]);
     });
 
     test('copyWith updates specified fields', () {
@@ -94,25 +110,33 @@ void main() {
       );
       final copy = region.copyWith(
         id: 'work',
+        name: 'Workplace',
         latitude: 3.0,
         longitude: 4.0,
         radiusMeters: 250.0,
+        isEnabled: false,
       );
       expect(copy.id, 'work');
+      expect(copy.name, 'Workplace');
       expect(copy.latitude, 3.0);
       expect(copy.longitude, 4.0);
       expect(copy.radiusMeters, 250.0);
+      expect(copy.isEnabled, isFalse);
     });
 
     test('toJson / fromJson roundtrip', () {
       const region = GeofenceRegion(
         id: 'home',
+        name: 'My House',
         latitude: 1.5,
         longitude: 2.5,
         radiusMeters: 150.0,
+        isEnabled: false,
       );
       final restored = GeofenceRegion.fromJson(region.toJson());
       expect(restored, equals(region));
+      expect(restored.name, 'My House');
+      expect(restored.isEnabled, isFalse);
     });
 
     test('fromJson supports lat/lng and radius aliases', () {
@@ -123,9 +147,50 @@ void main() {
         'radius': 300,
       });
       expect(region.id, 'office');
+      expect(region.name, 'office');
       expect(region.latitude, 10.0);
       expect(region.longitude, 20.0);
       expect(region.radiusMeters, 300.0);
+      expect(region.isEnabled, isTrue);
+    });
+
+    test('fromJson supports label and active aliases', () {
+      final region = GeofenceRegion.fromJson({
+        'id': 'office',
+        'label': 'Main Office',
+        'lat': 10.0,
+        'lng': 20.0,
+        'radius': 300,
+        'active': false,
+      });
+      expect(region.id, 'office');
+      expect(region.name, 'Main Office');
+      expect(region.latitude, 10.0);
+      expect(region.longitude, 20.0);
+      expect(region.radiusMeters, 300.0);
+      expect(region.isEnabled, isFalse);
+    });
+
+    test('fromJson supports string booleans and is_enabled / active keys', () {
+      final r1 = GeofenceRegion.fromJson({
+        'id': 'r1',
+        'is_enabled': 'false',
+      });
+      expect(r1.isEnabled, isFalse);
+
+      final r2 = GeofenceRegion.fromJson({
+        'id': 'r2',
+        'active': 'true',
+      });
+      expect(r2.isEnabled, isTrue);
+
+      final r3 = GeofenceRegion.fromJson({
+        'id': 'r3',
+        'isEnabled': true,
+        'name': 'Custom',
+      });
+      expect(r3.name, 'Custom');
+      expect(r3.isEnabled, isTrue);
     });
 
     test('fromJson supports radius_meters alias and string numbers', () {
@@ -143,19 +208,23 @@ void main() {
     test('fromJson defaults missing or invalid fields', () {
       final empty = GeofenceRegion.fromJson({});
       expect(empty.id, isEmpty);
+      expect(empty.name, isEmpty);
       expect(empty.latitude, 0.0);
       expect(empty.longitude, 0.0);
       expect(empty.radiusMeters, 100.0);
+      expect(empty.isEnabled, isTrue);
 
       final invalid = GeofenceRegion.fromJson({
         'id': null,
         'latitude': 'not-a-number',
         'longitude': true,
         'radiusMeters': 'bad',
+        'isEnabled': 'invalid_bool',
       });
       expect(invalid.latitude, 0.0);
       expect(invalid.longitude, 0.0);
       expect(invalid.radiusMeters, 100.0);
+      expect(invalid.isEnabled, isTrue);
     });
   });
 

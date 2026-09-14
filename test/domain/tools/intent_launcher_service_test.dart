@@ -136,7 +136,7 @@ void main() {
         (f) {
           expect(f, isA<ServerFailure>());
           expect(f.message, contains('Error opening WhatsApp'));
-          expect(f.message, contains('boom'));
+          expect(f.message, isNot(contains('Exception')));
         },
         (_) => fail('Expected Left'),
       );

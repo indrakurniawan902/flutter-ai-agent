@@ -40,37 +40,51 @@ AmbientEventType ambientEventTypeFromJson(dynamic raw) {
 
 class GeofenceRegion extends Equatable {
   final String id;
+  final String _name;
   final double latitude;
   final double longitude;
   final double radiusMeters;
+  final bool isEnabled;
 
   const GeofenceRegion({
     required this.id,
+    String name = '',
     required this.latitude,
     required this.longitude,
     required this.radiusMeters,
-  });
+    this.isEnabled = true,
+  }) : _name = name;
+
+  String get name => _name.isNotEmpty ? _name : id;
+  String get displayName => name;
+  String get rawName => _name;
 
   GeofenceRegion copyWith({
     String? id,
+    String? name,
     double? latitude,
     double? longitude,
     double? radiusMeters,
+    bool? isEnabled,
   }) {
     return GeofenceRegion(
       id: id ?? this.id,
+      name: name ?? _name,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
       radiusMeters: radiusMeters ?? this.radiusMeters,
+      isEnabled: isEnabled ?? this.isEnabled,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'name': name,
       'latitude': latitude,
       'longitude': longitude,
       'radiusMeters': radiusMeters,
+      'isEnabled': isEnabled,
     };
   }
 
@@ -81,19 +95,43 @@ class GeofenceRegion extends Equatable {
       return fallback;
     }
 
+    bool parseBool(dynamic raw, bool fallback) {
+      if (raw is bool) return raw;
+      if (raw is String) {
+        final lower = raw.trim().toLowerCase();
+        if (lower == 'true') return true;
+        if (lower == 'false') return false;
+      }
+      if (raw is num) return raw != 0;
+      return fallback;
+    }
+
+    final rawName = json['name'] ?? json['label'];
+    final rawEnabled =
+        json['isEnabled'] ?? json['is_enabled'] ?? json['active'];
+
     return GeofenceRegion(
       id: json['id']?.toString() ?? '',
+      name: rawName?.toString() ?? '',
       latitude: parseDouble(json['latitude'] ?? json['lat'], 0.0),
       longitude: parseDouble(json['longitude'] ?? json['lng'], 0.0),
       radiusMeters: parseDouble(
         json['radiusMeters'] ?? json['radius_meters'] ?? json['radius'],
         100.0,
       ),
+      isEnabled: parseBool(rawEnabled, true),
     );
   }
 
   @override
-  List<Object?> get props => [id, latitude, longitude, radiusMeters];
+  List<Object?> get props => [
+        id,
+        name,
+        latitude,
+        longitude,
+        radiusMeters,
+        isEnabled,
+      ];
 }
 
 class AmbientEvent extends Equatable {

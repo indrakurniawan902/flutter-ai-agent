@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:injectable/injectable.dart';
 
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/entities/skills/skill.dart';
 import 'package:flutter_ai_agent/domain/services/skills/skill_import_service.dart';
 import 'package:flutter_ai_agent/domain/services/skills/skills_registry_service.dart';
@@ -38,7 +39,8 @@ class SkillsCubit extends Cubit<SkillsState> {
         activeCount: _skillsRegistryService.getActiveSkills().length,
       ));
     } catch (e) {
-      emit(SkillsError('Failed to load skills: $e'));
+      emit(SkillsError(
+          FailureMessage.humanize(e, context: 'Failed to load skills')));
     }
   }
 

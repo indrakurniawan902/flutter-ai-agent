@@ -186,7 +186,8 @@ void main() {
       result.fold(
         (failure) {
           expect(failure, isA<ServerFailure>());
-          expect(failure.message, contains('boom'));
+          expect(failure.message, contains('Calendar error'));
+          expect(failure.message, isNot(contains('Exception')));
         },
         (_) => fail('Expected Left'),
       );
@@ -316,7 +317,8 @@ void main() {
       result.fold(
         (failure) {
           expect(failure, isA<ServerFailure>());
-          expect(failure.message, contains('boom'));
+          expect(failure.message, contains('Calendar error'));
+          expect(failure.message, isNot(contains('Exception')));
         },
         (_) => fail('Expected Left'),
       );

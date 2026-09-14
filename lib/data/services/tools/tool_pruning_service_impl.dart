@@ -1,130 +1,11 @@
 import 'package:injectable/injectable.dart';
 
 import 'package:flutter_ai_agent/domain/services/tools/tool_pruning_service.dart';
-
-class _ToolCategory {
-  const _ToolCategory(this.keywords, this.toolNames);
-
-  final List<String> keywords;
-  final List<String> toolNames;
-}
-
-const List<_ToolCategory> _categories = [
-  _ToolCategory(
-    [
-      'battery',
-      'wifi',
-      'signal',
-      'storage',
-      'ram',
-      'cpu',
-      'charging',
-      'device',
-      'system',
-      'status',
-      'sensor',
-    ],
-    ['device_status', 'system_info'],
-  ),
-  _ToolCategory(
-    ['copy', 'paste', 'clipboard'],
-    ['clipboard_read', 'clipboard_write'],
-  ),
-  _ToolCategory(
-    ['location', 'where', 'gps', 'coordinate', 'geofence', 'nearby', 'place'],
-    ['get_location', 'register_geofence', 'list_geofences', 'remove_geofence'],
-  ),
-  _ToolCategory(
-    ['photo', 'scan', 'image', 'qr', 'ocr', 'camera', 'picture'],
-    ['camera_take_photo'],
-  ),
-  _ToolCategory(
-    ['calendar', 'event', 'schedule', 'reminder', 'appointment', 'meeting'],
-    ['calendar_list_events', 'calendar_create_event', 'schedule_reminder'],
-  ),
-  _ToolCategory(
-    ['notification', 'unread', 'otp', 'code', 'verify', 'inbox', 'alert'],
-    [
-      'read_recent_notifications',
-      'extract_latest_otp',
-      'send_local_notification',
-      'triage_notifications',
-    ],
-  ),
-  _ToolCategory(
-    [
-      'file',
-      'document',
-      'directory',
-      'folder',
-      'download',
-      'pdf',
-      'export',
-      'markdown',
-      'report',
-      'doc',
-    ],
-    ['list_device_files', 'read_device_file', 'export_document_pdf'],
-  ),
-  _ToolCategory(
-    ['remember', 'recall', 'memory', 'memorize', 'forget'],
-    ['save_memory', 'search_memories', 'list_memories', 'delete_memory'],
-  ),
-  _ToolCategory(
-    ['voice', 'speak', 'say', 'listen', 'tts', 'audio'],
-    ['listen_voice_input', 'speak_text'],
-  ),
-  _ToolCategory(
-    [
-      'whatsapp',
-      'wa',
-      'phone',
-      'call',
-      'contact',
-      'intent',
-      'map',
-      'open',
-      'url',
-      'browser',
-      'deep',
-      'link',
-    ],
-    [
-      'search_contacts',
-      'make_phone_call',
-      'open_whatsapp_chat',
-      'open_external_url',
-    ],
-  ),
-  _ToolCategory(
-    ['ambient', 'trigger', 'condition', 'watch'],
-    [
-      'check_ambient_status',
-      'trigger_ambient_check',
-      'register_geofence',
-      'list_geofences',
-      'remove_geofence',
-    ],
-  ),
-  _ToolCategory(
-    ['background', 'service', 'headless'],
-    ['manage_background_service'],
-  ),
-];
+import 'package:flutter_ai_agent/domain/services/tools/tool_search_index.dart';
 
 @LazySingleton(as: ToolPruningService)
 class ToolPruningServiceImpl implements ToolPruningService {
   const ToolPruningServiceImpl();
-
-  static final List<RegExp> _keywordMatchers = _categories
-      .map(
-        (category) => RegExp(
-          r'(?:^|[^a-z0-9])(?:'
-          '${category.keywords.map(RegExp.escape).join('|')}'
-          r')(?:[^a-z0-9]|$)',
-        ),
-      )
-      .toList(growable: false);
 
   static const String toolSearchName = 'tool_search';
   static const String toolDescribeName = 'tool_describe';
@@ -176,13 +57,7 @@ class ToolPruningServiceImpl implements ToolPruningService {
   }) {
     if (!enabled) return fullToolDefinitions;
 
-    final text = prompt.toLowerCase();
-    final matchedNames = <String>{};
-    for (var i = 0; i < _categories.length; i++) {
-      if (_keywordMatchers[i].hasMatch(text)) {
-        matchedNames.addAll(_categories[i].toolNames);
-      }
-    }
+    final matchedNames = ToolSearchIndex.toolNamesForPrompt(prompt);
 
     final result = <Map<String, dynamic>>[
       toolSearchDefinition,

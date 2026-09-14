@@ -10,6 +10,7 @@ import 'package:injectable/injectable.dart';
 import 'package:flutter_ai_agent/common/constant.dart';
 import 'package:flutter_ai_agent/common/exception.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
 
@@ -387,8 +388,12 @@ class VoiceOutputService implements VoiceOutputServiceBase {
     } on UnsupportedEndpointException {
       return _speakWithPlatform(text, voice: voice, speed: speed);
     } catch (e) {
-      _fail('Speech synthesis failed: $e');
-      return Left(ServerFailure('Speech synthesis failed: $e'));
+      _fail(FailureMessage.humanize(e, context: 'Speech synthesis failed'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Speech synthesis failed'),
+        ),
+      );
     }
   }
 
@@ -399,8 +404,10 @@ class VoiceOutputService implements VoiceOutputServiceBase {
       if (!_playing) await _playNext();
       return const Right(unit);
     } catch (e) {
-      _fail('Audio queue failed: $e');
-      return Left(ServerFailure('Audio queue failed: $e'));
+      _fail(FailureMessage.humanize(e, context: 'Audio queue failed'));
+      return Left(
+        ServerFailure(FailureMessage.humanize(e, context: 'Audio queue failed')),
+      );
     }
   }
 
@@ -430,8 +437,10 @@ class VoiceOutputService implements VoiceOutputServiceBase {
     } on UnsupportedEndpointException {
       return _speakWithPlatform(text, voice: voice, speed: speed);
     } catch (e) {
-      _fail('Text queue failed: $e');
-      return Left(ServerFailure('Text queue failed: $e'));
+      _fail(FailureMessage.humanize(e, context: 'Text queue failed'));
+      return Left(
+        ServerFailure(FailureMessage.humanize(e, context: 'Text queue failed')),
+      );
     }
   }
 
@@ -461,8 +470,12 @@ class VoiceOutputService implements VoiceOutputServiceBase {
       _setStatus(VoiceOutputStatus.idle);
       return const Right(unit);
     } catch (e) {
-      _fail('Platform TTS failed: $e');
-      return Left(ServerFailure('Platform TTS failed: $e'));
+      _fail(FailureMessage.humanize(e, context: 'Platform TTS failed'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Platform TTS failed'),
+        ),
+      );
     }
   }
 
@@ -537,7 +550,7 @@ class VoiceOutputService implements VoiceOutputServiceBase {
       await _player.play(BytesSource(next));
     } catch (e) {
       _playing = false;
-      _fail('Audio playback failed: $e');
+      _fail(FailureMessage.humanize(e, context: 'Audio playback failed'));
       await _playNext();
     }
   }

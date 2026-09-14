@@ -5,8 +5,11 @@ import 'package:dartz/dartz.dart';
 import 'package:injectable/injectable.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/ambient_event.dart';
+import 'package:flutter_ai_agent/domain/services/tools/tool_search_index.dart';
 import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
+import 'accessibility_inspector_service.dart';
 import 'ambient_trigger_service.dart';
 import 'calendar_service.dart';
 import 'background_service.dart';
@@ -15,6 +18,8 @@ import 'clipboard_service.dart';
 import 'contact_launcher_tools.dart';
 import 'device_context_service.dart';
 import 'file_workspace_service.dart';
+import 'health_metrics.dart';
+import 'health_service.dart';
 import 'intent_launcher_service.dart';
 import 'local_memory_service.dart';
 import 'location_service.dart';
@@ -88,6 +93,8 @@ class ToolRegistry {
     IntentLauncherServiceBase? intentLauncherService,
     UrlReaderServiceBase? urlReaderService,
     NfcServiceBase? nfcService,
+    HealthServiceBase? healthService,
+    AccessibilityInspectorServiceBase? accessibilityInspectorService,
   }) {
     if (clipboardService != null) registerClipboardTools(clipboardService);
     if (locationService != null) registerLocationTools(locationService);
@@ -120,6 +127,10 @@ class ToolRegistry {
     }
     if (urlReaderService != null) registerUrlReaderTools(urlReaderService);
     if (nfcService != null) registerNfcTools(nfcService);
+    if (healthService != null) registerHealthTools(healthService);
+    if (accessibilityInspectorService != null) {
+      registerAccessibilityTools(accessibilityInspectorService);
+    }
     registerMetaTools();
   }
 
@@ -128,7 +139,9 @@ class ToolRegistry {
       RegisteredTool(
         name: 'tool_search',
         description:
-            'Searches the available tools by keyword and returns matching tool names.',
+            'Searches the available tools by keyword and returns matching tool names, '
+            'best match first. Accepts multi-word queries; prefer single keywords like '
+            'battery, location, notification.',
         parameters: const {
           'type': 'object',
           'properties': {
@@ -141,17 +154,20 @@ class ToolRegistry {
         },
         securityTier: SecurityTier.tier1Auto,
         execute: (args) async {
-          final query = (args['query'] ?? '').toString().toLowerCase();
-          final matches = <String>[];
-          for (final tool in activeTools) {
-            if (matches.length >= 10) break;
-            final haystack =
-                '${tool.name} ${tool.description}'.toLowerCase();
-            if (query.isEmpty || haystack.contains(query)) {
-              matches.add(tool.name);
-            }
+          final query = (args['query'] ?? '').toString().trim();
+          final names = ToolSearchIndex.rank(
+            query: query,
+            docs: activeTools
+                .map((t) => ToolSearchDoc(name: t.name, description: t.description))
+                .toList(growable: false),
+          );
+          if (names.isEmpty) {
+            return Right(
+              'No tools matched "$query". Try a single English keyword '
+              '(e.g. battery, location, notification).',
+            );
           }
-          return Right(matches.join('\n'));
+          return Right(names.join('\n'));
         },
       ),
     );
@@ -235,7 +251,8 @@ class ToolRegistry {
       }
       return await tool.execute(arguments);
     } catch (e) {
-      return Left(ServerFailure('Tool execution error: $e'));
+      return Left(ServerFailure(
+          FailureMessage.humanize(e, context: 'Tool execution error')));
     }
   }
 
@@ -1452,6 +1469,121 @@ class ToolRegistry {
           );
           return result.map((balance) => jsonEncode(balance.toJson()));
         },
+      ),
+    );
+  }
+
+  void registerHealthTools(HealthServiceBase service) {
+    register(
+      RegisteredTool(
+        name: 'health_status',
+        description:
+            'Reports whether the device health provider (Android Health Connect) is available and which health permissions are granted.',
+        parameters: const {
+          'type': 'object',
+          'properties': <String, dynamic>{},
+          'required': <String>[],
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (_) => service.healthStatusFormattedJson(),
+      ),
+    );
+
+    register(
+      RegisteredTool(
+        name: 'get_health_data',
+        description:
+            'Reads health metrics (steps, heart rate, calories, sleep, SpO2, weight) from Android Health Connect for a time range.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'metric': {
+              'type': 'string',
+              'enum': HealthMetrics.supported,
+              'description':
+                  'Health metric to read (${HealthMetrics.description})',
+            },
+            'startDate': {
+              'type': 'string',
+              'description':
+                  'Range start in ISO 8601 (default: 24 hours before endDate)',
+            },
+            'endDate': {
+              'type': 'string',
+              'description': 'Range end in ISO 8601 (default: now)',
+            },
+          },
+          'required': ['metric'],
+        },
+        securityTier: SecurityTier.tier2Permission,
+        checkPermission: () => service.checkPermission(),
+        execute: (args) => service.getHealthDataFormattedJson(
+          metric: args['metric']?.toString() ?? '',
+          startDate: args['startDate']?.toString(),
+          endDate: args['endDate']?.toString(),
+        ),
+      ),
+    );
+  }
+
+  void registerAccessibilityTools(AccessibilityInspectorServiceBase service) {
+    register(
+      RegisteredTool(
+        name: 'ui_find_elements',
+        description:
+            'Reads the CURRENT screen as a structured text tree (role, text, '
+            'content description, clickable/focusable/editable, bounds, depth) so '
+            'you can pick an element by meaning instead of by coordinates. '
+            'READ-ONLY: it never taps, swipes or types. Requires the "Flames '
+            'Screen Reader" accessibility service; while that service is off it '
+            'fails with [accessibility_not_enabled] plus a one-tap fix '
+            '(launch_system_setting with setting_type "accessibility"). Results '
+            'are capped by max_nodes/max_depth and end with a marker when '
+            'elements were cut.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'text_filter': {
+              'type': 'string',
+              'description':
+                  'Keep elements whose text OR content description contains '
+                      'this, case-insensitive.',
+            },
+            'package_filter': {
+              'type': 'string',
+              'description':
+                  'Keep elements whose package contains this, case-insensitive.',
+            },
+            'clickable_only': {
+              'type': 'boolean',
+              'description': 'Only clickable elements.',
+            },
+            'max_nodes': {
+              'type': 'integer',
+              'description': 'Maximum elements to return (default 40, clamped '
+                  '1-200).',
+            },
+            'max_depth': {
+              'type': 'integer',
+              'description':
+                  'Maximum tree depth to include (default 8, clamped 1-20).',
+            },
+          },
+          'required': <String>[],
+        },
+        securityTier: SecurityTier.tier2Permission,
+        // No checkPermission: the registry gate would return a generic
+        // PermissionFailure, while the service returns the actionable
+        // [accessibility_not_enabled] message the model needs.
+        execute: (args) => service.findElementsFormatted(
+          textFilter: args['text_filter']?.toString(),
+          packageFilter: args['package_filter']?.toString(),
+          clickableOnly: args['clickable_only'] as bool? ?? false,
+          maxNodes: (args['max_nodes'] as num?)?.toInt() ??
+              AccessibilityTreeSerializer.defaultMaxNodes,
+          maxDepth: (args['max_depth'] as num?)?.toInt() ??
+              AccessibilityTreeSerializer.defaultMaxDepth,
+        ),
       ),
     );
   }
