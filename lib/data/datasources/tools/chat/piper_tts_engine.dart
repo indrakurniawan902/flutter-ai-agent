@@ -87,16 +87,6 @@ class DefaultSherpaTtsWrapper implements SherpaTtsWrapper {
   }
 }
 
-/// Thrown when a downloaded voice tarball fails MD5 verification.
-class VoiceModelIntegrityException implements Exception {
-  const VoiceModelIntegrityException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => 'VoiceModelIntegrityException: $message';
-}
-
 /// Resolves the `<id>.onnx` file name, falling back to `<id>.onnx`
 /// for ids outside the catalog (e.g. in tests).
 String _voiceModelFileName(String voiceId) =>
@@ -297,7 +287,7 @@ class PiperTtsEngine implements PiperTtsEngineBase {
     bool Function()? nativeSupported,
   }) : _store = store,
        _sherpa = sherpa ?? DefaultSherpaTtsWrapper(),
-       _player = player ?? DefaultAudioPlayerWrapper(),
+       _player = player,
        _nativeSupported = nativeSupported;
 
   /// Injectable-friendly creator.
@@ -307,8 +297,13 @@ class PiperTtsEngine implements PiperTtsEngineBase {
 
   final PiperVoiceStoreBase _store;
   final SherpaTtsWrapper _sherpa;
-  final AudioPlayerWrapper _player;
+  AudioPlayerWrapper? _player;
   final bool Function()? _nativeSupported;
+
+  /// Lazily builds the audio player so DI resolution never touches a
+  /// platform plugin in test environments.
+  AudioPlayerWrapper get _audioPlayer =>
+      _player ??= DefaultAudioPlayerWrapper();
 
   String? _preparedVoiceId;
   String? _modelPath;
@@ -362,8 +357,8 @@ class PiperTtsEngine implements PiperTtsEngineBase {
       );
       if (audio.samples.isEmpty) return false;
       final wav = _encodeWav16Mono(audio.samples, audio.sampleRate);
-      await _player.play(BytesSource(wav));
-      await _player.onPlayerStateChanged
+      await _audioPlayer.play(BytesSource(wav));
+      await _audioPlayer.onPlayerStateChanged
           .firstWhere((state) => state == PlayerState.completed)
           .timeout(
             const Duration(seconds: 45),
@@ -378,14 +373,18 @@ class PiperTtsEngine implements PiperTtsEngineBase {
   @override
   Future<void> setVolume(double volume) async {
     try {
-      await _player.setVolume(volume);
+      final player = _player;
+      if (player == null) return;
+      await player.setVolume(volume);
     } catch (_) {}
   }
 
   @override
   Future<void> stop() async {
     try {
-      await _player.stop();
+      final player = _player;
+      if (player == null) return;
+      await player.stop();
     } catch (_) {}
   }
 }

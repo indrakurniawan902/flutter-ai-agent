@@ -1,7 +1,6 @@
 import 'package:flutter_ai_agent/common/constant.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
-import 'package:flutter_ai_agent/data/datasources/tools/chat/piper_tts_engine.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/nfc_tag_prompt_binding.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/piper_voice.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';

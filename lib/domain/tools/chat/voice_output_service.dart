@@ -62,6 +62,16 @@ abstract class VoiceOutputServiceBase {
 
 enum TtsEngineMode { system, piper }
 
+/// Thrown when a downloaded Piper voice model fails checksum/size validation.
+class VoiceModelIntegrityException implements Exception {
+  const VoiceModelIntegrityException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'VoiceModelIntegrityException: $message';
+}
+
 /// Contract for the on-demand Piper voice model store
 /// (download/verify/locate).
 abstract class PiperVoiceStoreBase {
