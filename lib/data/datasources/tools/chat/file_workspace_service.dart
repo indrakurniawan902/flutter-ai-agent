@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/data/datasources/tools/chat/pdf_text_parser.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/file_workspace_service.dart';
 
@@ -167,7 +168,9 @@ class FileWorkspaceService implements FileWorkspaceServiceBase {
       final content = await _fileSystem.readFileAsString(path);
       return Right(_paginate(content, maxLines: maxLines, offset: offset));
     } catch (e) {
-      return Left(CacheFailure('Failed to read file: $e'));
+      return Left(
+        CacheFailure(FailureMessage.humanize(e, context: 'Failed to read file')),
+      );
     }
   }
 
@@ -199,7 +202,11 @@ class FileWorkspaceService implements FileWorkspaceServiceBase {
       }
       return Right(parsed.text);
     } catch (e) {
-      return Left(CacheFailure('Failed to extract PDF text: $e'));
+      return Left(
+        CacheFailure(
+          FailureMessage.humanize(e, context: 'Failed to extract PDF text'),
+        ),
+      );
     }
   }
 
@@ -265,7 +272,11 @@ class FileWorkspaceService implements FileWorkspaceServiceBase {
       });
       return Right(entries);
     } catch (e) {
-      return Left(CacheFailure('Failed to list files: $e'));
+      return Left(
+        CacheFailure(
+          FailureMessage.humanize(e, context: 'Failed to list files'),
+        ),
+      );
     }
   }
 
@@ -282,7 +293,11 @@ class FileWorkspaceService implements FileWorkspaceServiceBase {
           final jsonList = entries.map((e) => e.toJson()).toList();
           return Right(jsonEncode(jsonList));
         } catch (e) {
-          return Left(CacheFailure('Failed to encode files as JSON: $e'));
+          return Left(
+            CacheFailure(
+              FailureMessage.humanize(e, context: 'Failed to encode files as JSON'),
+            ),
+          );
         }
       },
     );
@@ -305,7 +320,9 @@ class FileWorkspaceService implements FileWorkspaceServiceBase {
       }
       return Right(result.files.first.path);
     } catch (e) {
-      return Left(CacheFailure('Failed to pick file: $e'));
+      return Left(
+        CacheFailure(FailureMessage.humanize(e, context: 'Failed to pick file')),
+      );
     }
   }
 }

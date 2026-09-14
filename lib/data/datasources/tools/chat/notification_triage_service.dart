@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:injectable/injectable.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.dart';
 
 class DefaultNotificationListenerPlatformWrapper
@@ -251,7 +252,11 @@ class NotificationTriageService implements NotificationTriageServiceBase {
           .toList();
       return Right(visible);
     } catch (e) {
-      return Left(ServerFailure('Notification triage error: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Notification triage error'),
+        ),
+      );
     }
   }
 
@@ -295,7 +300,11 @@ class NotificationTriageService implements NotificationTriageServiceBase {
       }
       return Right(OtpExtractionResult.empty());
     } catch (e) {
-      return Left(ServerFailure('OTP extraction error: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'OTP extraction error'),
+        ),
+      );
     }
   }
 

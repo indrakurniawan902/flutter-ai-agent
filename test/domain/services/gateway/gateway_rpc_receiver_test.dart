@@ -247,7 +247,10 @@ void main() {
             result: null,
             error: any(
               named: 'error',
-              that: contains('Camera sensor hardware fault'),
+              that: allOf(
+                contains('Tool execution error'),
+                isNot(contains('Exception')),
+              ),
             ),
           )).called(1);
     });

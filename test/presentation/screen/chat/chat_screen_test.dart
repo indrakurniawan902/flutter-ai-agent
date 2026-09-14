@@ -25,6 +25,7 @@ import 'package:flutter_ai_agent/presentation/screen/settings/settings_screen.da
 import 'package:flutter_ai_agent/utils/app_theme.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_routes.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/permission_rationale_modal.dart';
+import 'package:flutter_ai_agent/presentation/widget/app_toast.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
@@ -70,6 +71,7 @@ void main() {
   });
 
   tearDown(() async {
+    AppToast.dismissAll();
     await stateController.close();
     await sl.reset();
   });
@@ -347,7 +349,8 @@ void main() {
       verify(() => mockAgentCubit.rejectAction()).called(1);
     });
 
-    testWidgets('displays SnackBar when AgentError is emitted', (tester) async {
+    testWidgets('displays top-right toast when AgentError is emitted', (tester) async {
+      AppToast.dismissAll();
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();
 
@@ -355,7 +358,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Connection timed out to LLM'), findsOneWidget);
-      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.byKey(const Key('app_toast')), findsOneWidget);
+      AppToast.dismissAll();
     });
 
     testWidgets('renders LiveActionStepperCard in chat stream and toggles accordion upon tap', (tester) async {

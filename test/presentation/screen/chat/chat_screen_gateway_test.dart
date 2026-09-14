@@ -873,6 +873,135 @@ void main() {
 
       expect(find.byType(ElicitationApprovalSheet), findsNothing);
     });
+
+    testWidgets('tool_event running renders an executing tool card',
+        (tester) async {
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.gateway));
+      await tester.pumpAndSettle();
+
+      gatewayMessageController.add(const GatewayToolEventMessage(
+        phase: 'running',
+        tool: 'read_file',
+        label: 'Reading foo.py',
+        toolCallId: 'call_1',
+        sessionId: 'up-1',
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      expect(find.text('Running read_file...'), findsOneWidget);
+    });
+
+    testWidgets('tool_event completed settles the card and drops the running '
+        'spinner', (tester) async {
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.gateway));
+      await tester.pumpAndSettle();
+
+      gatewayMessageController.add(const GatewayToolEventMessage(
+        phase: 'running',
+        tool: 'read_file',
+        label: 'Reading foo.py',
+        toolCallId: 'call_1',
+        sessionId: 'up-1',
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+      expect(find.text('Running read_file...'), findsOneWidget);
+
+      gatewayMessageController.add(const GatewayToolEventMessage(
+        phase: 'completed',
+        tool: 'read_file',
+        label: 'Reading foo.py',
+        toolCallId: 'call_1',
+        sessionId: 'up-1',
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      expect(find.text('Running read_file...'), findsNothing);
+      expect(find.text('Tool: read_file'), findsOneWidget);
+    });
+
+    testWidgets('tool_event completed without a prior running frame still '
+        'renders a card', (tester) async {
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.gateway));
+      await tester.pumpAndSettle();
+
+      gatewayMessageController.add(const GatewayToolEventMessage(
+        phase: 'completed',
+        tool: 'read_file',
+        label: 'Reading foo.py',
+        toolCallId: 'call_1',
+        sessionId: 'up-1',
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      expect(find.text('Tool: read_file'), findsOneWidget);
+    });
+
+    testWidgets('final assistant message leaves no running spinner behind',
+        (tester) async {
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.gateway));
+      await tester.pumpAndSettle();
+
+      gatewayMessageController.add(const GatewayToolEventMessage(
+        phase: 'running',
+        tool: 'read_file',
+        label: 'Reading foo.py',
+        toolCallId: 'call_1',
+        sessionId: 'up-1',
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+      expect(find.text('Running read_file...'), findsOneWidget);
+
+      gatewayMessageController.add(
+          const GatewayChatMessage(content: 'done', role: 'assistant'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      expect(find.text('Running read_file...'), findsNothing);
+      expect(find.text('Tool: read_file'), findsOneWidget);
+    });
+
+    testWidgets('tool_call_request does NOT render a tool card (regression '
+        'guard, double-execute)', (tester) async {
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.gateway));
+      await tester.pumpAndSettle();
+
+      gatewayMessageController.add(const GatewayToolCallRequestMessage(
+        id: 'call_9',
+        tool: 'battery_level',
+        arguments: {},
+      ));
+      await tester.pump();
+
+      expect(find.textContaining('Running '), findsNothing);
+      expect(find.textContaining('Tool: '), findsNothing);
+    });
+
+    testWidgets('tool_event frames are ignored in Direct mode', (tester) async {
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.direct));
+      await tester.pumpAndSettle();
+
+      gatewayMessageController.add(const GatewayToolEventMessage(
+        phase: 'running',
+        tool: 'read_file',
+        label: 'Reading foo.py',
+        toolCallId: 'call_1',
+        sessionId: 'up-1',
+      ));
+      await tester.pump();
+
+      expect(find.text('Running read_file...'), findsNothing);
+    });
   });
 }
 

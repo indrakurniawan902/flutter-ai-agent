@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_ai_agent/common/exception.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/session.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -117,7 +118,9 @@ class ChatLocalDatasourceImpl implements ChatLocalDatasource {
       final encoded = jsonEncode(messages.map((m) => m.toJson()).toList());
       await _storage.write(key: keyFor(sessionId), value: encoded);
     } catch (e) {
-      throw CacheException('Failed to save chat history: $e');
+      throw CacheException(
+        FailureMessage.humanize(e, context: 'Failed to save chat history'),
+      );
     }
   }
 
@@ -126,7 +129,9 @@ class ChatLocalDatasourceImpl implements ChatLocalDatasource {
     try {
       await _storage.delete(key: keyFor(sessionId));
     } catch (e) {
-      throw CacheException('Failed to clear chat history: $e');
+      throw CacheException(
+        FailureMessage.humanize(e, context: 'Failed to clear chat history'),
+      );
     }
   }
 
@@ -142,7 +147,9 @@ class ChatLocalDatasourceImpl implements ChatLocalDatasource {
       );
       return rows.map(_sessionFromRow).toList();
     } catch (e) {
-      throw CacheException('Failed to load chat sessions: $e');
+      throw CacheException(
+        FailureMessage.humanize(e, context: 'Failed to load chat sessions'),
+      );
     }
   }
 
@@ -165,7 +172,9 @@ class ChatLocalDatasourceImpl implements ChatLocalDatasource {
         updatedAt: now,
       );
     } catch (e) {
-      throw CacheException('Failed to create chat session: $e');
+      throw CacheException(
+        FailureMessage.humanize(e, context: 'Failed to create chat session'),
+      );
     }
   }
 
@@ -182,7 +191,9 @@ class ChatLocalDatasourceImpl implements ChatLocalDatasource {
       if (rows.isEmpty) return null;
       return _sessionFromRow(rows.first);
     } catch (e) {
-      throw CacheException('Failed to load chat session: $e');
+      throw CacheException(
+        FailureMessage.humanize(e, context: 'Failed to load chat session'),
+      );
     }
   }
 
@@ -200,7 +211,12 @@ class ChatLocalDatasourceImpl implements ChatLocalDatasource {
         whereArgs: [sessionId],
       );
     } catch (e) {
-      throw CacheException('Failed to update chat session title: $e');
+      throw CacheException(
+        FailureMessage.humanize(
+          e,
+          context: 'Failed to update chat session title',
+        ),
+      );
     }
   }
 
@@ -215,7 +231,9 @@ class ChatLocalDatasourceImpl implements ChatLocalDatasource {
       );
       await _storage.delete(key: keyFor(sessionId.toString()));
     } catch (e) {
-      throw CacheException('Failed to delete chat session: $e');
+      throw CacheException(
+        FailureMessage.humanize(e, context: 'Failed to delete chat session'),
+      );
     }
   }
 

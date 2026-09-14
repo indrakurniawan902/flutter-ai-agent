@@ -5,6 +5,7 @@ import 'package:dartz/dartz.dart';
 import 'package:injectable/injectable.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/ambient_event.dart';
 import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
 import 'accessibility_inspector_service.dart';
@@ -240,7 +241,8 @@ class ToolRegistry {
       }
       return await tool.execute(arguments);
     } catch (e) {
-      return Left(ServerFailure('Tool execution error: $e'));
+      return Left(ServerFailure(
+          FailureMessage.humanize(e, context: 'Tool execution error')));
     }
   }
 

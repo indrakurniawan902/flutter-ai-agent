@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:injectable/injectable.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart';
 
 @LazySingleton(as: LocationServiceBase)
@@ -114,7 +115,9 @@ class LocationService implements LocationServiceBase {
         'address': addressString,
       });
     } catch (e) {
-      return Left(ServerFailure('Location error: $e'));
+      return Left(
+        ServerFailure(FailureMessage.humanize(e, context: 'Location error')),
+      );
     }
   }
 
