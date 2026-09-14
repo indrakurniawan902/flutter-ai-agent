@@ -93,6 +93,19 @@ void main() {
       expect(msg, isNot(contains('DioException')));
       expect(msg, isNot(contains('PlatformException')));
     });
+
+    test('FormatException prefers the caller context over the generic message', () {
+      final msg = FailureMessage.humanize(
+        const FormatException('Unexpected character'),
+        context: 'Malformed JSON in pairing payload',
+      );
+
+      expect(msg, 'Malformed JSON in pairing payload');
+      expect(msg, isNot(contains('Exception(')));
+      expect(msg, isNot(contains('SqliteException')));
+      expect(msg, isNot(contains('DioException')));
+      expect(msg, isNot(contains('PlatformException')));
+    });
   });
 
   group('FailureMessage.humanize - platform errors', () {

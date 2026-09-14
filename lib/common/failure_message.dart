@@ -31,7 +31,7 @@ class FailureMessage {
     } else if (error is TimeoutException) {
       candidate = 'The request timed out. Please try again.';
     } else if (error is FormatException) {
-      candidate = 'Received malformed data. Please try again.';
+      candidate = context ?? 'Received malformed data. Please try again.';
     } else if (error.runtimeType.toString().contains('MissingPluginException') ||
         error.toString().contains('MissingPluginException')) {
       candidate = 'This feature is not available on this device.';

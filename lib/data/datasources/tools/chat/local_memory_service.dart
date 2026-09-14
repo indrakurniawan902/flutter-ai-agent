@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'package:dartz/dartz.dart';
@@ -6,6 +7,7 @@ import 'package:injectable/injectable.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/memory_item.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/local_memory_service.dart';
 
@@ -235,7 +237,11 @@ class LocalMemoryService implements LocalMemoryServiceBase {
       }
       return Right(item);
     } catch (e) {
-      return Left(StorageFailure('memory_unavailable: ${_shortReason(e)}'));
+      developer.log(
+        '[local_memory] memory_unavailable: ${_shortReason(e)}',
+        name: 'LocalMemoryService',
+      );
+      return Left(StorageFailure('memory_unavailable'));
     }
   }
 
@@ -284,7 +290,11 @@ class LocalMemoryService implements LocalMemoryServiceBase {
       final items = results.map((row) => MemoryItem.fromDbMap(row)).toList();
       return Right(items);
     } catch (e) {
-      return Left(StorageFailure('memory_unavailable: ${_shortReason(e)}'));
+      developer.log(
+        '[local_memory] memory_unavailable: ${_shortReason(e)}',
+        name: 'LocalMemoryService',
+      );
+      return Left(StorageFailure('memory_unavailable'));
     }
   }
 
@@ -326,7 +336,11 @@ class LocalMemoryService implements LocalMemoryServiceBase {
       );
       return Right(count > 0);
     } catch (e) {
-      return Left(StorageFailure('Failed to delete memory (id: $id): $e'));
+      return Left(
+        StorageFailure(
+          FailureMessage.humanize(e, context: 'Failed to delete memory (id: $id)'),
+        ),
+      );
     }
   }
 
@@ -341,7 +355,14 @@ class LocalMemoryService implements LocalMemoryServiceBase {
       );
       return Right(count > 0);
     } catch (e) {
-      return Left(StorageFailure('Failed to delete memory (key: $key): $e'));
+      return Left(
+        StorageFailure(
+          FailureMessage.humanize(
+            e,
+            context: 'Failed to delete memory (key: $key)',
+          ),
+        ),
+      );
     }
   }
 
@@ -361,7 +382,11 @@ class LocalMemoryService implements LocalMemoryServiceBase {
       }
       return Right(MemoryItem.fromDbMap(results.first));
     } catch (e) {
-      return Left(StorageFailure('Failed to get memory by key ($key): $e'));
+      return Left(
+        StorageFailure(
+          FailureMessage.humanize(e, context: 'Failed to get memory by key ($key)'),
+        ),
+      );
     }
   }
 
@@ -381,7 +406,11 @@ class LocalMemoryService implements LocalMemoryServiceBase {
       }
       return Right(MemoryItem.fromDbMap(results.first));
     } catch (e) {
-      return Left(StorageFailure('Failed to get memory by id ($id): $e'));
+      return Left(
+        StorageFailure(
+          FailureMessage.humanize(e, context: 'Failed to get memory by id ($id)'),
+        ),
+      );
     }
   }
 
@@ -400,7 +429,11 @@ class LocalMemoryService implements LocalMemoryServiceBase {
       final items = results.map((row) => MemoryItem.fromDbMap(row)).toList();
       return Right(items);
     } catch (e) {
-      return Left(StorageFailure('memory_unavailable: ${_shortReason(e)}'));
+      developer.log(
+        '[local_memory] memory_unavailable: ${_shortReason(e)}',
+        name: 'LocalMemoryService',
+      );
+      return Left(StorageFailure('memory_unavailable'));
     }
   }
 
@@ -411,7 +444,11 @@ class LocalMemoryService implements LocalMemoryServiceBase {
       final count = await db.delete('memories');
       return Right(count);
     } catch (e) {
-      return Left(StorageFailure('Failed to clear memories: $e'));
+      return Left(
+        StorageFailure(
+          FailureMessage.humanize(e, context: 'Failed to clear memories'),
+        ),
+      );
     }
   }
 
@@ -433,7 +470,7 @@ class LocalMemoryService implements LocalMemoryServiceBase {
     final result = await saveMemory(key, content, tags);
     return result.fold(
       (failure) {
-        if (failure.message.startsWith('memory_unavailable:')) {
+        if (failure.message.startsWith('memory_unavailable')) {
           return Right(
             jsonEncode({
               'status': 'memory_unavailable',

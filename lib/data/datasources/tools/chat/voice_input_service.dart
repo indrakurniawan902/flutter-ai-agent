@@ -7,6 +7,7 @@ import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_input_service.dart';
 
 abstract class SpeechToTextWrapper {
@@ -140,7 +141,14 @@ class VoiceInputService implements VoiceInputServiceBase {
       }
       return Right(await _speech.hasPermission());
     } catch (e) {
-      return Left(PermissionFailure('Microphone permission check failed: $e'));
+      return Left(
+        PermissionFailure(
+          FailureMessage.humanize(
+            e,
+            context: 'Microphone permission check failed',
+          ),
+        ),
+      );
     }
   }
 
@@ -153,7 +161,11 @@ class VoiceInputService implements VoiceInputServiceBase {
       );
       return Right(ready);
     } catch (e) {
-      return Left(ServerFailure('Speech initialization failed: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Speech initialization failed'),
+        ),
+      );
     }
   }
 
@@ -199,7 +211,11 @@ class VoiceInputService implements VoiceInputServiceBase {
       return const Right(unit);
     } catch (e) {
       _listening = false;
-      return Left(ServerFailure('Start listening failed: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Start listening failed'),
+        ),
+      );
     }
   }
 
@@ -213,7 +229,11 @@ class VoiceInputService implements VoiceInputServiceBase {
       if (pluginWords.isNotEmpty) _lastWords = pluginWords;
       return Right(_lastWords);
     } catch (e) {
-      return Left(ServerFailure('Stop listening failed: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Stop listening failed'),
+        ),
+      );
     }
   }
 
