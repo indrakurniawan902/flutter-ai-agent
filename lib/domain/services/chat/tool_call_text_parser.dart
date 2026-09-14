@@ -19,24 +19,43 @@ class ToolCallTextParseResult {
 class ToolCallTextParser {
   const ToolCallTextParser();
 
+  /// Upper bound on how much of the message is scanned for tool calls.
+  ///
+  /// `parse` runs synchronously on the UI isolate, so a compromised or
+  /// adversarial model can stall the whole app by streaming a huge payload
+  /// (e.g. 100k unmatched `{`). Capping the scanned window keeps the
+  /// worst-case work bounded while still covering any realistic payload.
+  static const int maxScanLength = 64 * 1024;
+
+  /// Safety-valve cap on candidate-span decode attempts per parse.
+  ///
+  /// Attempts at one nesting level cover disjoint spans, so their decode work
+  /// is bounded by the region length, and across at most [maxNestingDepth]
+  /// levels by `maxNestingDepth * maxScanLength`. The counter is therefore only
+  /// a backstop against pathological input, not the primary bound; a tight cap
+  /// silently starves a real call that follows a few hundred echoed JSON
+  /// objects, which is exactly the weak-model behaviour this parser targets.
+  static const int maxSpanAttempts = 8192;
+
+  /// How deep the "rejected wrapper -> retry its interior" recursion may go.
+  ///
+  /// A legit message never nests tool-call wrappers deeper than this; the bound
+  /// keeps pathological nesting cheap even when every level must be retried.
+  static const int maxNestingDepth = 16;
+
   /// [isKnownTool] lets the caller reject names the registry does not know.
+  /// [maxScanLength] bounds the scanned window; text past it is untouched.
   ToolCallTextParseResult parse(
     String rawText, {
     bool Function(String name)? isKnownTool,
+    int maxScanLength = maxScanLength,
   }) {
-    final fences = _findFences(rawText);
+    final scanText = rawText.length > maxScanLength
+        ? rawText.substring(0, maxScanLength)
+        : rawText;
+
     final accepted = <_AcceptedSpan>[];
-
-    for (final fence in fences) {
-      if (fence.info != 'json' && fence.info != 'tool_call') continue;
-      final decoded = _tryDecode(rawText.substring(fence.bodyStart, fence.bodyEnd));
-      if (decoded == null) continue;
-      final calls = _validate(_extract(decoded), isKnownTool);
-      if (calls.isEmpty) continue;
-      accepted.add(_AcceptedSpan(fence.start, fence.end, calls));
-    }
-
-    _scanBare(rawText, fences, isKnownTool, accepted);
+    _scan(scanText, isKnownTool, accepted);
 
     if (accepted.isEmpty) {
       return ToolCallTextParseResult(toolCalls: const [], cleanedText: rawText);
@@ -60,89 +79,67 @@ class ToolCallTextParser {
     );
   }
 
-  List<_Fence> _findFences(String text) {
-    final fences = <_Fence>[];
-    var i = 0;
-    while (i + 3 <= text.length) {
-      if (text.startsWith('```', i)) {
-        var k = i + 3;
-        while (k < text.length && !_isInfoTerminator(text.codeUnitAt(k))) {
-          k++;
-        }
-        final info = text.substring(i + 3, k).trim().toLowerCase();
-        final close = text.indexOf('```', k);
-        if (close == -1) {
-          i += 3;
-          continue;
-        }
-        fences.add(_Fence(i, close + 3, info, k, close));
-        i = close + 3;
-      } else {
-        i++;
-      }
-    }
-    return fences;
-  }
-
-  bool _isInfoTerminator(int c) =>
-      c == 0x20 ||
-      c == 0x09 ||
-      c == 0x0A ||
-      c == 0x0D ||
-      c == 0x7B ||
-      c == 0x5B;
-
-  void _scanBare(
+  /// Single left-to-right pass over the scanned window. Tracking string state,
+  /// bracket nesting and fence spans lets every character be visited once: the
+  /// previous per-opener rescan was quadratic and could freeze the isolate.
+  ///
+  /// A rejected outermost span is not swallowed: its interior is rescanned
+  /// recursively so a valid tool-call object wrapped in a non-envelope object
+  /// (e.g. `{"action": ..., "payload": {...}}`) is still recovered, matching
+  /// the historical per-opener behaviour. The [maxSpanAttempts] and
+  /// [maxNestingDepth] budgets keep that retry bounded.
+  void _scan(
     String text,
-    List<_Fence> fences,
     bool Function(String name)? isKnownTool,
     List<_AcceptedSpan> accepted,
   ) {
-    var i = 0;
-    var inString = false;
-    while (i < text.length) {
-      if (_insideFence(fences, i)) {
-        i++;
-        continue;
-      }
-      final c = text[i];
-      if (inString) {
-        if (c == '\\') {
-          i += 2;
-          continue;
-        }
-        if (c == '"') inString = false;
-        i++;
-        continue;
-      }
-      if (c == '"') {
-        inString = true;
-        i++;
-        continue;
-      }
-      if (c == '{' || c == '[') {
-        final end = _balancedEnd(text, i);
-        if (end != null) {
-          final decoded = _tryDecode(text.substring(i, end));
-          if (decoded != null) {
-            final calls = _validate(_extract(decoded), isKnownTool);
-            if (calls.isNotEmpty) {
-              accepted.add(_AcceptedSpan(i, end, calls));
-              i = end;
-              continue;
-            }
-          }
-        }
-      }
-      i++;
-    }
+    _scanRegion(text, 0, text.length, isKnownTool, accepted, _ScanBudget(), 0);
   }
 
-  int? _balancedEnd(String text, int start) {
+  /// Scans `[regionStart, regionEnd)` of [text]. A closed bracket pair that
+  /// empties the stack is an outermost span of this region: if it is not a tool
+  /// call, its interior is scanned recursively so nested openers get their own
+  /// attempt in increasing index order.
+  void _scanRegion(
+    String text,
+    int regionStart,
+    int regionEnd,
+    bool Function(String name)? isKnownTool,
+    List<_AcceptedSpan> accepted,
+    _ScanBudget budget,
+    int depth,
+  ) {
     final closers = <int>[];
-    var i = start;
+    final openers = <int>[];
     var inString = false;
-    while (i < text.length) {
+    var i = regionStart;
+    while (i < regionEnd) {
+      if (!inString && i + 3 <= regionEnd && text.startsWith('```', i)) {
+        final fence = _readFence(text, i, regionEnd);
+        if (fence == null) {
+          // Unclosed fence: skip the marker and keep scanning, matching the
+          // historical "not a fence" treatment.
+          i += 3;
+          continue;
+        }
+        if (_isToolCallInfo(fence.info)) {
+          final calls = _attemptSpan(
+            text,
+            fence.bodyStart,
+            fence.bodyEnd,
+            isKnownTool,
+            budget,
+          );
+          if (calls != null) {
+            accepted.add(_AcceptedSpan(fence.start, fence.end, calls));
+          }
+        }
+        // Every closed fence is consumed as a span, recognised or not, so the
+        // bare scanner never double-reads its body.
+        i = fence.end;
+        continue;
+      }
+
       final c = text.codeUnitAt(i);
       if (inString) {
         if (c == 0x5C) {
@@ -155,26 +152,98 @@ class ToolCallTextParser {
       }
       if (c == 0x22) {
         inString = true;
-      } else if (c == 0x7B) {
-        closers.add(0x7D);
-      } else if (c == 0x5B) {
-        closers.add(0x5D);
-      } else if (c == 0x7D || c == 0x5D) {
-        if (closers.isEmpty || closers.last != c) return null;
-        closers.removeLast();
-        if (closers.isEmpty) return i + 1;
+        i++;
+        continue;
+      }
+      if (c == 0x7B || c == 0x5B) {
+        closers.add(c == 0x7B ? 0x7D : 0x5D);
+        openers.add(i);
+        i++;
+        continue;
+      }
+      if (c == 0x7D || c == 0x5D) {
+        if (closers.isNotEmpty && closers.last == c) {
+          closers.removeLast();
+          final start = openers.removeLast();
+          if (closers.isEmpty) {
+            final end = i + 1;
+            final calls = _attemptSpan(text, start, end, isKnownTool, budget);
+            if (calls != null) {
+              accepted.add(_AcceptedSpan(start, end, calls));
+            } else if (depth < maxNestingDepth) {
+              // Rejected wrapper: retry its interior so nested tool-call
+              // objects are recovered instead of being lost forever.
+              _scanRegion(
+                text,
+                start + 1,
+                end - 1,
+                isKnownTool,
+                accepted,
+                budget,
+                depth + 1,
+              );
+            }
+            // Resume past the span. An accepted span must never be rescanned
+            // (no double execution); a rejected one was already rescanned
+            // above, so its interior is not re-read here either.
+            i = end;
+            continue;
+          }
+        }
+        i++;
+        continue;
       }
       i++;
     }
-    return null;
   }
 
-  bool _insideFence(List<_Fence> fences, int index) {
-    for (final fence in fences) {
-      if (index >= fence.start && index < fence.end) return true;
-    }
-    return false;
+  /// Decodes one candidate span and returns its validated calls, or null when
+  /// the span is malformed or carries no tool-call envelope. Every attempt
+  /// spends one unit of [budget] so adversarial nesting stays bounded.
+  List<_ValidatedCall>? _attemptSpan(
+    String text,
+    int start,
+    int end,
+    bool Function(String name)? isKnownTool,
+    _ScanBudget budget,
+  ) {
+    if (!budget.claim()) return null;
+    final decoded = _tryDecode(text.substring(start, end));
+    if (decoded == null) return null;
+    final calls = _validate(_extract(decoded), isKnownTool);
+    return calls.isEmpty ? null : calls;
   }
+
+  /// Info strings we attempt to decode as a tool call. The empty string is
+  /// included because weak models routinely omit the language tag.
+  bool _isToolCallInfo(String info) =>
+      info.isEmpty ||
+      info == 'json' ||
+      info == 'tool_call' ||
+      info == 'text' ||
+      info == 'jsonc' ||
+      info == 'json5';
+
+  _Fence? _readFence(String text, int start, int limit) {
+    var k = start + 3;
+    while (k < limit && !_isInfoTerminator(text.codeUnitAt(k))) {
+      k++;
+    }
+    final info = text.substring(start + 3, k).trim().toLowerCase();
+    final close = text.indexOf('```', k);
+    // A closer outside the current region means the fence is unclosed here;
+    // treating it as such keeps nested regions from swallowing outer content.
+    if (close == -1 || close + 3 > limit) return null;
+    return _Fence(start, close + 3, info, k, close);
+  }
+
+  bool _isInfoTerminator(int c) =>
+      c == 0x20 ||
+      c == 0x09 ||
+      c == 0x0A ||
+      c == 0x0D ||
+      c == 0x7B ||
+      c == 0x5B;
 
   List<_RawCandidate> _extract(dynamic value) {
     if (value is Map) {
@@ -281,4 +350,17 @@ class _AcceptedSpan {
   final int end;
   final List<_ValidatedCall> calls;
   const _AcceptedSpan(this.start, this.end, this.calls);
+}
+
+/// Mutable per-parse counter for [ToolCallTextParser.maxSpanAttempts]. Lives
+/// outside the parser so the parser itself stays const-constructible and
+/// stateless.
+class _ScanBudget {
+  int remaining = ToolCallTextParser.maxSpanAttempts;
+
+  bool claim() {
+    if (remaining <= 0) return false;
+    remaining--;
+    return true;
+  }
 }
