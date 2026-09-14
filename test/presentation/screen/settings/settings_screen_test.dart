@@ -1,6 +1,5 @@
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_ai_agent/common/constant.dart';
 import 'package:flutter_ai_agent/utils/app_theme.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_cubit.dart';
@@ -13,6 +12,9 @@ import 'package:mocktail/mocktail.dart';
 
 class MockSettingsCubit extends MockCubit<SettingsState> implements SettingsCubit {}
 class MockServerProfileCubit extends MockCubit<ServerProfileState> implements ServerProfileCubit {}
+class MockVoidCallback extends Mock {
+  void call();
+}
 
 void main() {
   late MockSettingsCubit mockSettingsCubit;
@@ -64,12 +66,14 @@ void main() {
   Widget buildTestWidget({
     SettingsCubit? cubit,
     ServerProfileCubit? profileCubit,
+    VoidCallback? onAddProfile,
   }) {
     return MaterialApp(
       theme: AppTheme.darkTheme,
       home: SettingsScreen(
         cubit: cubit ?? mockSettingsCubit,
         serverProfileCubit: profileCubit ?? mockServerProfileCubit,
+        onAddProfile: onAddProfile,
       ),
     );
   }
@@ -379,11 +383,11 @@ void main() {
       verify(() => mockServerProfileCubit.switchActiveProfile('p2')).called(1);
     });
 
-    testWidgets('tapping add server profile button opens dialog and submitting calls addProfile', (tester) async {
+    testWidgets('tapping add server profile button invokes the add-profile navigation callback', (tester) async {
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(
           baseUrl: 'https://example.com/v1',
-          apiKey: '«reda...…»',
+          apiKey: 'sk-key',
           model: 'ag-glm',
           temperature: 0.7,
         ),
@@ -391,41 +395,39 @@ void main() {
       when(() => mockServerProfileCubit.state).thenReturn(
         const ServerProfileLoaded(profiles: [], activeProfile: null),
       );
-      when(() => mockServerProfileCubit.addProfile(
-            name: 'Local Dev',
-            gatewayUrl: 'http://localhost:8080',
-            token: 'sk-local',
-            makeActive: true,
-            model: any(named: 'model'),
-            temperature: any(named: 'temperature'),
-          )).thenAnswer((_) async {});
 
-      await tester.pumpWidget(buildTestWidget());
+      final spy = MockVoidCallback();
+      await tester.pumpWidget(buildTestWidget(onAddProfile: spy.call));
       await tester.pump();
 
-      final addButton = find.byKey(const Key('settings_add_profile_button'));
-      await tester.tap(addButton);
+      await tester.tap(find.byKey(const Key('settings_add_profile_button')));
+      await tester.pump();
+
+      verify(() => spy()).called(1);
+      expect(find.byType(AlertDialog), findsNothing);
+    });
+
+    testWidgets('settings no longer renders the legacy add-profile dialog fields', (tester) async {
+      when(() => mockSettingsCubit.state).thenReturn(
+        const SettingsLoaded(
+          baseUrl: 'https://example.com/v1',
+          apiKey: 'sk-key',
+          model: 'ag-glm',
+          temperature: 0.7,
+        ),
+      );
+      when(() => mockServerProfileCubit.state).thenReturn(
+        const ServerProfileLoaded(profiles: [], activeProfile: null),
+      );
+
+      final spy = MockVoidCallback();
+      await tester.pumpWidget(buildTestWidget(onAddProfile: spy.call));
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('settings_add_profile_button')));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('add_profile_name_field')), findsOneWidget);
-      expect(find.byKey(const Key('add_profile_url_field')), findsOneWidget);
-      expect(find.byKey(const Key('add_profile_token_field')), findsOneWidget);
-
-      await tester.enterText(find.byKey(const Key('add_profile_name_field')), 'Local Dev');
-      await tester.enterText(find.byKey(const Key('add_profile_url_field')), 'http://localhost:8080');
-      await tester.enterText(find.byKey(const Key('add_profile_token_field')), 'sk-local');
-
-      await tester.tap(find.byKey(const Key('add_profile_submit_button')));
-      await tester.pumpAndSettle();
-
-      verify(() => mockServerProfileCubit.addProfile(
-            name: 'Local Dev',
-            gatewayUrl: 'http://localhost:8080',
-            token: 'sk-local',
-            makeActive: true,
-            model: any(named: 'model'),
-            temperature: any(named: 'temperature'),
-          )).called(1);
+      expect(find.byKey(const Key('add_profile_name_field')), findsNothing);
     });
 
     testWidgets('tapping delete profile button calls deleteProfile on active profile', (tester) async {
@@ -515,248 +517,6 @@ void main() {
       expect(find.text('Failed to delete profile'), findsOneWidget);
     });
 
-    testWidgets('tapping cancel in add profile dialog closes dialog without calling addProfile', (tester) async {
-      when(() => mockSettingsCubit.state).thenReturn(
-        const SettingsLoaded(
-          baseUrl: 'https://example.com/v1',
-          apiKey: 'test-api-key',
-          model: 'ag-glm',
-          temperature: 0.7,
-        ),
-      );
-      when(() => mockServerProfileCubit.state).thenReturn(
-        const ServerProfileLoaded(profiles: [], activeProfile: null),
-      );
-
-      await tester.pumpWidget(buildTestWidget());
-      await tester.pump();
-
-      final addButton = find.byKey(const Key('settings_add_profile_button'));
-      await tester.tap(addButton);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Add Server Profile'), findsOneWidget);
-
-      await tester.tap(find.text('Cancel'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Add Server Profile'), findsNothing);
-      verifyNever(() => mockServerProfileCubit.addProfile(
-            name: any(named: 'name'),
-            gatewayUrl: any(named: 'gatewayUrl'),
-            token: any(named: 'token'),
-            makeActive: any(named: 'makeActive'),
-            model: any(named: 'model'),
-            temperature: any(named: 'temperature'),
-          ));
-    });
-
-    testWidgets('submitting add profile dialog with invalid inputs shows errors', (tester) async {
-      when(() => mockSettingsCubit.state).thenReturn(
-        const SettingsLoaded(
-          baseUrl: 'https://example.com/v1',
-          apiKey: 'test-api-key',
-          model: 'ag-glm',
-          temperature: 0.7,
-        ),
-      );
-      when(() => mockServerProfileCubit.state).thenReturn(
-        const ServerProfileLoaded(profiles: [], activeProfile: null),
-      );
-
-      await tester.pumpWidget(buildTestWidget());
-      await tester.pump();
-
-      final addButton = find.byKey(const Key('settings_add_profile_button'));
-      await tester.tap(addButton);
-      await tester.pumpAndSettle();
-
-      // Submit empty form
-      await tester.tap(find.byKey(const Key('add_profile_submit_button')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Name cannot be empty'), findsOneWidget);
-      expect(find.text('URL cannot be empty'), findsOneWidget);
-      expect(find.text('Token cannot be empty'), findsOneWidget);
-
-      // Enter invalid URL
-      await tester.enterText(find.byKey(const Key('add_profile_url_field')), 'invalid-url');
-      await tester.tap(find.byKey(const Key('add_profile_submit_button')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Enter a valid HTTP/HTTPS/WS/WSS URL'), findsOneWidget);
-      verifyNever(() => mockServerProfileCubit.addProfile(
-            name: any(named: 'name'),
-            gatewayUrl: any(named: 'gatewayUrl'),
-            token: any(named: 'token'),
-            makeActive: any(named: 'makeActive'),
-            model: any(named: 'model'),
-            temperature: any(named: 'temperature'),
-          ));
-    });
-
-    testWidgets('accepts gateway URLs in all four normalizable schemes', (tester) async {
-      when(() => mockSettingsCubit.state).thenReturn(
-        const SettingsLoaded(
-          baseUrl: 'https://example.com/v1',
-          apiKey: 'sk-valid-key',
-          model: 'ag-glm',
-          temperature: 0.7,
-        ),
-      );
-      when(() => mockServerProfileCubit.state).thenReturn(
-        const ServerProfileLoaded(profiles: [], activeProfile: null),
-      );
-
-      // A gateway endpoint IS a WebSocket endpoint; http/https/ws/wss are all
-      // rewritten by GatewayClient.normalizeGatewayUri, so the form must admit
-      // every one of them.
-      const gatewayUrls = [
-        'wss://example.com/device/ws',
-        'https://example.com',
-        'ws://192.168.1.10:18789/device/ws',
-        'http://192.168.1.10:8644',
-      ];
-
-      for (final url in gatewayUrls) {
-        when(() => mockServerProfileCubit.addProfile(
-              name: 'Bridge',
-              gatewayUrl: url,
-              token: 'sk-bridge-token',
-              makeActive: true,
-              model: 'ag-glm',
-              temperature: 0.7,
-            )).thenAnswer((_) async {});
-
-        await tester.pumpWidget(buildTestWidget());
-        await tester.pump();
-
-        await tester.tap(find.byKey(const Key('settings_add_profile_button')));
-        await tester.pumpAndSettle();
-
-        await tester.enterText(
-          find.byKey(const Key('add_profile_name_field')),
-          'Bridge',
-        );
-        await tester.enterText(
-          find.byKey(const Key('add_profile_url_field')),
-          url,
-        );
-        await tester.enterText(
-          find.byKey(const Key('add_profile_token_field')),
-          'sk-bridge-token',
-        );
-        await tester.enterText(
-          find.byKey(const Key('add_profile_model_field')),
-          'ag-glm',
-        );
-
-        await tester.tap(find.byKey(const Key('add_profile_submit_button')));
-        await tester.pumpAndSettle();
-
-        expect(
-          find.text('Enter a valid HTTP/HTTPS/WS/WSS URL'),
-          findsNothing,
-          reason: '$url must pass validation',
-        );
-        verify(() => mockServerProfileCubit.addProfile(
-              name: 'Bridge',
-              gatewayUrl: url,
-              token: 'sk-bridge-token',
-              makeActive: true,
-              model: 'ag-glm',
-              temperature: 0.7,
-            )).called(1);
-      }
-    });
-
-    testWidgets('still rejects junk and empty gateway URLs', (tester) async {
-      when(() => mockSettingsCubit.state).thenReturn(
-        const SettingsLoaded(
-          baseUrl: 'https://example.com/v1',
-          apiKey: 'sk-valid-key',
-          model: 'ag-glm',
-          temperature: 0.7,
-        ),
-      );
-      when(() => mockServerProfileCubit.state).thenReturn(
-        const ServerProfileLoaded(profiles: [], activeProfile: null),
-      );
-
-      await tester.pumpWidget(buildTestWidget());
-      await tester.pump();
-
-      await tester.tap(find.byKey(const Key('settings_add_profile_button')));
-      await tester.pumpAndSettle();
-
-      await tester.enterText(
-        find.byKey(const Key('add_profile_name_field')),
-        'Bridge',
-      );
-      await tester.enterText(
-        find.byKey(const Key('add_profile_token_field')),
-        'sk-bridge-token',
-      );
-
-      // Non-URL junk.
-      await tester.enterText(
-        find.byKey(const Key('add_profile_url_field')),
-        'not a url',
-      );
-      await tester.tap(find.byKey(const Key('add_profile_submit_button')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Enter a valid HTTP/HTTPS/WS/WSS URL'), findsOneWidget);
-
-      // Empty.
-      await tester.enterText(
-        find.byKey(const Key('add_profile_url_field')),
-        '',
-      );
-      await tester.tap(find.byKey(const Key('add_profile_submit_button')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('URL cannot be empty'), findsOneWidget);
-
-      verifyNever(() => mockServerProfileCubit.addProfile(
-            name: any(named: 'name'),
-            gatewayUrl: any(named: 'gatewayUrl'),
-            token: any(named: 'token'),
-            makeActive: any(named: 'makeActive'),
-            model: any(named: 'model'),
-            temperature: any(named: 'temperature'),
-          ));
-    });
-
-    testWidgets('gateway URL field hints at a WebSocket gateway endpoint',
-        (tester) async {
-      when(() => mockSettingsCubit.state).thenReturn(
-        const SettingsLoaded(
-          baseUrl: 'https://example.com/v1',
-          apiKey: 'sk-valid-key',
-          model: 'ag-glm',
-          temperature: 0.7,
-        ),
-      );
-      when(() => mockServerProfileCubit.state).thenReturn(
-        const ServerProfileLoaded(profiles: [], activeProfile: null),
-      );
-
-      await tester.pumpWidget(buildTestWidget());
-      await tester.pump();
-
-      await tester.tap(find.byKey(const Key('settings_add_profile_button')));
-      await tester.pumpAndSettle();
-
-      final inner = tester.widget<TextField>(
-        find.descendant(
-          of: find.byKey(const Key('add_profile_url_field')),
-          matching: find.byType(TextField),
-        ),
-      );
-      expect(inner.decoration?.hintText, 'wss://example.com/ws');
-    });
-
     testWidgets(
         'updates model and temperature fields and calls updateFromProfile when ServerProfileOperationSuccess emitted',
         (tester) async {
@@ -820,106 +580,6 @@ void main() {
   });
 
   group('SettingsScreen - Add Profile Model & Temperature', () {
-    testWidgets('add profile dialog renders model and temperature fields with defaults', (tester) async {
-      when(() => mockSettingsCubit.state).thenReturn(
-        const SettingsLoaded(
-          baseUrl: 'https://example.com/v1',
-          apiKey: 'test-api-key',
-          model: 'ag-glm',
-          temperature: 0.7,
-        ),
-      );
-      when(() => mockServerProfileCubit.state).thenReturn(
-        const ServerProfileLoaded(profiles: [], activeProfile: null),
-      );
-
-      await tester.pumpWidget(buildTestWidget());
-      await tester.pump();
-
-      await tester.tap(find.byKey(const Key('settings_add_profile_button')));
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const Key('add_profile_model_field')), findsOneWidget);
-      expect(
-        find.byKey(const Key('add_profile_temperature_field')),
-        findsOneWidget,
-      );
-
-      final modelField = tester.widget<TextFormField>(
-        find.byKey(const Key('add_profile_model_field')),
-      );
-      expect(modelField.controller?.text, AppConstants.defaultModel);
-
-      final tempField = tester.widget<TextFormField>(
-        find.byKey(const Key('add_profile_temperature_field')),
-      );
-      expect(
-        tempField.controller?.text,
-        AppConstants.defaultTemperature.toString(),
-      );
-    });
-
-    testWidgets('submitting add profile dialog forwards model and temperature to addProfile', (tester) async {
-      when(() => mockSettingsCubit.state).thenReturn(
-        const SettingsLoaded(
-          baseUrl: 'https://example.com/v1',
-          apiKey: 'test-api-key',
-          model: 'ag-glm',
-          temperature: 0.7,
-        ),
-      );
-      when(() => mockServerProfileCubit.state).thenReturn(
-        const ServerProfileLoaded(profiles: [], activeProfile: null),
-      );
-      when(() => mockServerProfileCubit.addProfile(
-            name: 'Custom Dev',
-            gatewayUrl: 'http://localhost:8080',
-            token: 'sk-custom',
-            makeActive: true,
-            model: 'gpt-4o-mini',
-            temperature: 0.3,
-          )).thenAnswer((_) async {});
-
-      await tester.pumpWidget(buildTestWidget());
-      await tester.pump();
-
-      await tester.tap(find.byKey(const Key('settings_add_profile_button')));
-      await tester.pumpAndSettle();
-
-      await tester.enterText(
-        find.byKey(const Key('add_profile_name_field')),
-        'Custom Dev',
-      );
-      await tester.enterText(
-        find.byKey(const Key('add_profile_url_field')),
-        'http://localhost:8080',
-      );
-      await tester.enterText(
-        find.byKey(const Key('add_profile_token_field')),
-        'sk-custom',
-      );
-      await tester.enterText(
-        find.byKey(const Key('add_profile_model_field')),
-        'gpt-4o-mini',
-      );
-      await tester.enterText(
-        find.byKey(const Key('add_profile_temperature_field')),
-        '0.3',
-      );
-
-      await tester.tap(find.byKey(const Key('add_profile_submit_button')));
-      await tester.pumpAndSettle();
-
-      verify(() => mockServerProfileCubit.addProfile(
-            name: 'Custom Dev',
-            gatewayUrl: 'http://localhost:8080',
-            token: 'sk-custom',
-            makeActive: true,
-            model: 'gpt-4o-mini',
-            temperature: 0.3,
-          )).called(1);
-    });
-
     testWidgets('saving settings also updates the active server profile', (tester) async {
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(

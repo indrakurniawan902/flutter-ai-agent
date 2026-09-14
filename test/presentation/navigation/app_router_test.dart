@@ -18,12 +18,12 @@ void main() {
       expect(appRouter.routerDelegate.navigatorKey, equals(AppGlobals.navigatorKey));
     });
 
-    test('has exactly 10 registered GoRoute entries', () {
+    test('has exactly 12 registered GoRoute entries', () {
       final routes = appRouter.configuration.routes
           .whereType<GoRoute>()
           .toList();
 
-      expect(routes.length, equals(10));
+      expect(routes.length, equals(12));
     });
 
     test('registers all expected route names', () {
@@ -42,7 +42,9 @@ void main() {
         AppRoutes.nrVault,
         AppRoutes.nrPairing,
         AppRoutes.nrServerProfiles,
+        AppRoutes.nrAddProfile,
         AppRoutes.nrActionCenter,
+        AppRoutes.nrGeofenceManagement,
       };
 
       expect(routeNames, equals(expectedNames));
@@ -64,7 +66,9 @@ void main() {
         AppRoutes.nrVault,
         AppRoutes.nrPairing,
         AppRoutes.nrServerProfiles,
+        AppRoutes.nrAddProfile,
         AppRoutes.nrActionCenter,
+        AppRoutes.nrGeofenceManagement,
       ];
 
       for (final name in allRouteNames) {
@@ -109,6 +113,13 @@ void main() {
 
       expect(routeByName[AppRoutes.nrActionCenter]?.path, equals('/action-center'));
       expect(routeByName[AppRoutes.nrActionCenter]?.builder, isNotNull);
+
+      expect(routeByName[AppRoutes.nrAddProfile]?.path, equals('/settings/add-profile'));
+      expect(routeByName[AppRoutes.nrAddProfile]?.builder, isNotNull);
+
+      expect(routeByName[AppRoutes.nrGeofenceManagement]?.path,
+          equals('/node/geofence-management'));
+      expect(routeByName[AppRoutes.nrGeofenceManagement]?.builder, isNotNull);
     });
   });
 }

@@ -6,11 +6,12 @@ import 'package:injectable/injectable.dart';
 
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_chunk.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_attachment.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
-import 'package:flutter_ai_agent/domain/models/chat/tool_call_request.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/tool_call_request.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/memory_item.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/session.dart';
 import 'package:flutter_ai_agent/domain/repositories/chat/chat_local_repository.dart';
@@ -992,7 +993,8 @@ class AgentCubit extends Cubit<AgentState> {
         if (_isCancelled || runGeneration != _runGeneration) return;
 
         if (streamError != null) {
-          emit(AgentError('Stream interrupted: $streamError'));
+          emit(AgentError(
+              FailureMessage.humanize(streamError!, context: 'Stream interrupted')));
           return;
         }
 

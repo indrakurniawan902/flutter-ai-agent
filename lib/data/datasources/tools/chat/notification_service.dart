@@ -4,6 +4,7 @@ import 'package:injectable/injectable.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/notification_service.dart';
 
 @LazySingleton(as: NotificationServiceBase)
@@ -85,7 +86,11 @@ class NotificationService implements NotificationServiceBase {
       );
       return const Right(null);
     } catch (e) {
-      return Left(ServerFailure('Notification error: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Notification error'),
+        ),
+      );
     }
   }
 
@@ -119,7 +124,9 @@ class NotificationService implements NotificationServiceBase {
       );
       return const Right(null);
     } catch (e) {
-      return Left(ServerFailure('Schedule error: $e'));
+      return Left(
+        ServerFailure(FailureMessage.humanize(e, context: 'Schedule error')),
+      );
     }
   }
 }

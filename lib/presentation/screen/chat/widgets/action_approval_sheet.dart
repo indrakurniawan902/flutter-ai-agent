@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_ai_agent/domain/models/chat/tool_call_request.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/tool_call_request.dart';
 
 /// Modal bottom sheet for Tier 3 HITL tool call approval.
 ///

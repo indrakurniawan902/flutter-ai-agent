@@ -18,6 +18,7 @@ import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.d
 import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/action_center/action_center_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/permission_rationale_modal.dart';
+import 'package:flutter_ai_agent/presentation/screen/node/geofence_management_screen.dart';
 import 'package:flutter_ai_agent/utils/hermes_theme.dart';
 import 'package:flutter_ai_agent/utils/permission_gate.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -376,6 +377,14 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
     });
   }
 
+  void _handleManageGeofences() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const GeofenceManagementScreen(),
+      ),
+    );
+  }
+
   void _handleBroadcastPing() {
     final latency = 12 + (DateTime.now().millisecond % 5);
     setState(() {
@@ -488,6 +497,16 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
             value: _geofenceEnabled,
             onChanged: (val) => _onTriggerChanged(geofence: val),
             child: _buildGeofenceStatus(),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: _buildActionButton(
+              key: const Key('action_manage_geofences'),
+              label: 'Manage Geofences',
+              icon: Icons.place_outlined,
+              onTap: _handleManageGeofences,
+            ),
           ),
           const SizedBox(height: 8),
           _buildTriggerTile(

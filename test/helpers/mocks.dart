@@ -24,6 +24,7 @@ import 'package:flutter_ai_agent/domain/tools/chat/device_context_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/notification_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/accessibility_inspector_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
@@ -206,5 +207,12 @@ class MockToolPruningService extends Mock implements ToolPruningService {}
 
 // URL Reader
 class MockUrlReaderService extends Mock implements UrlReaderServiceBase {}
+
+// Accessibility Inspector
+class MockAccessibilityInspectorService extends Mock
+    implements AccessibilityInspectorServiceBase {}
+
+class MockAccessibilityInspectorPlatformWrapper extends Mock
+    implements AccessibilityInspectorPlatformWrapper {}
 
 

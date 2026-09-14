@@ -106,7 +106,7 @@ void main() {
       act: (cubit) => cubit.loadProfiles(),
       expect: () => [
         const ServerProfileLoading(),
-        const ServerProfileError(message: 'Failed to load server profiles: Exception: Storage disk read error'),
+        const ServerProfileError(message: 'Failed to load server profiles'),
       ],
     );
   });
@@ -395,7 +395,7 @@ void main() {
       act: (cubit) => cubit.switchActiveProfile('non-existent'),
       expect: () => [
         const ServerProfileLoading(),
-        const ServerProfileError(message: 'Failed to switch server profile: Exception: Profile not found'),
+        const ServerProfileError(message: 'Failed to switch server profile'),
       ],
     );
   });
@@ -452,7 +452,7 @@ void main() {
       act: (cubit) => cubit.deleteProfile('profile-1'),
       expect: () => [
         const ServerProfileLoading(),
-        const ServerProfileError(message: 'Failed to delete server profile: Exception: Disk write failed'),
+        const ServerProfileError(message: 'Failed to delete server profile'),
       ],
     );
   });

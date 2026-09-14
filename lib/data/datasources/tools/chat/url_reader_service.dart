@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:injectable/injectable.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/url_reader_service.dart';
 
@@ -59,7 +60,11 @@ class UrlReaderService implements UrlReaderServiceBase {
     } on DioException catch (e) {
       return Left(NetworkFailure(_describeDioError(e, url)));
     } catch (e) {
-      return Left(NetworkFailure('Failed to fetch $url: $e'));
+      return Left(
+        NetworkFailure(
+          FailureMessage.humanize(e, context: 'Failed to fetch the page'),
+        ),
+      );
     }
   }
 
@@ -89,7 +94,7 @@ class UrlReaderService implements UrlReaderServiceBase {
   static String _describeDioError(DioException e, String url) {
     final status = e.response?.statusCode;
     if (status != null) return 'HTTP $status while fetching $url';
-    return 'Failed to fetch $url: ${e.message ?? e.type.name}';
+    return 'Failed to fetch $url: ${FailureMessage.fromDio(e)}';
   }
 
   /// Text of `<title>…</title>`, entity-decoded and whitespace-collapsed.

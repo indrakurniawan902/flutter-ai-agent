@@ -6,6 +6,7 @@ import 'package:injectable/injectable.dart';
 import 'package:workmanager/workmanager.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/data/datasources/local/action_center/action_center_datasource.dart';
 import 'package:flutter_ai_agent/data/models/action_center/action_item_model.dart';
 import 'package:flutter_ai_agent/domain/entities/action_center/action_item.dart';
@@ -120,6 +121,17 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
   void removeGeofence(String id) {
     _regions.removeWhere((r) => r.id == id);
     _insideState.remove(id);
+  }
+
+  @override
+  void toggleGeofence(String id, bool isEnabled) {
+    final index = _regions.indexWhere((r) => r.id == id);
+    if (index != -1) {
+      _regions[index] = _regions[index].copyWith(isEnabled: isEnabled);
+      if (!isEnabled) {
+        _insideState.remove(id);
+      }
+    }
   }
 
   @override
@@ -259,7 +271,11 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
       }
       return Right(AmbientCheckResult.empty(checkedAt: current));
     } catch (e) {
-      return Left(ServerFailure('Ambient battery check error: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Ambient battery check error'),
+        ),
+      );
     }
   }
 
@@ -273,6 +289,7 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
       final current = now ?? DateTime.now();
       final fired = <AmbientEvent>[];
       for (final region in _regions) {
+        if (!region.isEnabled) continue;
         final distance = distanceMeters(
           latitude,
           longitude,
@@ -323,7 +340,11 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
         ),
       );
     } catch (e) {
-      return Left(ServerFailure('Ambient geofence check error: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Ambient geofence check error'),
+        ),
+      );
     }
   }
 
@@ -363,7 +384,11 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
         ),
       );
     } catch (e) {
-      return Left(ServerFailure('Ambient check error: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Ambient check error'),
+        ),
+      );
     }
   }
 
@@ -378,7 +403,11 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
       );
       return const Right<Failure, void>(null);
     } catch (e) {
-      return Left(ServerFailure('Ambient schedule error: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Ambient schedule error'),
+        ),
+      );
     }
   }
 
@@ -388,7 +417,11 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
       await _workmanager.cancelAmbientTasks();
       return const Right<Failure, void>(null);
     } catch (e) {
-      return Left(ServerFailure('Ambient cancel error: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Ambient cancel error'),
+        ),
+      );
     }
   }
 }

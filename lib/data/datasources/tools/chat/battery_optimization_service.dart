@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:injectable/injectable.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/battery_optimization_service.dart';
 
 class DefaultBatteryOptimizationPlatformWrapper
@@ -50,7 +51,14 @@ class BatteryOptimizationService implements BatteryOptimizationServiceBase {
       final isIgnoring = await _platform.isIgnoringBatteryOptimizations();
       return Right(isIgnoring);
     } catch (e) {
-      return Left(ServerFailure('Failed to check battery optimization: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(
+            e,
+            context: 'Failed to check battery optimization',
+          ),
+        ),
+      );
     }
   }
 
@@ -60,7 +68,14 @@ class BatteryOptimizationService implements BatteryOptimizationServiceBase {
       final requested = await _platform.requestIgnoreBatteryOptimizations();
       return Right(requested);
     } catch (e) {
-      return Left(ServerFailure('Failed to request battery optimization disable: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(
+            e,
+            context: 'Failed to request battery optimization disable',
+          ),
+        ),
+      );
     }
   }
 }

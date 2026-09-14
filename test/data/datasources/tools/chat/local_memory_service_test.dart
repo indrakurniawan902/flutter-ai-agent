@@ -650,7 +650,8 @@ void main() {
       saved.fold(
         (failure) {
           expect(failure, isA<StorageFailure>());
-          expect(failure.message, startsWith('memory_unavailable:'));
+          expect(failure.message, 'memory_unavailable');
+          expect(failure.message, isNot(contains('Exception')));
         },
         (_) => fail('expected Left'),
       );
@@ -658,8 +659,7 @@ void main() {
       final listed = await svc.getAllMemories();
       expect(listed.isLeft(), isTrue);
       listed.fold(
-        (failure) =>
-            expect(failure.message, startsWith('memory_unavailable:')),
+        (failure) => expect(failure.message, 'memory_unavailable'),
         (_) => fail('expected Left'),
       );
 

@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
-import 'package:flutter_ai_agent/domain/models/share/shared_payload.dart';
+import 'package:flutter_ai_agent/domain/entities/share/shared_payload.dart';
 import 'package:flutter_ai_agent/domain/services/share/share_target_service.dart';
 
 class MockShareMediaProvider extends Mock implements ShareMediaProvider {}

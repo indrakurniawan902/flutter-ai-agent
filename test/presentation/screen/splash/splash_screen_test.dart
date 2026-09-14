@@ -104,7 +104,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(ChatScreen), findsOneWidget);
-      expect(find.byKey(const Key('chat_settings_button')), findsOneWidget);
+      expect(find.byKey(const Key('chat_input_field')), findsOneWidget);
       expect(find.byKey(const Key('chat_app_bar_logo')), findsOneWidget);
     });
 

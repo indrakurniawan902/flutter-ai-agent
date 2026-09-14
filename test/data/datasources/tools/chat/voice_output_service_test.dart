@@ -246,7 +246,8 @@ void main() {
 
       expect(result.isLeft(), true);
       expect(errors.isNotEmpty, true);
-      expect(errors.first, contains('TTS quota exceeded'));
+      expect(errors.first, contains('Speech synthesis failed'));
+      expect(errors.first, isNot(contains('Exception')));
       expect(service.currentStatus, VoiceOutputStatus.error);
     });
 
@@ -383,7 +384,8 @@ void main() {
       await sub.cancel();
 
       expect(errors.isNotEmpty, true);
-      expect(errors.first, contains('Codec failure'));
+      expect(errors.first, contains('Audio playback failed'));
+      expect(errors.first, isNot(contains('Exception')));
       expect(service.isPlaying, false);
     });
   });

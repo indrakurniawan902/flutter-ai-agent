@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/utils/hermes_theme.dart';
-import 'package:flutter_ai_agent/domain/models/chat/action_step.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/action_step.dart';
 
 /// Interactive live action stepper card rendered in chat stream during
 /// multi-step tool execution pipelines.

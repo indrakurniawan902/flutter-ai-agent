@@ -367,6 +367,23 @@ class SkillsRegistryService {
     ));
 
     registerSkill(const Skill(
+      id: 'health_metrics',
+      name: 'health_metrics',
+      description:
+          'Reads steps, heart rate, calories, sleep stages, SpO2, and weight from Android Health Connect.',
+      category: 'Health',
+      tier: 'Tier 2 Perm',
+      version: 'v1.0.0',
+      tools: ['health_status', 'get_health_data'],
+      prompts: [
+        'How many steps did I walk today?',
+        'Show my sleep stages from last night',
+      ],
+      instructions:
+          'Check health_status first; if a metric permission is missing, ask the user to grant it in Health Connect before reading data.',
+    ));
+
+    registerSkill(const Skill(
       id: 'device_telemetry',
       name: 'device_telemetry',
       description:

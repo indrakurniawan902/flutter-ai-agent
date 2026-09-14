@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:injectable/injectable.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart';
 
 @LazySingleton(as: CameraVisionServiceBase)
@@ -58,7 +59,9 @@ class CameraVisionService implements CameraVisionServiceBase {
             final base64String = await _fileToBase64(recoveredFile);
             return Right(base64String);
           } catch (e) {
-            return Left(ServerFailure('[camera_error] $e'));
+            return Left(
+              ServerFailure('[camera_error] ${FailureMessage.humanize(e)}'),
+            );
           }
         }
       }
@@ -96,11 +99,15 @@ class CameraVisionService implements CameraVisionServiceBase {
       }
       if (e.code.toLowerCase().contains('permission') ||
           (e.message ?? '').toLowerCase().contains('permission')) {
-        return Left(PermissionFailure(e.message ?? 'Camera permission denied'));
+        return Left(
+          PermissionFailure(
+            FailureMessage.humanize(e, context: 'Camera permission denied'),
+          ),
+        );
       }
-      return Left(ServerFailure('[camera_error] ${e.message ?? e.code}'));
+      return Left(ServerFailure('[camera_error] ${FailureMessage.humanize(e)}'));
     } catch (e) {
-      return Left(ServerFailure('[camera_error] $e'));
+      return Left(ServerFailure('[camera_error] ${FailureMessage.humanize(e)}'));
     }
 
     if (timedOut) {
@@ -116,9 +123,15 @@ class CameraVisionService implements CameraVisionServiceBase {
           return Right(base64String);
         }
         if (lostData.exception != null) {
-          return Left(CameraLostResultFailure(
-            lostData.exception!.message ?? 'camera_lost_result',
-          ));
+          return Left(
+            CameraLostResultFailure(
+              FailureMessage.humanize(
+                lostData.exception!,
+                context:
+                    'camera_lost_result: Camera result lost to Activity recreation',
+              ),
+            ),
+          );
         }
       } catch (_) {}
       return const Left(CameraCancelledFailure());
@@ -128,7 +141,7 @@ class CameraVisionService implements CameraVisionServiceBase {
       final base64String = await _fileToBase64(file);
       return Right(base64String);
     } catch (e) {
-      return Left(ServerFailure('[camera_error] $e'));
+      return Left(ServerFailure('[camera_error] ${FailureMessage.humanize(e)}'));
     }
   }
 
@@ -142,9 +155,15 @@ class CameraVisionService implements CameraVisionServiceBase {
         return Right(base64String);
       }
       if (lostData.exception != null) {
-        return Left(CameraLostResultFailure(
-          lostData.exception!.message ?? 'camera_lost_result',
-        ));
+        return Left(
+          CameraLostResultFailure(
+            FailureMessage.humanize(
+              lostData.exception!,
+              context:
+                  'camera_lost_result: Camera result lost to Activity recreation',
+            ),
+          ),
+        );
       }
       return const Right(null);
     } catch (_) {

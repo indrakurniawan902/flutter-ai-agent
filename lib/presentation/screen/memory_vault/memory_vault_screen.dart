@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/memory_item.dart';
@@ -10,16 +12,18 @@ class MemoryRecord {
   final String key;
   final String content;
   final String category;
+  final List<String> tags;
   final String timestamp;
-  final double score;
+  final double? score;
 
   const MemoryRecord({
     this.id,
     required this.key,
     required this.content,
     required this.category,
+    this.tags = const [],
     required this.timestamp,
-    required this.score,
+    this.score,
   });
 }
 
@@ -27,7 +31,8 @@ class MemoryRecord {
 ///
 /// Features:
 /// - SQLite FTS5 user memory viewer & search with BM25 full-text indexing.
-/// - Query input and filter categories.
+/// - Full CRUD: create, edit, delete with confirmation.
+/// - Live FTS5 search with debounce.
 /// - Hermes Nous design tokens with zero emojis.
 /// - State preservation across tab switches.
 class MemoryVaultScreen extends StatefulWidget {
@@ -42,6 +47,8 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
   String _searchQuery = '';
   String _selectedCategory = 'all';
   bool _isLoading = false;
+  Timer? _searchDebounce;
+  int _searchSeq = 0;
 
   List<MemoryRecord> _records = [];
 
@@ -66,7 +73,9 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
     setState(() => _isLoading = true);
     try {
       final res = await service.getAllMemories();
-      res.fold((_) {}, (items) {
+      await res.fold((_) async {}, (items) async {
+        // Never seed the vault: a fresh install must show the empty state,
+        // and no personal placeholder data may be written on the user's behalf.
         if (mounted) {
           setState(() {
             _records = items.map(_fromMemoryItem).toList();
@@ -77,104 +86,6 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
     if (mounted) {
       setState(() => _isLoading = false);
     }
-  }
-
-  Future<void> _showAddMemoryDialog() async {
-    final keyController = TextEditingController();
-    final contentController = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: HermesColors.cardSurface,
-        title: const Text(
-          'Add Memory',
-          style: TextStyle(color: HermesColors.inkPrimary, fontSize: 17),
-        ),
-        content: Form(
-          key: formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  key: const Key('memory_add_key_field'),
-                  controller: keyController,
-                  style: const TextStyle(color: HermesColors.inkPrimary),
-                  decoration: const InputDecoration(
-                    labelText: 'Key',
-                    hintText: 'e.g. user.home.city',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (v) => (v?.trim().isEmpty ?? true)
-                      ? 'Key cannot be empty'
-                      : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  key: const Key('memory_add_content_field'),
-                  controller: contentController,
-                  maxLines: 3,
-                  style: const TextStyle(color: HermesColors.inkPrimary),
-                  decoration: const InputDecoration(
-                    labelText: 'Content',
-                    hintText: 'e.g. Preferred location is Jakarta',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (v) => (v?.trim().isEmpty ?? true)
-                      ? 'Content cannot be empty'
-                      : null,
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            key: const Key('memory_add_save_button'),
-            onPressed: () async {
-              if (formKey.currentState?.validate() ?? false) {
-                final key = keyController.text.trim();
-                final content = contentController.text.trim();
-                final category = _detectCategory(key);
-                if (sl.isRegistered<LocalMemoryServiceBase>()) {
-                  await sl<LocalMemoryServiceBase>().saveMemory(key, content, [
-                    category,
-                  ]);
-                  await _initMemoryStore();
-                } else {
-                  final now = DateTime.now();
-                  final timeStr =
-                      '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-                  if (mounted) {
-                    setState(() {
-                      _records.add(
-                        MemoryRecord(
-                          key: key,
-                          content: content,
-                          category: category,
-                          timestamp: timeStr,
-                          score: 1.0,
-                        ),
-                      );
-                    });
-                  }
-                }
-                if (dialogContext.mounted) {
-                  Navigator.of(dialogContext).pop();
-                }
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
   }
 
   MemoryRecord _fromMemoryItem(MemoryItem item) {
@@ -189,8 +100,9 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
       key: item.key,
       content: item.content,
       category: cat,
+      tags: item.tags,
       timestamp: timeStr,
-      score: item.score ?? 1.0,
+      score: item.score,
     );
   }
 
@@ -217,57 +129,226 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
     return 'profile';
   }
 
-  Future<void> _deleteMemoryRecord(MemoryRecord record) async {
-    if (record.id != null && sl.isRegistered<LocalMemoryServiceBase>()) {
-      await sl<LocalMemoryServiceBase>().deleteMemory(record.id!);
-    } else if (sl.isRegistered<LocalMemoryServiceBase>()) {
-      await sl<LocalMemoryServiceBase>().deleteMemoryByKey(record.key);
-    }
-    setState(() {
-      _records.removeWhere(
-        (r) => r.key == record.key || (record.id != null && r.id == record.id),
-      );
-    });
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Memory record "${record.key}" deleted.',
-            style: HermesTypography.monospace(
-              fontSize: 12,
-              color: Colors.white,
+  Future<bool> _confirmDelete(MemoryRecord record) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        key: const Key('memory_delete_confirm_dialog'),
+        backgroundColor: HermesColors.cardSurface,
+        title: const Text(
+          'Delete this memory permanently?',
+          style: TextStyle(color: HermesColors.inkPrimary, fontSize: 16),
+        ),
+        content: Text(
+          'Key: ${record.key}',
+          style: HermesTypography.monospace(
+            fontSize: 12,
+            color: HermesColors.inkSecondary,
+          ),
+        ),
+        actions: [
+          TextButton(
+            key: const Key('memory_delete_cancel_button'),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(
+              'Cancel',
+              style: HermesTypography.monospace(
+                fontSize: 12,
+                color: HermesColors.inkSecondary,
+              ),
             ),
           ),
-          backgroundColor: HermesColors.cardSurface,
-          duration: const Duration(seconds: 2),
+          TextButton(
+            key: const Key('memory_delete_confirm_button'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(
+              'Delete',
+              style: HermesTypography.monospace(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: HermesColors.rose,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
+  void _showMemorySnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: HermesTypography.monospace(fontSize: 12, color: Colors.white),
         ),
+        backgroundColor: HermesColors.cardSurface,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _deleteMemoryRecord(MemoryRecord record) async {
+    if (!sl.isRegistered<LocalMemoryServiceBase>()) {
+      setState(() {
+        _records.removeWhere(
+          (r) =>
+              r.key == record.key || (record.id != null && r.id == record.id),
+        );
+      });
+      _showMemorySnackBar('Memory record "${record.key}" deleted.');
+      return;
+    }
+    try {
+      final res = record.id != null
+          ? await sl<LocalMemoryServiceBase>().deleteMemory(record.id!)
+          : await sl<LocalMemoryServiceBase>().deleteMemoryByKey(record.key);
+      await res.fold(
+        (failure) async {
+          await _refreshFromService();
+          _showMemorySnackBar(failure.message);
+        },
+        (_) async {
+          await _refreshFromService();
+          _showMemorySnackBar('Memory record "${record.key}" deleted.');
+        },
       );
+    } catch (e) {
+      await _refreshFromService();
+      _showMemorySnackBar('Failed to delete memory: $e');
     }
   }
 
+  Future<void> _requestDelete(MemoryRecord record) async {
+    if (await _confirmDelete(record)) {
+      await _deleteMemoryRecord(record);
+    }
+  }
+
+  Future<bool> _saveMemoryRecord(
+    String key,
+    String content,
+    String category,
+    List<String> tags,
+  ) async {
+    if (!sl.isRegistered<LocalMemoryServiceBase>()) {
+      _showMemorySnackBar('Memory saved');
+      return true;
+    }
+    try {
+      final res = await sl<LocalMemoryServiceBase>().saveMemory(key, content, [
+        category,
+        ...tags,
+      ]);
+      return await res.fold(
+        (failure) async {
+          _showMemorySnackBar(failure.message);
+          return false;
+        },
+        (_) async {
+          await _refreshFromService();
+          _showMemorySnackBar('Memory saved');
+          return true;
+        },
+      );
+    } catch (e) {
+      _showMemorySnackBar('Failed to save memory: $e');
+      return false;
+    }
+  }
+
+  Future<void> _openMemoryForm({MemoryRecord? record}) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: HermesColors.cardSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (sheetContext) => _MemoryFormSheet(
+        isEditing: record != null,
+        record: record,
+        onSave: _saveMemoryRecord,
+      ),
+    );
+  }
+
   void _onSearchChanged() {
+    _searchDebounce?.cancel();
+    _searchSeq++;
+    final query = _searchController.text.trim();
     setState(() {
-      _searchQuery = _searchController.text.trim().toLowerCase();
+      _searchQuery = query.toLowerCase();
     });
+    if (query.isEmpty) {
+      if (sl.isRegistered<LocalMemoryServiceBase>()) {
+        _refreshFromService();
+      }
+      return;
+    }
+    if (!sl.isRegistered<LocalMemoryServiceBase>()) return;
+    _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+      _runLiveSearch(query);
+    });
+  }
+
+  Future<void> _runLiveSearch(String query) async {
+    if (query.isEmpty) return;
+    if (!sl.isRegistered<LocalMemoryServiceBase>()) return;
+    final service = sl<LocalMemoryServiceBase>();
+    final seq = ++_searchSeq;
+    try {
+      final res = await service.searchMemories(query, 50);
+      res.fold((_) {}, (items) {
+        if (!mounted || seq != _searchSeq) return;
+        setState(() {
+          _records = items.map(_fromMemoryItem).toList();
+        });
+      });
+    } catch (e) {
+      _showMemorySnackBar('Search failed: $e');
+    }
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     super.dispose();
   }
 
+  Future<void> _refreshFromService() async {
+    if (!sl.isRegistered<LocalMemoryServiceBase>()) return;
+    final service = sl<LocalMemoryServiceBase>();
+    final seq = ++_searchSeq;
+    try {
+      final res = await service.getAllMemories();
+      res.fold((_) {}, (items) {
+        if (!mounted || seq != _searchSeq) return;
+        setState(() {
+          _records = items.map(_fromMemoryItem).toList();
+        });
+      });
+    } catch (_) {}
+  }
+
   List<MemoryRecord> get _filteredRecords {
+    final serviceBacked =
+        _searchQuery.isNotEmpty && sl.isRegistered<LocalMemoryServiceBase>();
     return _records.where((record) {
       final matchesCat =
           _selectedCategory == 'all' ||
           record.category.toLowerCase() == _selectedCategory.toLowerCase();
-      final matchesQuery =
-          _searchQuery.isEmpty ||
-          record.key.toLowerCase().contains(_searchQuery) ||
-          record.content.toLowerCase().contains(_searchQuery);
-      return matchesCat && matchesQuery;
+      if (!matchesCat) return false;
+      if (serviceBacked || _searchQuery.isEmpty) return true;
+      if (record.key.toLowerCase().contains(_searchQuery) ||
+          record.content.toLowerCase().contains(_searchQuery)) {
+        return true;
+      }
+      return record.tags.any((tag) => tag.toLowerCase().contains(_searchQuery));
     }).toList();
   }
 
@@ -291,16 +372,6 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
             ),
             tooltip: 'Refresh Memories',
             onPressed: _initMemoryStore,
-          ),
-          IconButton(
-            key: const Key('memory_add_button'),
-            icon: const Icon(
-              Icons.add,
-              size: 20,
-              color: HermesColors.inkSecondary,
-            ),
-            tooltip: 'Add Memory',
-            onPressed: _showAddMemoryDialog,
           ),
           Container(
             key: const Key('memory_fts5_badge'),
@@ -355,7 +426,7 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
                 fontSize: 14,
               ),
               decoration: InputDecoration(
-                hintText: 'Search FTS5 memory index (e.g. home, office)...',
+                hintText: 'Search FTS5 memory index (e.g. profile, router)...',
                 hintStyle: const TextStyle(
                   color: HermesColors.inkMuted,
                   fontSize: 13,
@@ -450,60 +521,61 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
 
           // Memory Records List
           Expanded(
-            child: _records.isEmpty
-                ? Center(
-                    key: const Key('memory_empty_state'),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: const [
-                        Icon(
-                          Icons.storage_outlined,
-                          size: 48,
-                          color: HermesColors.inkMuted,
-                        ),
-                        SizedBox(height: 12),
-                        Text(
-                          'No memories saved yet. Tap + to add one.',
-                          style: TextStyle(
-                            color: HermesColors.inkSecondary,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
+            child: filtered.isEmpty
+                ? (_records.isEmpty && _searchQuery.isEmpty
+                      ? Center(
+                          key: const Key('memory_empty_state'),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(
+                                Icons.storage_outlined,
+                                size: 48,
+                                color: HermesColors.inkMuted,
+                              ),
+                              SizedBox(height: 12),
+                              Text(
+                                'No memories saved yet. Tap + to add one.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: HermesColors.inkSecondary,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
-                  )
-                : filtered.isEmpty
-                ? Center(
-                    key: const Key('memory_search_empty_state'),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.search_off_outlined,
-                          size: 48,
-                          color: HermesColors.inkMuted,
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'No memory records match your search query',
-                          style: TextStyle(
-                            color: HermesColors.inkSecondary,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
+                        )
+                      : Center(
+                          key: const Key('memory_search_empty_state'),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.search_off_outlined,
+                                size: 48,
+                                color: HermesColors.inkMuted,
+                              ),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'No memory records match your search query',
+                                style: TextStyle(
+                                  color: HermesColors.inkSecondary,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Query matches across FTS5 indexed keys and values.',
+                                style: HermesTypography.monospace(
+                                  fontSize: 12,
+                                  color: HermesColors.inkMuted,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Query matches across FTS5 indexed keys and values.',
-                          style: HermesTypography.monospace(
-                            fontSize: 12,
-                            color: HermesColors.inkMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
+                        ))
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
                     itemCount: filtered.length,
@@ -511,98 +583,334 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
                         const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final item = filtered[index];
-                      return Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: HermesColors.cardSurface,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: HermesColors.border),
+                      final identity = item.id ?? item.key;
+                      return Dismissible(
+                        key: Key('memory_dismissible_$identity'),
+                        direction: DismissDirection.endToStart,
+                        background: Container(
+                          color: HermesColors.rose,
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: const Icon(
+                            Icons.delete,
+                            color: Colors.white,
+                            size: 28,
+                          ),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+                        confirmDismiss: (_) => _confirmDelete(item),
+                        onDismissed: (_) => _deleteMemoryRecord(item),
+                        child: InkWell(
+                          key: Key('memory_item_$identity'),
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () => _openMemoryForm(record: item),
+                          child: Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: HermesColors.cardSurface,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: HermesColors.border),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      item.key,
+                                      style: HermesTypography.monospace(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: HermesColors.electricTeal,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: HermesColors.deepObsidian,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                          color: HermesColors.hairline,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        item.category.toUpperCase(),
+                                        style: HermesTypography.monospace(
+                                          fontSize: 9,
+                                          color: HermesColors.inkSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.delete_outline,
+                                        size: 15,
+                                        color: HermesColors.inkMuted,
+                                      ),
+                                      visualDensity: VisualDensity.compact,
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                      tooltip: 'Delete Memory',
+                                      onPressed: () => _requestDelete(item),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
                                 Text(
-                                  item.key,
-                                  style: HermesTypography.monospace(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: HermesColors.electricTeal,
+                                  item.content,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: HermesColors.inkPrimary,
+                                    height: 1.3,
                                   ),
                                 ),
-                                const Spacer(),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: HermesColors.deepObsidian,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(
-                                      color: HermesColors.hairline,
+                                const SizedBox(height: 8),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      item.timestamp,
+                                      style: HermesTypography.monospace(
+                                        fontSize: 11,
+                                        color: HermesColors.inkMuted,
+                                      ),
                                     ),
-                                  ),
-                                  child: Text(
-                                    item.category.toUpperCase(),
-                                    style: HermesTypography.monospace(
-                                      fontSize: 9,
-                                      color: HermesColors.inkSecondary,
+                                    Text(
+                                      'BM25 score: ${((item.score ?? 1.0) * 100).toStringAsFixed(0)}%',
+                                      style: HermesTypography.monospace(
+                                        fontSize: 11,
+                                        color: HermesColors.emerald,
+                                      ),
                                     ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.delete_outline,
-                                    size: 15,
-                                    color: HermesColors.inkMuted,
-                                  ),
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                  tooltip: 'Delete Memory',
-                                  onPressed: () => _deleteMemoryRecord(item),
+                                  ],
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              item.content,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: HermesColors.inkPrimary,
-                                height: 1.3,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  item.timestamp,
-                                  style: HermesTypography.monospace(
-                                    fontSize: 11,
-                                    color: HermesColors.inkMuted,
-                                  ),
-                                ),
-                                Text(
-                                  'BM25 score: ${(item.score * 100).toStringAsFixed(0)}%',
-                                  style: HermesTypography.monospace(
-                                    fontSize: 11,
-                                    color: HermesColors.emerald,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                          ),
                         ),
                       );
                     },
                   ),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        key: const Key('memory_create_fab'),
+        backgroundColor: HermesColors.electricTeal,
+        foregroundColor: HermesColors.deepObsidian,
+        tooltip: 'Create Memory',
+        onPressed: () => _openMemoryForm(),
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+
+/// Modal form for creating and editing memory records.
+class _MemoryFormSheet extends StatefulWidget {
+  const _MemoryFormSheet({
+    required this.isEditing,
+    this.record,
+    required this.onSave,
+  });
+
+  final bool isEditing;
+  final MemoryRecord? record;
+  final Future<bool> Function(
+    String key,
+    String content,
+    String category,
+    List<String> tags,
+  )
+  onSave;
+
+  @override
+  State<_MemoryFormSheet> createState() => _MemoryFormSheetState();
+}
+
+class _MemoryFormSheetState extends State<_MemoryFormSheet> {
+  static const List<String> _formCategories = [
+    'profile',
+    'router',
+    'hardware',
+    'rules',
+    'other',
+  ];
+
+  late final TextEditingController _keyController;
+  late final TextEditingController _contentController;
+  late final TextEditingController _tagsController;
+  late String _category;
+
+  @override
+  void initState() {
+    super.initState();
+    final record = widget.record;
+    _keyController = TextEditingController(text: record?.key ?? '');
+    _contentController = TextEditingController(text: record?.content ?? '');
+    final recordTags = record?.tags ?? const <String>[];
+    _tagsController = TextEditingController(
+      text: recordTags.where((t) => t != record?.category).join(', '),
+    );
+    _category = record != null && _formCategories.contains(record.category)
+        ? record.category
+        : 'profile';
+    _keyController.addListener(_rebuild);
+    _contentController.addListener(_rebuild);
+  }
+
+  void _rebuild() => setState(() {});
+
+  bool get _canSave =>
+      _keyController.text.trim().isNotEmpty &&
+      _contentController.text.trim().isNotEmpty;
+
+  @override
+  void dispose() {
+    _keyController.removeListener(_rebuild);
+    _contentController.removeListener(_rebuild);
+    _keyController.dispose();
+    _contentController.dispose();
+    _tagsController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_canSave) return;
+    final tags = _tagsController.text
+        .split(',')
+        .map((t) => t.trim())
+        .where((t) => t.isNotEmpty)
+        .toList();
+    final saved = await widget.onSave(
+      _keyController.text.trim(),
+      _contentController.text.trim(),
+      _category,
+      tags,
+    );
+    if (!mounted) return;
+    if (saved) Navigator.of(context).pop();
+  }
+
+  InputDecoration _fieldDecoration(String hint) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(color: HermesColors.inkMuted, fontSize: 13),
+      filled: true,
+      fillColor: HermesColors.deepObsidian,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: HermesColors.border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: HermesColors.border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: HermesColors.electricTeal),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.isEditing ? 'Edit Memory' : 'Create Memory',
+              style: const TextStyle(
+                color: HermesColors.inkPrimary,
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              key: const Key('memory_form_key_field'),
+              controller: _keyController,
+              enabled: !widget.isEditing,
+              style: const TextStyle(
+                color: HermesColors.inkPrimary,
+                fontSize: 14,
+              ),
+              decoration: _fieldDecoration(
+                widget.isEditing
+                    ? 'Key cannot be changed'
+                    : 'Key (e.g. user.identity.name)',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('memory_form_content_field'),
+              controller: _contentController,
+              maxLines: 4,
+              style: const TextStyle(
+                color: HermesColors.inkPrimary,
+                fontSize: 14,
+              ),
+              decoration: _fieldDecoration('Content'),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              key: const Key('memory_form_category_field'),
+              initialValue: _category,
+              dropdownColor: HermesColors.cardSurface,
+              style: const TextStyle(
+                color: HermesColors.inkPrimary,
+                fontSize: 14,
+              ),
+              decoration: _fieldDecoration('Category'),
+              items: _formCategories
+                  .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) setState(() => _category = value);
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('memory_form_tags_field'),
+              controller: _tagsController,
+              style: const TextStyle(
+                color: HermesColors.inkPrimary,
+                fontSize: 14,
+              ),
+              decoration: _fieldDecoration('Tags (comma separated)'),
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                key: const Key('memory_form_save_button'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: HermesColors.electricTeal,
+                  foregroundColor: HermesColors.deepObsidian,
+                  disabledBackgroundColor: HermesColors.border,
+                  disabledForegroundColor: HermesColors.inkMuted,
+                ),
+                onPressed: _canSave ? _submit : null,
+                child: const Text('Save'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

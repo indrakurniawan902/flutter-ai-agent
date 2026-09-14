@@ -5,8 +5,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:injectable/injectable.dart';
 
 import 'package:flutter_ai_agent/domain/entities/gateway/gateway_connection_state.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/entities/gateway/gateway_message.dart';
-import 'package:flutter_ai_agent/domain/models/chat/tool_call_request.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/tool_call_request.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_rpc_receiver.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
@@ -84,13 +85,15 @@ class GatewayRpcCubit extends Cubit<GatewayRpcState> {
     _requestSubscription = _gatewayClient.toolCallRequestStream.listen(
       _handleIncomingRequest,
       onError: (err) {
-        emit(GatewayRpcError('Gateway tool request stream error: $err'));
+        emit(GatewayRpcError(FailureMessage.humanize(
+            err, context: 'Gateway tool request stream error')));
       },
     );
     _elicitationSubscription = _gatewayClient.elicitationRequestStream.listen(
       _handleIncomingElicitation,
       onError: (err) {
-        emit(GatewayRpcError('Gateway elicitation stream error: $err'));
+        emit(GatewayRpcError(FailureMessage.humanize(
+            err, context: 'Gateway elicitation stream error')));
       },
     );
   }
@@ -145,7 +148,8 @@ class GatewayRpcCubit extends Cubit<GatewayRpcState> {
     } catch (e) {
       if (isClosed) return;
       emit(GatewayRpcError(
-        'Failed to process tool call ${request.tool}: $e',
+        FailureMessage.humanize(
+            e, context: 'Failed to process tool call ${request.tool}'),
         callId: request.id,
       ));
     }

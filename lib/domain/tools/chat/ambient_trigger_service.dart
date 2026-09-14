@@ -27,6 +27,8 @@ abstract class AmbientTriggerServiceBase {
 
   void removeGeofence(String id);
 
+  void toggleGeofence(String id, bool isEnabled);
+
   void clearGeofences();
 
   void clearCooldowns();
