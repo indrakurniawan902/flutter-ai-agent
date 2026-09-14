@@ -11,8 +11,6 @@
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 
 import 'package:dio/dio.dart' as _i361;
-import 'package:flutter_ai_agent/data/datasources/skills/doc_builder_skill.dart'
-    as _i701;
 import 'package:flutter_ai_agent/common/injection/modules.dart' as _i225;
 import 'package:flutter_ai_agent/data/datasources/local/action_center/action_center_datasource.dart'
     as _i561;
@@ -20,6 +18,8 @@ import 'package:flutter_ai_agent/data/datasources/local/chat/chat_local_datasour
     as _i613;
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart'
     as _i348;
+import 'package:flutter_ai_agent/data/datasources/local/skills/skills_local_datasource.dart'
+    as _i1021;
 import 'package:flutter_ai_agent/data/datasources/remote/chat/chat_datasource.dart'
     as _i522;
 import 'package:flutter_ai_agent/data/datasources/remote/chat/sse_parser.dart'
@@ -28,6 +28,8 @@ import 'package:flutter_ai_agent/data/datasources/remote/gateway/gateway_client.
     as _i122;
 import 'package:flutter_ai_agent/data/datasources/remote/pairing/scanner_controller_wrapper.dart'
     as _i319;
+import 'package:flutter_ai_agent/data/datasources/remote/skills/skill_remote_loader.dart'
+    as _i1042;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/ambient_trigger_service.dart'
     as _i315;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/background_service.dart'
@@ -86,6 +88,14 @@ import 'package:flutter_ai_agent/domain/services/share/share_target_service.dart
     as _i205;
 import 'package:flutter_ai_agent/domain/services/shortcuts/quick_actions_service.dart'
     as _i355;
+import 'package:flutter_ai_agent/domain/services/skills/skill_import_service.dart'
+    as _i124;
+import 'package:flutter_ai_agent/domain/services/skills/skill_remote_loader.dart'
+    as _i680;
+import 'package:flutter_ai_agent/domain/services/skills/skill_security_scanner.dart'
+    as _i988;
+import 'package:flutter_ai_agent/domain/services/skills/skills_local_datasource.dart'
+    as _i292;
 import 'package:flutter_ai_agent/domain/services/skills/skills_registry_service.dart'
     as _i791;
 import 'package:flutter_ai_agent/domain/services/tools/tool_pruning_service.dart'
@@ -176,8 +186,8 @@ extension GetItInjectableX on _i174.GetIt {
       () => toolsModule.provideUrlLauncherProvider(),
     );
     gh.lazySingleton<_i598.SseParser>(() => _i598.SseParser());
-    gh.lazySingleton<_i791.SkillsRegistryService>(
-      () => _i791.SkillsRegistryService(),
+    gh.lazySingleton<_i988.SkillSecurityScanner>(
+      () => _i988.SkillSecurityScanner(),
     );
     gh.lazySingleton<_i301.PairingParser>(() => const _i301.PairingParser());
     gh.lazySingleton<_i919.NotificationServiceBase>(
@@ -200,11 +210,17 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i14.UrlReaderServiceBase>(
       () => _i840.UrlReaderService.create(gh<_i361.Dio>()),
     );
+    gh.lazySingleton<_i292.SkillsLocalDatasourceBase>(
+      () => _i1021.SkillsLocalDatasource.create(),
+    );
     gh.lazySingleton<_i821.QrScannerControllerBase>(
       () => _i319.MobileScannerControllerWrapper(),
     );
     gh.lazySingleton<_i547.ClipboardServiceBase>(
       () => _i105.ClipboardService.create(),
+    );
+    gh.lazySingleton<_i680.SkillRemoteLoaderBase>(
+      () => _i1042.SkillRemoteLoader.create(gh<_i361.Dio>()),
     );
     gh.lazySingleton<_i192.LlmRepository>(
       () => _i236.LlmRepositoryImpl(
@@ -299,33 +315,24 @@ extension GetItInjectableX on _i174.GetIt {
       ),
     );
     gh.lazySingleton<_i732.ToolRegistry>(
-      () {
-        final registry = _i732.ToolRegistry(
-          clipboardService: gh<_i547.ClipboardServiceBase>(),
-          locationService: gh<_i292.LocationServiceBase>(),
-          deviceContextService: gh<_i3.DeviceContextServiceBase>(),
-          cameraVisionService: gh<_i815.CameraVisionServiceBase>(),
-          calendarService: gh<_i1020.CalendarServiceBase>(),
-          notificationService: gh<_i919.NotificationServiceBase>(),
-          fileWorkspaceService: gh<_i745.FileWorkspaceServiceBase>(),
-          notificationTriageService: gh<_i396.NotificationTriageServiceBase>(),
-          localMemoryService: gh<_i987.LocalMemoryServiceBase>(),
-          ambientTriggerService: gh<_i290.AmbientTriggerServiceBase>(),
-          voiceInputService: gh<_i652.VoiceInputServiceBase>(),
-          voiceOutputService: gh<_i45.VoiceOutputServiceBase>(),
-          backgroundService: gh<_i791.BackgroundServiceBase>(),
-          contactLauncherTools: gh<_i777.ContactLauncherTools>(),
-          intentLauncherService: gh<_i173.IntentLauncherServiceBase>(),
-          urlReaderService: gh<_i14.UrlReaderServiceBase>(),
-          nfcService: gh<_i350.NfcServiceBase>(),
-        );
-        _i701.DocBuilderSkill.registerTools(registry);
-        return registry;
-      },
-    );
-    gh.factory<_i96.SkillsCubit>(
-      () => _i96.SkillsCubit(
-        skillsRegistryService: gh<_i791.SkillsRegistryService>(),
+      () => _i732.ToolRegistry(
+        clipboardService: gh<_i547.ClipboardServiceBase>(),
+        locationService: gh<_i292.LocationServiceBase>(),
+        deviceContextService: gh<_i3.DeviceContextServiceBase>(),
+        cameraVisionService: gh<_i815.CameraVisionServiceBase>(),
+        calendarService: gh<_i1020.CalendarServiceBase>(),
+        notificationService: gh<_i919.NotificationServiceBase>(),
+        fileWorkspaceService: gh<_i745.FileWorkspaceServiceBase>(),
+        notificationTriageService: gh<_i396.NotificationTriageServiceBase>(),
+        localMemoryService: gh<_i987.LocalMemoryServiceBase>(),
+        ambientTriggerService: gh<_i290.AmbientTriggerServiceBase>(),
+        voiceInputService: gh<_i652.VoiceInputServiceBase>(),
+        voiceOutputService: gh<_i45.VoiceOutputServiceBase>(),
+        backgroundService: gh<_i791.BackgroundServiceBase>(),
+        contactLauncherTools: gh<_i777.ContactLauncherTools>(),
+        intentLauncherService: gh<_i173.IntentLauncherServiceBase>(),
+        urlReaderService: gh<_i14.UrlReaderServiceBase>(),
+        nfcService: gh<_i350.NfcServiceBase>(),
       ),
     );
     gh.lazySingleton<_i445.ChatLocalRepository>(
@@ -342,6 +349,11 @@ extension GetItInjectableX on _i174.GetIt {
         nfcService: gh<_i350.NfcServiceBase>(),
       ),
     );
+    gh.lazySingleton<_i791.SkillsRegistryService>(
+      () => _i791.SkillsRegistryService(
+        localDatasource: gh<_i292.SkillsLocalDatasourceBase>(),
+      ),
+    );
     gh.factory<_i819.ServerProfileCubit>(
       () => _i819.ServerProfileCubit.create(
         secureStorageService: gh<_i348.SecureStorageService>(),
@@ -356,8 +368,22 @@ extension GetItInjectableX on _i174.GetIt {
         gh<_i45.PlatformTtsEngine>(),
       ),
     );
+    gh.lazySingleton<_i124.SkillImportService>(
+      () => _i124.SkillImportService(
+        loader: gh<_i680.SkillRemoteLoaderBase>(),
+        registry: gh<_i791.SkillsRegistryService>(),
+        scanner: gh<_i988.SkillSecurityScanner>(),
+        toolRegistry: gh<_i732.ToolRegistry>(),
+      ),
+    );
     gh.lazySingleton<_i27.GatewayClientBase>(
       () => gatewayModule.provideGatewayClientBase(gh<_i122.GatewayClient>()),
+    );
+    gh.factory<_i96.SkillsCubit>(
+      () => _i96.SkillsCubit(
+        skillsRegistryService: gh<_i791.SkillsRegistryService>(),
+        skillImportService: gh<_i124.SkillImportService>(),
+      ),
     );
     gh.factory<_i118.GatewayRpcCubit>(
       () => _i118.GatewayRpcCubit.create(
