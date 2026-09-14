@@ -1002,6 +1002,177 @@ void main() {
 
       expect(find.text('Running read_file...'), findsNothing);
     });
+
+    testWidgets('a chat_cancelled error frame settles a running tool card',
+        (tester) async {
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.gateway));
+      await tester.pumpAndSettle();
+
+      gatewayMessageController.add(const GatewayToolEventMessage(
+        phase: 'running',
+        tool: 'read_file',
+        label: 'Reading foo.py',
+        toolCallId: 'call_1',
+        sessionId: 'up-1',
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+      expect(find.text('Running read_file...'), findsOneWidget);
+
+      gatewayMessageController.add(const GatewayErrorMessage(
+        message: 'cancelled',
+        code: 'chat_cancelled',
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      expect(find.text('Running read_file...'), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('Tool: read_file'), findsOneWidget);
+    });
+
+    testWidgets('a gateway disconnect settles a running tool card',
+        (tester) async {
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.gateway));
+      await tester.pumpAndSettle();
+
+      gatewayMessageController.add(const GatewayToolEventMessage(
+        phase: 'running',
+        tool: 'read_file',
+        label: 'Reading foo.py',
+        toolCallId: 'call_1',
+        sessionId: 'up-1',
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+      expect(find.text('Running read_file...'), findsOneWidget);
+
+      gatewayStateController.add(GatewayConnectionState.disconnected);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      expect(find.text('Running read_file...'), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
+
+    testWidgets(
+        'a completed frame after the assistant message does not duplicate the '
+        'settled card', (tester) async {
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.gateway));
+      await tester.pumpAndSettle();
+
+      gatewayMessageController.add(const GatewayToolEventMessage(
+        phase: 'running',
+        tool: 'read_file',
+        label: 'Reading foo.py',
+        toolCallId: 'call_1',
+        sessionId: 'up-1',
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      gatewayMessageController.add(
+          const GatewayChatMessage(content: 'done', role: 'assistant'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      gatewayMessageController.add(const GatewayToolEventMessage(
+        phase: 'completed',
+        tool: 'read_file',
+        toolCallId: 'call_1',
+        sessionId: 'up-1',
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      expect(find.text('Tool: read_file'), findsOneWidget);
+    });
+
+    testWidgets('an id-less completed frame settles the matching running frame',
+        (tester) async {
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.gateway));
+      await tester.pumpAndSettle();
+
+      gatewayMessageController.add(const GatewayToolEventMessage(
+        phase: 'running',
+        tool: 'read_file',
+        label: 'Reading foo.py',
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+      expect(find.text('Running read_file...'), findsOneWidget);
+
+      gatewayMessageController.add(const GatewayToolEventMessage(
+        phase: 'completed',
+        tool: 'read_file',
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      expect(find.text('Running read_file...'), findsNothing);
+      expect(find.text('Tool: read_file'), findsOneWidget);
+    });
+
+    testWidgets('the running frame label survives onto the settled card',
+        (tester) async {
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.gateway));
+      await tester.pumpAndSettle();
+
+      gatewayMessageController.add(const GatewayToolEventMessage(
+        phase: 'running',
+        tool: 'read_file',
+        label: 'Reading foo.py',
+        toolCallId: 'call_1',
+        sessionId: 'up-1',
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      gatewayMessageController.add(const GatewayToolEventMessage(
+        phase: 'completed',
+        tool: 'read_file',
+        toolCallId: 'call_1',
+        sessionId: 'up-1',
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      await tester.tap(find.text('Tool: read_file'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Reading foo.py'), findsOneWidget);
+    });
+
+    testWidgets(
+        'switching to Direct after a tool event restores the empty state',
+        (tester) async {
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.gateway));
+      await tester.pumpAndSettle();
+
+      gatewayMessageController.add(const GatewayToolEventMessage(
+        phase: 'running',
+        tool: 'read_file',
+        label: 'Reading foo.py',
+        toolCallId: 'call_1',
+        sessionId: 'up-1',
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+      expect(find.text('Running read_file...'), findsOneWidget);
+      expect(find.text('Gateway Remote Node'), findsNothing);
+
+      await tester.tap(find.byKey(const Key('chat_mode_toggle')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Running read_file...'), findsNothing);
+      expect(find.text('Autonomous Device Agent'), findsOneWidget);
+    });
   });
 }
 
