@@ -17,6 +17,10 @@ const Skill _storedSkill = Skill(
 void main() {
   late MockSkillsLocalDatasource datasource;
 
+  setUpAll(() {
+    registerFallbackValue(_storedSkill);
+  });
+
   setUp(() {
     datasource = MockSkillsLocalDatasource();
   });

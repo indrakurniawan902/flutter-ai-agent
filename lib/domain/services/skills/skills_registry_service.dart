@@ -16,6 +16,7 @@ class SkillsRegistryService {
   final SkillsLocalDatasourceBase? _localDatasource;
   final void Function(Object error, StackTrace stack)? _onStorageError;
   bool _hydrated = false;
+  Future<bool>? _hydration;
 
   SkillsRegistryService({
     @ignoreParam bool loadDefaults = true,
@@ -124,9 +125,28 @@ class SkillsRegistryService {
   /// and failure-tolerant: returns false when storage is unavailable,
   /// never throws.
   ///
-  /// Re-entrancy: concurrent callers share one hydration; a failed
-  /// hydration may be retried.
-  Future<bool> hydrateFromStorage() async {
+  /// Re-entrancy: concurrent callers share the SAME hydration future, so a
+  /// caller that joins while a load is in flight receives that load's real
+  /// result rather than an immediate success. A failed hydration clears the
+  /// shared future so a later call retries; a successful one stays cached.
+  /// With no datasource there is nothing to share, so the false result is
+  /// returned without caching.
+  Future<bool> hydrateFromStorage() {
+    if (_localDatasource == null) {
+      return Future.value(false);
+    }
+    final existing = _hydration;
+    if (existing != null) return existing;
+    final completer = Completer<bool>();
+    _hydration = completer.future;
+    _hydrate().then(
+      completer.complete,
+      onError: completer.completeError,
+    );
+    return completer.future;
+  }
+
+  Future<bool> _hydrate() async {
     final datasource = _localDatasource;
     if (datasource == null) {
       return false;
@@ -151,6 +171,7 @@ class SkillsRegistryService {
       return true;
     } catch (error, stack) {
       _hydrated = false;
+      _hydration = null;
       _onStorageError?.call(error, stack);
       return false;
     }

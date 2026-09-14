@@ -27,9 +27,11 @@ class SkillsCubit extends Cubit<SkillsState> {
 
   /// Loads all registered skills from the registry.
   Future<void> loadSkills() async {
+    if (isClosed) return;
     emit(const SkillsLoading());
     try {
       await _skillsRegistryService.hydrateFromStorage();
+      if (isClosed) return;
       final all = _skillsRegistryService.getAllSkills();
       emit(SkillsLoaded(
         allSkills: all,
@@ -39,6 +41,7 @@ class SkillsCubit extends Cubit<SkillsState> {
         activeCount: _skillsRegistryService.getActiveSkills().length,
       ));
     } catch (e) {
+      if (isClosed) return;
       emit(SkillsError(
           FailureMessage.humanize(e, context: 'Failed to load skills')));
     }
@@ -121,6 +124,7 @@ class SkillsCubit extends Cubit<SkillsState> {
   /// Fetches and security-scans the remote SKILL.md at [url],
   /// then publishes a preview. Never registers anything.
   Future<void> importSkillFromUrl(String url) async {
+    if (isClosed) return;
     if (state is! SkillsLoaded) return;
     final service = _skillImportService;
     if (service == null) {
@@ -141,6 +145,7 @@ class SkillsCubit extends Cubit<SkillsState> {
       importBusy: true,
     ));
     final res = await service.buildPreview(url);
+    if (isClosed) return;
     if (state is! SkillsLoaded) return;
     final latest = state as SkillsLoaded;
     res.fold(
@@ -163,6 +168,7 @@ class SkillsCubit extends Cubit<SkillsState> {
   /// Registers the pending preview when it is safe; clears pending state.
   /// Returns the registered skill, or null when nothing was registered.
   Future<Skill?> confirmSkillImport() async {
+    if (isClosed) return null;
     if (state is! SkillsLoaded) return null;
     final current = state as SkillsLoaded;
     final preview = current.importPreview;
@@ -184,6 +190,7 @@ class SkillsCubit extends Cubit<SkillsState> {
       return null;
     }
     final res = await service.confirmImport(preview);
+    if (isClosed) return null;
     Skill? ok;
     res.fold(
       (f) {

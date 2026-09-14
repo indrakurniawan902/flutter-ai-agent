@@ -34,6 +34,19 @@ class SkillSecurityScanner {
   static final RegExp _whitespaceRuns = RegExp(r'\s+');
   static final RegExp _base64Candidate = RegExp(r'[A-Za-z0-9+/]{40,}={0,2}');
 
+  /// Largest base64 candidate that is decoded; longer runs are skipped so a
+  /// hostile document cannot force a huge decode (decode bomb).
+  static const int _maxBase64CandidateLength = 64 * 1024;
+
+  /// Requires an override verb phrase to read as an instruction: followed by
+  /// end of sentence/line, a punctuation stop, `now`, `and`/`then` plus a
+  /// verb, or a "with the following" / "as follows" continuation. A bare
+  /// conditional continuation (`when ...`, `if ...`, `only when ...`) never
+  /// matches, which is what keeps prose about ignoring things benign.
+  static const String _directiveTail =
+      r'(?=\s*(?:[:.!?;]|$|now\b|(?:and|then)\s+\w+|'
+      r'with\s+the\s+following|as\s+follows))';
+
   static final List<_ScanPattern> _patterns = [
     _ScanPattern(
       patternIgnorePreviousInstructions,
@@ -42,7 +55,9 @@ class SkillSecurityScanner {
       r'(ignore|forget|discard|disregard)\s+'
           r'(all\s+|the\s+|your\s+|any\s+|everything\s+)*'
           r'(previous|prior|above|earlier|preceding)\s+'
-          r'(instruction|prompt|rule|message|direction|command|guideline)?s?',
+          r'(instruction|prompt|rule|message|direction|command|guideline)?s?'
+          '$_directiveTail',
+      negatable: true,
     ),
     _ScanPattern(
       patternDisregardSystemPrompt,
@@ -50,7 +65,9 @@ class SkillSecurityScanner {
       SkillScanSeverity.critical,
       r'(disregard|override)\s+(the\s+)?'
           r'(system\s+prompt|previous|prior|above|earlier)'
-          r'\s*(instruction|prompt|rule|message|direction|command|guideline)?s?',
+          r'\s*(instruction|prompt|rule|message|direction|command|guideline)?s?'
+          '$_directiveTail',
+      negatable: true,
     ),
     _ScanPattern(
       patternExfiltrate,
@@ -146,11 +163,11 @@ class SkillSecurityScanner {
       skill.category,
       skill.version,
       skill.author,
-    ].join('\n');
-    final text = _normalise(surface);
+    ];
+    final text = _normalise(surface.join('\n'));
     final findings = <SkillScanFinding>[];
     for (final pattern in _patterns) {
-      final match = pattern.regexp.firstMatch(text);
+      final match = pattern.firstNonNegatedMatch(text);
       if (match != null) {
         final raw = match.group(0) ?? '';
         findings.add(
@@ -176,48 +193,136 @@ class SkillSecurityScanner {
     return SkillScanResult(findings: findings, unknownTools: unknownTools);
   }
 
-  /// Decodes base64-looking runs from [haystack] and reports at most one
+  /// Decodes base64-looking runs from [surface] and reports at most one
   /// critical finding when a decoded payload matches an injection pattern.
   ///
-  /// Candidates come from the case-preserving [haystack] rather than the
-  /// normalised surface: normalisation lowercases, which would corrupt the
-  /// base64 alphabet before decoding.
-  static SkillScanFinding? _scanBase64Payloads(String haystack) {
-    for (final candidate in _base64Candidate.allMatches(haystack)) {
-      final decoded = _decodeBase64Text(candidate.group(0)!);
-      if (decoded == null) {
-        continue;
+  /// Two passes run over the case-preserving [surface]:
+  /// 1. the original text, so an unwrapped blob keeps its exact excerpt;
+  /// 2. a "squeezed" view with whitespace, format characters, and markdown
+  ///    delimiters removed and the base64url alphabet mapped, so line
+  ///    wrapping, indentation, inserted spaces, and inserted format
+  ///    characters cannot split a payload into undecodable runs.
+  ///
+  /// Each field is scanned separately so squeezing one field cannot glue
+  /// unrelated fields together into a bogus candidate.
+  static SkillScanFinding? _scanBase64Payloads(List<String> surface) {
+    for (final field in surface) {
+      final direct = _findEncodedPayloadIn(field, trimWhitespace: true);
+      if (direct != null) {
+        return direct;
       }
-      final decodedText = _normalise(decoded);
-      for (final pattern in _patterns) {
-        if (!pattern.regexp.hasMatch(decodedText)) {
-          continue;
-        }
-        return SkillScanFinding(
-          patternId: patternBase64EncodedPayload,
-          description: 'Contains a base64-encoded instruction payload',
-          severity: SkillScanSeverity.critical,
-          excerpt: decodedText.length > 120
-              ? decodedText.substring(0, 120)
-              : decodedText,
-        );
+      final squeezed = _findEncodedPayloadIn(
+        _squeeze(field),
+        allowPrintableTail: true,
+      );
+      if (squeezed != null) {
+        return squeezed;
       }
     }
     return null;
   }
 
-  static String? _decodeBase64Text(String candidate) {
+  static SkillScanFinding? _findEncodedPayloadIn(
+    String text, {
+    bool trimWhitespace = false,
+    bool allowPrintableTail = false,
+  }) {
+    for (final candidate in _base64Candidate.allMatches(text)) {
+      final run = candidate.group(0)!;
+      if (run.length > _maxBase64CandidateLength) {
+        continue;
+      }
+      final finding = _decodeAndMatch(
+        run,
+        trimWhitespace: trimWhitespace,
+        allowPrintableTail: allowPrintableTail,
+      );
+      if (finding != null) {
+        return finding;
+      }
+    }
+    return null;
+  }
+
+  /// Decodes [run] at each of the four base64 phases and returns a finding
+  /// when any decoding yields an injection payload. The phase offsets make
+  /// the match independent of how many characters precede the payload.
+  ///
+  /// When squeezing glued ordinary text after the payload, the decoded tail
+  /// stops being printable; with [allowPrintableTail] the printable prefix
+  /// of each decoding is matched, so such a tail cannot hide the payload.
+  static SkillScanFinding? _decodeAndMatch(
+    String run, {
+    bool trimWhitespace = false,
+    bool allowPrintableTail = false,
+  }) {
+    for (var phase = 0; phase < 4; phase++) {
+      var candidate = run.substring(phase);
+      if (trimWhitespace) {
+        candidate = candidate.replaceAll(_whitespaceRuns, '');
+      }
+      final bytes = _decodeBase64Bytes(candidate);
+      if (bytes == null) {
+        continue;
+      }
+      var end = bytes.length;
+      if (allowPrintableTail) {
+        end = 0;
+        while (end < bytes.length && _isPrintableByte(bytes[end])) {
+          end++;
+        }
+      } else if (!bytes.every(_isPrintableByte)) {
+        continue;
+      }
+      if (end < 8) {
+        continue;
+      }
+      final finding = _matchDecoded(
+        String.fromCharCodes(bytes.sublist(0, end)),
+      );
+      if (finding != null) {
+        return finding;
+      }
+    }
+    return null;
+  }
+
+  static SkillScanFinding? _matchDecoded(String decodedText) {
+    final normalised = _normalise(decodedText);
+    for (final pattern in _patterns) {
+      if (pattern.firstNonNegatedMatch(normalised) == null) {
+        continue;
+      }
+      return SkillScanFinding(
+        patternId: patternBase64EncodedPayload,
+        description: 'Contains a base64-encoded instruction payload',
+        severity: SkillScanSeverity.critical,
+        excerpt: normalised.length > 120
+            ? normalised.substring(0, 120)
+            : normalised,
+      );
+    }
+    return null;
+  }
+
+  /// Case-preserving view of [value] with whitespace, format characters,
+  /// markdown delimiters, and base64url alphabet characters removed or
+  /// mapped, so wrapped or split payloads become one contiguous run.
+  static String _squeeze(String value) {
+    var result = value.replaceAll(_formatCharacters, '');
+    result = result.replaceAll(_markdownDelimiters, '');
+    result = result.replaceAll(_whitespaceRuns, '');
+    return result.replaceAll('-', '+').replaceAll('_', '/');
+  }
+
+  static List<int>? _decodeBase64Bytes(String candidate) {
     final stripped = candidate.replaceAll(_whitespaceRuns, '');
     final remainder = stripped.length % 4;
     final padded = remainder == 0
         ? stripped
         : stripped.padRight(stripped.length + (4 - remainder), '=');
     try {
-      final bytes = base64Decode(padded);
-      if (bytes.length < 8 || !bytes.every(_isPrintableByte)) {
-        return null;
-      }
-      return String.fromCharCodes(bytes);
+      return base64Decode(padded);
     } catch (_) {
       return null;
     }
@@ -237,7 +342,7 @@ class SkillSecurityScanner {
       RegExp(r'[^a-z0-9]'),
       '',
     );
-    final isTier3 = compact.contains('tier3') || compact == '3';
+    final isTier3 = compact.startsWith('3') || compact.contains('tier3');
     return skill.copyWith(
       isEnabled: isTier3 ? false : skill.isEnabled,
       isCommunity: true,
@@ -257,7 +362,37 @@ class _ScanPattern {
   final String description;
   final SkillScanSeverity severity;
   final RegExp regexp;
+  final bool negatable;
 
-  _ScanPattern(this.id, this.description, this.severity, String source)
-    : regexp = RegExp(source, multiLine: false, caseSensitive: false);
+  _ScanPattern(
+    this.id,
+    this.description,
+    this.severity,
+    String source, {
+    this.negatable = false,
+  }) : regexp = RegExp(source, multiLine: false, caseSensitive: false);
+
+  /// First match of [regexp] in [text] that is not preceded by a negation
+  /// such as `do not` or `never`. Non-negatable patterns return the first
+  /// match unconditionally.
+  Match? firstNonNegatedMatch(String text) {
+    for (final match in regexp.allMatches(text)) {
+      if (!negatable || !_isNegated(text, match.start)) return match;
+    }
+    return null;
+  }
+
+  static bool _isNegated(String text, int start) {
+    final windowStart = start - 40 < 0 ? 0 : start - 40;
+    return _negationPrefix.hasMatch(text.substring(windowStart, start));
+  }
+
+  /// Matches a negated override verb phrase, such as `do not ignore`,
+  /// `never forget`, or `do not ever ignore`. At most one word may sit
+  /// between the negator and the verb.
+  static final RegExp _negationPrefix = RegExp(
+    r"(?:do\s+not|don't|does\s+not|doesn't|never|must\s+not|mustn't|"
+    r"should\s+not|shouldn't|cannot|can't|avoid|no\s+need\s+to)"
+    r'\s+(?:\w+\s+){0,1}$',
+  );
 }

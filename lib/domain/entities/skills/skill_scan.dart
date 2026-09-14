@@ -1,7 +1,16 @@
 import 'package:equatable/equatable.dart';
 
 /// Severity of a prompt-injection scan finding.
-enum SkillScanSeverity { critical, high, medium }
+enum SkillScanSeverity {
+  critical,
+  high,
+
+  /// Informational tier. No current pattern emits `medium`; the
+  /// non-blocking branch in [SkillScanResult.hasBlockingFindings] and
+  /// [SkillScanResult.rejectionReason] is retained deliberately so future
+  /// informational findings can be surfaced without refusing an import.
+  medium,
+}
 
 /// A single prompt-injection pattern match.
 class SkillScanFinding extends Equatable {
