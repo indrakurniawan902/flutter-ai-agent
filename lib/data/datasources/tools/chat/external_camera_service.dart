@@ -4,20 +4,46 @@ import 'package:dartz/dartz.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_ffi_uvc/flutter_ffi_uvc.dart';
 import 'package:injectable/injectable.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/external_camera_service.dart';
 
+/// Injectable read-only CAMERA permission probe so unit tests never touch a
+/// platform channel.
+abstract class CameraPermissionProbe {
+  Future<bool> isGranted();
+}
+
+/// Production probe: `.status` is a pure read and never raises a dialog.
+class DefaultCameraPermissionProbe implements CameraPermissionProbe {
+  const DefaultCameraPermissionProbe();
+
+  @override
+  Future<bool> isGranted() async {
+    try {
+      return (await Permission.camera.status).isGranted;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
 @LazySingleton(as: ExternalCameraServiceBase)
 class ExternalCameraService implements ExternalCameraServiceBase {
-  ExternalCameraService({UvcCamera Function()? cameraFactory})
-    : _createCamera = cameraFactory ?? UvcCamera.new;
+  ExternalCameraService({
+    UvcCamera Function()? cameraFactory,
+    CameraPermissionProbe? permissionProbe,
+  }) : _createCamera = cameraFactory ?? UvcCamera.new,
+       _permissionProbe =
+           permissionProbe ?? const DefaultCameraPermissionProbe();
 
   @factoryMethod
   factory ExternalCameraService.create() => ExternalCameraService();
 
   final UvcCamera Function() _createCamera;
+  final CameraPermissionProbe _permissionProbe;
 
   UvcCamera? _camera;
   int? _openedDeviceId;
@@ -232,6 +258,15 @@ class ExternalCameraService implements ExternalCameraServiceBase {
       );
     } catch (e) {
       return Left(_mapError(e));
+    }
+  }
+
+  @override
+  Future<bool> isCameraPermissionGranted() async {
+    try {
+      return await _permissionProbe.isGranted();
+    } catch (_) {
+      return false;
     }
   }
 

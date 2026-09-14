@@ -126,6 +126,14 @@ abstract class ExternalCameraServiceBase {
   /// Encodes the latest preview frame to JPEG and returns it base64-encoded.
   Future<Either<Failure, ExternalCameraFrame>> capture({int quality = 90});
 
+  /// Check-only probe: is the CAMERA runtime permission already granted?
+  ///
+  /// NEVER raises a prompt. Tools run in headless contexts (gateway RPC, voice
+  /// turn) where a permission dialog would hang; they check and return a
+  /// readable Failure instead. The user-facing prompt stays on Flames' single
+  /// PermissionGate path in the presentation layer.
+  Future<bool> isCameraPermissionGranted();
+
   /// Current device / preview state.
   ExternalCameraStatus get status;
 

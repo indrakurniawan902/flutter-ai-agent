@@ -357,6 +357,7 @@ extension GetItInjectableX on _i174.GetIt {
         locationService: gh<_i292.LocationServiceBase>(),
         deviceContextService: gh<_i3.DeviceContextServiceBase>(),
         cameraVisionService: gh<_i815.CameraVisionServiceBase>(),
+        externalCameraService: gh<_i151.ExternalCameraServiceBase>(),
         calendarService: gh<_i1020.CalendarServiceBase>(),
         notificationService: gh<_i919.NotificationServiceBase>(),
         fileWorkspaceService: gh<_i745.FileWorkspaceServiceBase>(),
