@@ -461,7 +461,7 @@ class _SettingsViewState extends State<_SettingsView> {
                       controller: _modelController,
                       decoration: const InputDecoration(
                         labelText: 'Model Name',
-                        hintText: 'ag-glm',
+                        hintText: 'gpt-4o',
                         prefixIcon: Icon(Icons.psychology),
                         border: OutlineInputBorder(),
                       ),

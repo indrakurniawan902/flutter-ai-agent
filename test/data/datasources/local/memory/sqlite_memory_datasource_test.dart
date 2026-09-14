@@ -52,7 +52,9 @@ void main() {
 
     test('creates parent directories recursively before opening', () async {
       final random = DateTime.now().microsecondsSinceEpoch;
-      final tempDir = Directory('${Directory.systemTemp.path}/test_db_dir_$random/sub');
+      final tempDir = Directory(
+        '${Directory.systemTemp.path}/test_db_dir_$random/sub',
+      );
       final dbPath = '${tempDir.path}/nested_flames_memory.db';
 
       expect(await tempDir.exists(), isFalse);
@@ -97,24 +99,18 @@ void main() {
 
       final byKey = await datasource.getMemoryByKey('user_name');
       expect(byKey.isRight(), isTrue);
-      byKey.fold(
-        (_) => fail('should succeed'),
-        (item) {
-          expect(item, isNotNull);
-          expect(item!.id, saved.id);
-          expect(item.content, 'User name is Alex');
-        },
-      );
+      byKey.fold((_) => fail('should succeed'), (item) {
+        expect(item, isNotNull);
+        expect(item!.id, saved.id);
+        expect(item.content, 'User name is Alex');
+      });
 
       final byId = await datasource.getMemoryById(saved.id!);
       expect(byId.isRight(), isTrue);
-      byId.fold(
-        (_) => fail('should succeed'),
-        (item) {
-          expect(item, isNotNull);
-          expect(item!.key, 'user_name');
-        },
-      );
+      byId.fold((_) => fail('should succeed'), (item) {
+        expect(item, isNotNull);
+        expect(item!.key, 'user_name');
+      });
     });
 
     test('trims key and content and filters empty tags', () async {
@@ -140,34 +136,25 @@ void main() {
         ['location', 'travel'],
       );
       expect(updated.isRight(), isTrue);
-      updated.fold(
-        (_) => fail('should succeed'),
-        (item) {
-          expect(item.content, 'Jakarta, Indonesia');
-          expect(item.tags, ['location', 'travel']);
-        },
-      );
+      updated.fold((_) => fail('should succeed'), (item) {
+        expect(item.content, 'Jakarta, Indonesia');
+        expect(item.tags, ['location', 'travel']);
+      });
 
       final all = await datasource.getAllMemories();
-      all.fold(
-        (_) => fail('should succeed'),
-        (list) {
-          expect(list.length, 1);
-          expect(list.first.content, 'Jakarta, Indonesia');
-        },
-      );
+      all.fold((_) => fail('should succeed'), (list) {
+        expect(list.length, 1);
+        expect(list.first.content, 'Jakarta, Indonesia');
+      });
     });
 
     test('returns StorageFailure for empty key', () async {
       final result = await datasource.saveMemory('   ', 'content');
       expect(result.isLeft(), isTrue);
-      result.fold(
-        (failure) {
-          expect(failure, isA<StorageFailure>());
-          expect(failure.message, contains('cannot be empty'));
-        },
-        (_) => fail('expected Left'),
-      );
+      result.fold((failure) {
+        expect(failure, isA<StorageFailure>());
+        expect(failure.message, contains('cannot be empty'));
+      }, (_) => fail('expected Left'));
     });
 
     test('returns StorageFailure when database is closed', () async {
@@ -183,19 +170,16 @@ void main() {
 
   group('delete and get', () {
     test('deleteMemory removes by id and reports missing ids', () async {
-      final saved =
-          (await datasource.saveMemory('temp_key', 'temporary')).getOrElse(
-        () => throw StateError('no item'),
-      );
+      final saved = (await datasource.saveMemory(
+        'temp_key',
+        'temporary',
+      )).getOrElse(() => throw StateError('no item'));
       final deleted = await datasource.deleteMemory(saved.id!);
       expect(deleted.isRight(), isTrue);
       expect(deleted.getOrElse(() => false), isTrue);
 
       final after = await datasource.getMemoryById(saved.id!);
-      after.fold(
-        (_) => fail('should succeed'),
-        (item) => expect(item, isNull),
-      );
+      after.fold((_) => fail('should succeed'), (item) => expect(item, isNull));
 
       final again = await datasource.deleteMemory(saved.id!);
       expect(again.getOrElse(() => true), isFalse);
@@ -207,10 +191,7 @@ void main() {
       expect(deleted.getOrElse(() => false), isTrue);
 
       final after = await datasource.getMemoryByKey('key_to_delete');
-      after.fold(
-        (_) => fail('should succeed'),
-        (item) => expect(item, isNull),
-      );
+      after.fold((_) => fail('should succeed'), (item) => expect(item, isNull));
     });
 
     test('deleteMemoryByKey returns false for unknown key', () async {
@@ -221,12 +202,17 @@ void main() {
     test('getMemoryByKey returns null for unknown key', () async {
       final result = await datasource.getMemoryByKey('missing');
       expect(result.isRight(), isTrue);
-      expect(result.getOrElse(() => MemoryItem(
+      expect(
+        result.getOrElse(
+          () => MemoryItem(
             key: 'x',
             content: 'x',
             createdAt: DateTime.now(),
             updatedAt: DateTime.now(),
-          )), isNull);
+          ),
+        ),
+        isNull,
+      );
     });
 
     test('getMemoryById returns null for unknown id', () async {
@@ -243,13 +229,10 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 5));
       await datasource.saveMemory('k2', 'c2');
       final all = await datasource.getAllMemories();
-      all.fold(
-        (_) => fail('should succeed'),
-        (list) {
-          expect(list.length, 2);
-          expect(list.first.key, 'k2');
-        },
-      );
+      all.fold((_) => fail('should succeed'), (list) {
+        expect(list.length, 2);
+        expect(list.first.key, 'k2');
+      });
     });
 
     test('getAllMemories handles non-positive limit', () async {
@@ -311,33 +294,26 @@ void main() {
     test('retrieves matches ordered with relevance scores', () async {
       final result = await datasource.searchMemories('Flutter Dart', 5);
       expect(result.isRight(), isTrue);
-      result.fold(
-        (_) => fail('should succeed'),
-        (matches) {
-          expect(matches.length, 2);
-          for (final m in matches) {
-            expect(m.score, isNotNull);
-            expect(m.content, contains('Flutter'));
-          }
-        },
-      );
+      result.fold((_) => fail('should succeed'), (matches) {
+        expect(matches.length, 2);
+        for (final m in matches) {
+          expect(m.score, isNotNull);
+          expect(m.content, contains('Flutter'));
+        }
+      });
     });
 
     test('matches keywords in tags', () async {
       final result = await datasource.searchMemories('engineering', 5);
       expect(result.isRight(), isTrue);
-      result.fold(
-        (_) => fail('should succeed'),
-        (matches) {
-          expect(matches.length, 1);
-          expect(matches.first.key, 'user_profile');
-        },
-      );
+      result.fold((_) => fail('should succeed'), (matches) {
+        expect(matches.length, 1);
+        expect(matches.first.key, 'user_profile');
+      });
     });
 
     test('returns empty list for no matches', () async {
-      final result =
-          await datasource.searchMemories('nonexistentterm123', 5);
+      final result = await datasource.searchMemories('nonexistentterm123', 5);
       expect(result.isRight(), isTrue);
       result.fold(
         (_) => fail('should succeed'),
@@ -364,16 +340,12 @@ void main() {
     });
 
     test('sanitizes punctuation safely', () async {
-      final result =
-          await datasource.searchMemories('cat? (Snow)! "*"', 5);
+      final result = await datasource.searchMemories('cat? (Snow)! "*"', 5);
       expect(result.isRight(), isTrue);
-      result.fold(
-        (_) => fail('should succeed'),
-        (matches) {
-          expect(matches.length, 1);
-          expect(matches.first.key, 'pet_info');
-        },
-      );
+      result.fold((_) => fail('should succeed'), (matches) {
+        expect(matches.length, 1);
+        expect(matches.first.key, 'pet_info');
+      });
     });
 
     test('returns empty for blank or too-short queries', () async {
@@ -403,42 +375,38 @@ void main() {
 
       final result = await ds.searchMemories('needle');
       expect(result.isRight(), isTrue);
-      result.fold(
-        (_) => fail('should succeed via LIKE fallback'),
-        (matches) {
-          expect(matches.length, 1);
-          expect(matches.first.key, 'needle_note');
-        },
-      );
+      result.fold((_) => fail('should succeed via LIKE fallback'), (matches) {
+        expect(matches.length, 1);
+        expect(matches.first.key, 'needle_note');
+      });
 
       await ds.close();
     });
 
-    test('unavailable open surfaces structured memory_unavailable failure',
-        () async {
-      final ds = SqliteMemoryDatasource(
-        databaseFactory: _BrokenFactory(),
-        databasePath: inMemoryDatabasePath,
-      );
+    test(
+      'unavailable open surfaces structured memory_unavailable failure',
+      () async {
+        final ds = SqliteMemoryDatasource(
+          databaseFactory: _BrokenFactory(),
+          databasePath: inMemoryDatabasePath,
+        );
 
-      final saved = await ds.saveMemory('k', 'v');
-      expect(saved.isLeft(), isTrue);
-      saved.fold(
-        (failure) {
+        final saved = await ds.saveMemory('k', 'v');
+        expect(saved.isLeft(), isTrue);
+        saved.fold((failure) {
           expect(failure, isA<StorageFailure>());
           expect(failure.message, startsWith('memory_unavailable:'));
-        },
-        (_) => fail('expected Left'),
-      );
+        }, (_) => fail('expected Left'));
 
-      final listed = await ds.getAllMemories();
-      expect(listed.isLeft(), isTrue);
-      listed.fold(
-        (failure) =>
-            expect(failure.message, startsWith('memory_unavailable:')),
-        (_) => fail('expected Left'),
-      );
-    });
+        final listed = await ds.getAllMemories();
+        expect(listed.isLeft(), isTrue);
+        listed.fold(
+          (failure) =>
+              expect(failure.message, startsWith('memory_unavailable:')),
+          (_) => fail('expected Left'),
+        );
+      },
+    );
   });
 
   group('schema migrations', () {
@@ -493,13 +461,10 @@ void main() {
       final upgraded = SqliteMemoryDatasource(database: upgradedDb);
       final found = await upgraded.getMemoryByKey('v1_test_key');
       expect(found.isRight(), isTrue);
-      found.fold(
-        (_) => fail('should succeed'),
-        (item) {
-          expect(item, isNotNull);
-          expect(item!.content, 'Data created in schema v1');
-        },
-      );
+      found.fold((_) => fail('should succeed'), (item) {
+        expect(item, isNotNull);
+        expect(item!.content, 'Data created in schema v1');
+      });
       await upgradedDb.close();
       final file = File(tempPath);
       if (await file.exists()) {
@@ -553,26 +518,31 @@ class _NoFtsDatabase implements Database {
     String? orderBy,
     int? limit,
     int? offset,
-  }) =>
-      _inner.query(
-        table,
-        distinct: distinct,
-        columns: columns,
-        where: where,
-        whereArgs: whereArgs,
-        groupBy: groupBy,
-        having: having,
-        orderBy: orderBy,
-        limit: limit,
-        offset: offset,
-      );
+  }) => _inner.query(
+    table,
+    distinct: distinct,
+    columns: columns,
+    where: where,
+    whereArgs: whereArgs,
+    groupBy: groupBy,
+    having: having,
+    orderBy: orderBy,
+    limit: limit,
+    offset: offset,
+  );
 
   @override
-  Future<int> insert(String table, Map<String, Object?> values,
-          {String? nullColumnHack, ConflictAlgorithm? conflictAlgorithm}) =>
-      _inner.insert(table, values,
-          nullColumnHack: nullColumnHack,
-          conflictAlgorithm: conflictAlgorithm);
+  Future<int> insert(
+    String table,
+    Map<String, Object?> values, {
+    String? nullColumnHack,
+    ConflictAlgorithm? conflictAlgorithm,
+  }) => _inner.insert(
+    table,
+    values,
+    nullColumnHack: nullColumnHack,
+    conflictAlgorithm: conflictAlgorithm,
+  );
 
   @override
   Future<int> update(
@@ -581,18 +551,16 @@ class _NoFtsDatabase implements Database {
     String? where,
     List<Object?>? whereArgs,
     ConflictAlgorithm? conflictAlgorithm,
-  }) =>
-      _inner.update(
-        table,
-        values,
-        where: where,
-        whereArgs: whereArgs,
-        conflictAlgorithm: conflictAlgorithm,
-      );
+  }) => _inner.update(
+    table,
+    values,
+    where: where,
+    whereArgs: whereArgs,
+    conflictAlgorithm: conflictAlgorithm,
+  );
 
   @override
-  Future<int> delete(String table,
-          {String? where, List<Object?>? whereArgs}) =>
+  Future<int> delete(String table, {String? where, List<Object?>? whereArgs}) =>
       _inner.delete(table, where: where, whereArgs: whereArgs);
 
   @override

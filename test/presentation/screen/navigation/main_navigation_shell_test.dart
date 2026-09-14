@@ -41,10 +41,14 @@ void main() {
     when(() => mockAgentCubit.refreshSessions()).thenAnswer((_) async {});
     when(() => mockAgentCubit.newChat()).thenAnswer((_) async {});
     when(() => mockAgentCubit.switchSession(any())).thenAnswer((_) async {});
-    when(() => mockAgentCubit.renameSession(any(), any())).thenAnswer((_) async {});
+    when(
+      () => mockAgentCubit.renameSession(any(), any()),
+    ).thenAnswer((_) async {});
     when(() => mockAgentCubit.deleteSession(any())).thenAnswer((_) async {});
     when(() => mockAgentCubit.messages).thenReturn([]);
-    when(() => mockAgentCubit.stream).thenAnswer((_) => agentStateController.stream);
+    when(
+      () => mockAgentCubit.stream,
+    ).thenAnswer((_) => agentStateController.stream);
 
     when(() => mockSettingsCubit.state).thenReturn(
       const SettingsLoaded(
@@ -54,12 +58,16 @@ void main() {
         temperature: 0.7,
       ),
     );
-    when(() => mockSettingsCubit.stream).thenAnswer((_) => const Stream.empty());
+    when(
+      () => mockSettingsCubit.stream,
+    ).thenAnswer((_) => const Stream.empty());
 
-    when(() => mockServerProfileCubit.state).thenReturn(
-      const ServerProfileLoaded(profiles: []),
-    );
-    when(() => mockServerProfileCubit.stream).thenAnswer((_) => const Stream.empty());
+    when(
+      () => mockServerProfileCubit.state,
+    ).thenReturn(const ServerProfileLoaded(profiles: []));
+    when(
+      () => mockServerProfileCubit.stream,
+    ).thenAnswer((_) => const Stream.empty());
 
     sl.registerFactory<AgentCubit>(() => mockAgentCubit);
     sl.registerFactory<SettingsCubit>(() => mockSettingsCubit);
@@ -80,23 +88,34 @@ void main() {
   }
 
   group('MainNavigationShell - Shell & Tab Rendering', () {
-    testWidgets('renders shell with IndexedStack, 5 tabs, and FloatingBottomNavBar', (tester) async {
-      await tester.pumpWidget(createWidgetUnderTest());
-      await tester.pumpAndSettle();
+    testWidgets(
+      'renders shell with IndexedStack, 5 tabs, and FloatingBottomNavBar',
+      (tester) async {
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pumpAndSettle();
 
-      expect(find.byType(MainNavigationShell), findsOneWidget);
-      expect(find.byKey(const Key('main_navigation_shell')), findsOneWidget);
-      expect(find.byKey(const Key('main_navigation_indexed_stack')), findsOneWidget);
-      expect(find.byKey(const Key('floating_bottom_nav_bar')), findsOneWidget);
+        expect(find.byType(MainNavigationShell), findsOneWidget);
+        expect(find.byKey(const Key('main_navigation_shell')), findsOneWidget);
+        expect(
+          find.byKey(const Key('main_navigation_indexed_stack')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('floating_bottom_nav_bar')),
+          findsOneWidget,
+        );
 
-      final indexedStack = tester.widget<IndexedStack>(find.byKey(const Key('main_navigation_indexed_stack')));
-      expect(indexedStack.children.length, 5);
-      expect(indexedStack.index, 0);
+        final indexedStack = tester.widget<IndexedStack>(
+          find.byKey(const Key('main_navigation_indexed_stack')),
+        );
+        expect(indexedStack.children.length, 5);
+        expect(indexedStack.index, 0);
 
-      // Tab 1 is visible by default
-      expect(find.byType(ChatScreen), findsOneWidget);
-      expect(find.text('Flames'), findsOneWidget);
-    });
+        // Tab 1 is visible by default
+        expect(find.byType(ChatScreen), findsOneWidget);
+        expect(find.text('Flames'), findsOneWidget);
+      },
+    );
 
     testWidgets('switching tabs updates active screen', (tester) async {
       await tester.pumpWidget(createWidgetUnderTest());
@@ -135,16 +154,23 @@ void main() {
   });
 
   group('MainNavigationShell - State Retention Verification', () {
-    testWidgets('preserves chat input state when switching between tabs', (tester) async {
+    testWidgets('preserves chat input state when switching between tabs', (
+      tester,
+    ) async {
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();
 
       // On Tab 1: ChatScreen, type input
       const testPrompt = 'Persistent state preservation test prompt';
-      await tester.enterText(find.byKey(const Key('chat_input_field')), testPrompt);
+      await tester.enterText(
+        find.byKey(const Key('chat_input_field')),
+        testPrompt,
+      );
       await tester.pump();
 
-      final inputFieldBefore = tester.widget<TextField>(find.byKey(const Key('chat_input_field')));
+      final inputFieldBefore = tester.widget<TextField>(
+        find.byKey(const Key('chat_input_field')),
+      );
       expect(inputFieldBefore.controller?.text, testPrompt);
 
       // Switch to Tab 2: Skills
@@ -157,20 +183,29 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Memory Vault'), findsOneWidget);
 
-      // Enter search query in Memory Vault
-      await tester.enterText(find.byKey(const Key('memory_search_input')), 'router');
-      await tester.pumpAndSettle();
-      // Seed data was purged (T19.5); with no LocalMemoryService registered the
-      // vault has no records and shows the vault empty state. The retained
-      // *input* text is the real assertion below.
+      // With no LocalMemoryService registered the vault has no records, so a
+      // fresh install shows the never-saved empty state (T19.5).
       expect(find.byKey(const Key('memory_empty_state')), findsOneWidget);
+
+      // Enter search query in Memory Vault -> switches to the search-empty state.
+      await tester.enterText(
+        find.byKey(const Key('memory_search_input')),
+        'router',
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('memory_search_empty_state')),
+        findsOneWidget,
+      );
 
       // Switch back to Tab 1: Chat
       await tester.tap(find.byKey(const Key('nav_item_chat')));
       await tester.pumpAndSettle();
 
       // Verify chat input is 100% retained!
-      final inputFieldAfter = tester.widget<TextField>(find.byKey(const Key('chat_input_field')));
+      final inputFieldAfter = tester.widget<TextField>(
+        find.byKey(const Key('chat_input_field')),
+      );
       expect(inputFieldAfter.controller?.text, testPrompt);
 
       // Switch back to Tab 4: Memory Vault
@@ -178,36 +213,41 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify memory vault search input is 100% retained!
-      final vaultSearchField = tester.widget<TextField>(find.byKey(const Key('memory_search_input')));
+      final vaultSearchField = tester.widget<TextField>(
+        find.byKey(const Key('memory_search_input')),
+      );
       expect(vaultSearchField.controller?.text, 'router');
     });
 
-    testWidgets('preserves skills category filter selection when switching tabs', (tester) async {
-      await tester.pumpWidget(createWidgetUnderTest());
-      await tester.pumpAndSettle();
+    testWidgets(
+      'preserves skills category filter selection when switching tabs',
+      (tester) async {
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pumpAndSettle();
 
-      // Go to Skills Hub
-      await tester.tap(find.byKey(const Key('nav_item_skills')));
-      await tester.pumpAndSettle();
+        // Go to Skills Hub
+        await tester.tap(find.byKey(const Key('nav_item_skills')));
+        await tester.pumpAndSettle();
 
-      // Select 'Device' filter
-      await tester.tap(find.byKey(const Key('skills_filter_pill_device')));
-      await tester.pumpAndSettle();
-      expect(find.text('location_context'), findsOneWidget);
-      expect(find.text('camera_vision'), findsNothing);
+        // Select 'Device' filter
+        await tester.tap(find.byKey(const Key('skills_filter_pill_device')));
+        await tester.pumpAndSettle();
+        expect(find.text('location_context'), findsOneWidget);
+        expect(find.text('camera_vision'), findsNothing);
 
-      // Switch to Tab 3: Pocket Node
-      await tester.tap(find.byKey(const Key('nav_item_node')));
-      await tester.pumpAndSettle();
-      expect(find.text('Pocket Node'), findsOneWidget);
+        // Switch to Tab 3: Pocket Node
+        await tester.tap(find.byKey(const Key('nav_item_node')));
+        await tester.pumpAndSettle();
+        expect(find.text('Pocket Node'), findsOneWidget);
 
-      // Switch back to Tab 2: Skills Hub
-      await tester.tap(find.byKey(const Key('nav_item_skills')));
-      await tester.pumpAndSettle();
+        // Switch back to Tab 2: Skills Hub
+        await tester.tap(find.byKey(const Key('nav_item_skills')));
+        await tester.pumpAndSettle();
 
-      // Verify filter remains active and filtered state is preserved!
-      expect(find.text('location_context'), findsOneWidget);
-      expect(find.text('camera_vision'), findsNothing);
-    });
+        // Verify filter remains active and filtered state is preserved!
+        expect(find.text('location_context'), findsOneWidget);
+        expect(find.text('camera_vision'), findsNothing);
+      },
+    );
   });
 }

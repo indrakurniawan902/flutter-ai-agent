@@ -55,10 +55,14 @@ void main() {
     when(() => mockAgentCubit.refreshSessions()).thenAnswer((_) async {});
     when(() => mockAgentCubit.newChat()).thenAnswer((_) async {});
     when(() => mockAgentCubit.switchSession(any())).thenAnswer((_) async {});
-    when(() => mockAgentCubit.renameSession(any(), any())).thenAnswer((_) async {});
+    when(
+      () => mockAgentCubit.renameSession(any(), any()),
+    ).thenAnswer((_) async {});
     when(() => mockAgentCubit.deleteSession(any())).thenAnswer((_) async {});
     when(() => mockAgentCubit.messages).thenAnswer((_) => inMemoryMessages);
-    when(() => mockAgentCubit.stream).thenAnswer((_) => agentStateController.stream);
+    when(
+      () => mockAgentCubit.stream,
+    ).thenAnswer((_) => agentStateController.stream);
     when(() => mockAgentCubit.reset()).thenAnswer((_) {
       inMemoryMessages.clear();
       mockAgentCubit.emit(const AgentIdle());
@@ -77,13 +81,17 @@ void main() {
         temperature: 0.7,
       ),
     );
-    when(() => mockSettingsCubit.stream).thenAnswer((_) => const Stream.empty());
+    when(
+      () => mockSettingsCubit.stream,
+    ).thenAnswer((_) => const Stream.empty());
 
     // Default server profiles cubit mock behaviors
-    when(() => mockServerProfileCubit.state).thenReturn(
-      const ServerProfileLoaded(profiles: []),
-    );
-    when(() => mockServerProfileCubit.stream).thenAnswer((_) => const Stream.empty());
+    when(
+      () => mockServerProfileCubit.state,
+    ).thenReturn(const ServerProfileLoaded(profiles: []));
+    when(
+      () => mockServerProfileCubit.stream,
+    ).thenAnswer((_) => const Stream.empty());
 
     // Register into GetIt service locator
     sl.registerFactory<AgentCubit>(() => mockAgentCubit);
@@ -119,7 +127,9 @@ void main() {
         await tester.pumpAndSettle();
 
         // 1. Verify Root App & Dark Theme
-        final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
+        final materialApp = tester.widget<MaterialApp>(
+          find.byType(MaterialApp),
+        );
         expect(materialApp.theme?.brightness, Brightness.dark);
         expect(find.byType(MainNavigationShell), findsOneWidget);
         expect(find.byType(FloatingBottomNavBar), findsOneWidget);
@@ -140,10 +150,22 @@ void main() {
         expect(find.text('Skills Hub'), findsOneWidget);
         expect(find.byKey(const Key('skills_search_field')), findsOneWidget);
         expect(find.byKey(const Key('skills_filter_pill_all')), findsOneWidget);
-        expect(find.byKey(const Key('skills_filter_pill_device')), findsOneWidget);
-        expect(find.byKey(const Key('skills_filter_pill_automations')), findsOneWidget);
-        expect(find.byKey(const Key('skills_filter_pill_system')), findsOneWidget);
-        expect(find.byKey(const Key('skills_filter_pill_vision')), findsOneWidget);
+        expect(
+          find.byKey(const Key('skills_filter_pill_device')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('skills_filter_pill_automations')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('skills_filter_pill_system')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('skills_filter_pill_vision')),
+          findsOneWidget,
+        );
         expect(find.text('camera_vision'), findsOneWidget);
 
         // 4. Tab 1 -> Tab 2: Pocket Node
@@ -154,10 +176,19 @@ void main() {
         expect(find.text('Pocket Node'), findsOneWidget);
         expect(find.text('RPC Node Telemetry'), findsOneWidget);
         expect(find.textContaining('Ambient Triggers'), findsOneWidget);
-        expect(find.byKey(const Key('ambient_trigger_geofence')), findsOneWidget);
-        expect(find.byKey(const Key('ambient_trigger_battery')), findsOneWidget);
+        expect(
+          find.byKey(const Key('ambient_trigger_geofence')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('ambient_trigger_battery')),
+          findsOneWidget,
+        );
         expect(find.byKey(const Key('switch_geofence')), findsOneWidget);
-        expect(find.byKey(const Key('node_rpc_telemetry_card')), findsOneWidget);
+        expect(
+          find.byKey(const Key('node_rpc_telemetry_card')),
+          findsOneWidget,
+        );
 
         // 5. Tab 2 -> Tab 3: Memory Vault
         await tester.tap(find.byKey(const Key('nav_item_vault')));
@@ -174,10 +205,16 @@ void main() {
 
         expect(find.byType(SettingsScreen), findsOneWidget);
         expect(find.text('LLM Settings'), findsOneWidget);
-        expect(find.byKey(const Key('settings_base_url_field')), findsOneWidget);
+        expect(
+          find.byKey(const Key('settings_base_url_field')),
+          findsOneWidget,
+        );
         expect(find.byKey(const Key('settings_api_key_field')), findsOneWidget);
         expect(find.byKey(const Key('settings_model_field')), findsOneWidget);
-        expect(find.byKey(const Key('settings_temperature_field')), findsOneWidget);
+        expect(
+          find.byKey(const Key('settings_temperature_field')),
+          findsOneWidget,
+        );
 
         // 7. Tab 4 -> Tab 0: Return to ChatScreen
         await tester.tap(find.byKey(const Key('nav_item_chat')));
@@ -196,11 +233,17 @@ void main() {
         await tester.pumpAndSettle();
 
         // 1. Enter draft text in Chat Tab (Tab 0)
-        const chatDraftText = 'Persistent prompt state testing for Hermes Nous UI';
-        await tester.enterText(find.byKey(const Key('chat_input_field')), chatDraftText);
+        const chatDraftText =
+            'Persistent prompt state testing for Hermes Nous UI';
+        await tester.enterText(
+          find.byKey(const Key('chat_input_field')),
+          chatDraftText,
+        );
         await tester.pump();
 
-        final chatFieldBefore = tester.widget<TextField>(find.byKey(const Key('chat_input_field')));
+        final chatFieldBefore = tester.widget<TextField>(
+          find.byKey(const Key('chat_input_field')),
+        );
         expect(chatFieldBefore.controller?.text, chatDraftText);
 
         // 2. Switch to Tab 1 (Skills Hub) and apply category filter
@@ -212,15 +255,28 @@ void main() {
         expect(find.text('location_context'), findsOneWidget);
         expect(find.text('camera_vision'), findsNothing);
 
-        // 3. Switch to Tab 3 (Memory Vault) and type search query
+        // 3. Switch to Tab 3 (Memory Vault)
         await tester.tap(find.byKey(const Key('nav_item_vault')));
         await tester.pumpAndSettle();
-        await tester.enterText(find.byKey(const Key('memory_search_input')), 'router');
-        await tester.pumpAndSettle();
 
-        // Seed records were purged (T19.5), so an empty vault is expected;
-        // this assertion only guards that the vault tab rendered its list area.
+        // A fresh install has no seeded records (T19.5), so the vault renders
+        // its never-saved empty state before any query is typed.
         expect(find.byKey(const Key('memory_empty_state')), findsOneWidget);
+        expect(
+          find.text('No memories saved yet. Tap + to add one.'),
+          findsOneWidget,
+        );
+
+        // Typing a query with zero records switches to the search-empty state.
+        await tester.enterText(
+          find.byKey(const Key('memory_search_input')),
+          'router',
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('memory_search_empty_state')),
+          findsOneWidget,
+        );
 
         // 4. Switch to Tab 2 (Pocket Node)
         await tester.tap(find.byKey(const Key('nav_item_node')));
@@ -236,7 +292,9 @@ void main() {
         await tester.tap(find.byKey(const Key('nav_item_chat')));
         await tester.pumpAndSettle();
 
-        final chatFieldAfter = tester.widget<TextField>(find.byKey(const Key('chat_input_field')));
+        final chatFieldAfter = tester.widget<TextField>(
+          find.byKey(const Key('chat_input_field')),
+        );
         expect(chatFieldAfter.controller?.text, chatDraftText);
 
         // 7. Return to Tab 1 (Skills Hub) -> Verify filter is retained
@@ -248,7 +306,9 @@ void main() {
         // 8. Return to Tab 3 (Memory Vault) -> Verify search query is retained
         await tester.tap(find.byKey(const Key('nav_item_vault')));
         await tester.pumpAndSettle();
-        final vaultFieldAfter = tester.widget<TextField>(find.byKey(const Key('memory_search_input')));
+        final vaultFieldAfter = tester.widget<TextField>(
+          find.byKey(const Key('memory_search_input')),
+        );
         expect(vaultFieldAfter.controller?.text, 'router');
       },
     );
@@ -326,7 +386,8 @@ void main() {
         inMemoryMessages.add(
           const ChatMessage(
             role: 'assistant',
-            content: '### Telemetry Report Complete\n- Battery: **92%** (Charging)\n- Wi-Fi: **Connected**',
+            content:
+                '### Telemetry Report Complete\n- Battery: **92%** (Charging)\n- Wi-Fi: **Connected**',
           ),
         );
         agentStateController.add(
@@ -339,7 +400,10 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
 
-        expect(find.textContaining('Telemetry Report Complete'), findsOneWidget);
+        expect(
+          find.textContaining('Telemetry Report Complete'),
+          findsOneWidget,
+        );
         expect(find.textContaining('Battery:'), findsOneWidget);
       },
     );
@@ -374,7 +438,8 @@ void main() {
             role: 'assistant',
             confirmationCard: ActionConfirmationData(
               title: 'Confirm Calendar Event',
-              message: 'Agent requests permission to add "Project Standup" to calendar.',
+              message:
+                  'Agent requests permission to add "Project Standup" to calendar.',
               primaryActionLabel: 'Authorize',
               secondaryActionLabel: 'Decline',
               tierLabel: 'Tier 3 (State Modifying)',
@@ -416,7 +481,9 @@ void main() {
         expect(find.text('100% Green'), findsOneWidget);
 
         // 3. Tap Authorize button on confirmation card -> calls cubit approveAction
-        final primaryBtn = find.byKey(const Key('action_confirmation_primary_btn'));
+        final primaryBtn = find.byKey(
+          const Key('action_confirmation_primary_btn'),
+        );
         await tester.ensureVisible(primaryBtn);
         await tester.pumpAndSettle();
         await tester.tap(primaryBtn);
