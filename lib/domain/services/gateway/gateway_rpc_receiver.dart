@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_request.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
 import 'package:flutter_ai_agent/domain/entities/gateway/gateway_message.dart';
@@ -115,7 +116,8 @@ class GatewayDeviceRpcReceiver implements GatewayRpcReceiverBase {
         final response = GatewayToolCallResponseMessage(
           id: request.id,
           result: null,
-          error: 'Approval request failed: $e',
+          error: FailureMessage.humanize(e,
+              context: 'Approval request failed'),
         );
         gatewayClient.sendToolCallResponse(
           callId: request.id,
@@ -181,7 +183,7 @@ class GatewayDeviceRpcReceiver implements GatewayRpcReceiverBase {
       response = GatewayToolCallResponseMessage(
         id: request.id,
         result: null,
-        error: 'Tool execution error: $e',
+        error: FailureMessage.humanize(e, context: 'Tool execution error'),
       );
       gatewayClient.sendToolCallResponse(
         callId: request.id,

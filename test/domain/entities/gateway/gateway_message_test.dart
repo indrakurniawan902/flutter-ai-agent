@@ -416,5 +416,73 @@ void main() {
       expect(raw.type, 'custom_event');
       expect(raw.payload, json);
     });
+
+    test('GatewayToolEventMessage parses running frame', () {
+      final json = {
+        'type': 'tool_event',
+        'phase': 'running',
+        'tool': 'read_file',
+        'label': 'Reading foo.py',
+        'tool_call_id': 'call_1',
+        'session_id': 'up-1',
+      };
+
+      final parsed = GatewayMessage.fromJson(json);
+      expect(parsed, isA<GatewayToolEventMessage>());
+      expect(parsed, isNot(isA<GatewayRawMessage>()));
+      final msg = parsed as GatewayToolEventMessage;
+      expect(msg.phase, 'running');
+      expect(msg.tool, 'read_file');
+      expect(msg.label, 'Reading foo.py');
+      expect(msg.toolCallId, 'call_1');
+      expect(msg.sessionId, 'up-1');
+    });
+
+    test('GatewayToolEventMessage parses completed frame with camelCase id', () {
+      final json = {
+        'type': 'tool_event',
+        'phase': 'completed',
+        'tool': 'read_file',
+        'toolCallId': 'call_1',
+        'session_id': 'up-1',
+      };
+
+      final parsed = GatewayMessage.fromJson(json);
+      expect(parsed, isA<GatewayToolEventMessage>());
+      final msg = parsed as GatewayToolEventMessage;
+      expect(msg.label, '');
+      expect(msg.toolCallId, 'call_1');
+    });
+
+    test('GatewayToolEventMessage defaults missing fields', () {
+      final parsed = GatewayMessage.fromJson({'type': 'tool_event'});
+      expect(parsed, isA<GatewayToolEventMessage>());
+      final msg = parsed as GatewayToolEventMessage;
+      expect(msg.phase, '');
+      expect(msg.tool, '');
+      expect(msg.label, '');
+      expect(msg.toolCallId, '');
+      expect(msg.sessionId, isNull);
+    });
+
+    test('GatewayToolEventMessage toJson omits null session_id', () {
+      const msg = GatewayToolEventMessage(phase: 'running', tool: 'x');
+      final json = msg.toJson();
+      expect(json['type'], 'tool_event');
+      expect(json.containsKey('session_id'), isFalse);
+    });
+
+    test('GatewayToolEventMessage round-trips via fromJson', () {
+      const msg = GatewayToolEventMessage(
+        phase: 'running',
+        tool: 'read_file',
+        label: 'Reading foo.py',
+        toolCallId: 'call_1',
+        sessionId: 'up-1',
+      );
+
+      final parsed = GatewayMessage.fromJson(msg.toJson());
+      expect(parsed, equals(msg));
+    });
   });
 }

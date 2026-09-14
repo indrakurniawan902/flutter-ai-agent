@@ -4,6 +4,7 @@ import 'package:injectable/injectable.dart';
 import 'package:url_launcher/url_launcher.dart' show LaunchMode;
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/contact_launcher_tools.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/intent_launcher_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/system_settings_allow_list.dart';
@@ -83,7 +84,11 @@ class IntentLauncherServiceImpl implements IntentLauncherServiceBase {
       }
       return Right('WhatsApp chat opened for $phoneNumber');
     } catch (e) {
-      return Left(ServerFailure('Error opening WhatsApp: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Error opening WhatsApp'),
+        ),
+      );
     }
   }
 
@@ -156,7 +161,11 @@ class IntentLauncherServiceImpl implements IntentLauncherServiceBase {
       }
       return Right('Opened map navigation for $label');
     } catch (e) {
-      return Left(ServerFailure('Error opening map navigation: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Error opening map navigation'),
+        ),
+      );
     }
   }
 
@@ -199,7 +208,11 @@ class IntentLauncherServiceImpl implements IntentLauncherServiceBase {
       }
       return const Right('Email composer opened');
     } catch (e) {
-      return Left(ServerFailure('Error opening email composer: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Error opening email composer'),
+        ),
+      );
     }
   }
 
@@ -216,7 +229,11 @@ class IntentLauncherServiceImpl implements IntentLauncherServiceBase {
       }
       return Right('Opened $normalized settings');
     } catch (e) {
-      return Left(ServerFailure('Error opening system settings: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Error opening system settings'),
+        ),
+      );
     }
   }
 }
