@@ -5,6 +5,7 @@ import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/calendar_service.dart';
 
 @LazySingleton(as: CalendarServiceBase)
@@ -108,7 +109,9 @@ class CalendarService implements CalendarServiceBase {
 
       return Right(allEvents);
     } catch (e) {
-      return Left(ServerFailure('Calendar error: $e'));
+      return Left(
+        ServerFailure(FailureMessage.humanize(e, context: 'Calendar error')),
+      );
     }
   }
 
@@ -155,7 +158,9 @@ class CalendarService implements CalendarServiceBase {
 
       return Right(result.data!);
     } catch (e) {
-      return Left(ServerFailure('Calendar error: $e'));
+      return Left(
+        ServerFailure(FailureMessage.humanize(e, context: 'Calendar error')),
+      );
     }
   }
 }

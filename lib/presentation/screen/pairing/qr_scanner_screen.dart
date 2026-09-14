@@ -8,6 +8,7 @@ import 'package:flutter_ai_agent/domain/tools/pairing/pairing_parser.dart';
 import 'package:flutter_ai_agent/domain/tools/pairing/qr_scanner_controller.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/app_settings_opener.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/permission_rationale_modal.dart';
+import 'package:flutter_ai_agent/presentation/widget/app_toast.dart';
 import 'package:flutter_ai_agent/utils/permission_gate.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -156,13 +157,7 @@ class _QrScannerScreenState extends State<QrScannerScreen>
       (failure) {
         _isProcessing = false;
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(failure.message),
-            backgroundColor: Colors.redAccent,
-            duration: const Duration(seconds: 3),
-          ),
-        );
+        AppToast.error(context, failure.message);
       },
       (payload) {
         if (!mounted) return;

@@ -11,6 +11,7 @@ import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/serve
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/settings_params.dart';
+import 'package:flutter_ai_agent/presentation/widget/app_toast.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 /// Screen for viewing and configuring LLM endpoint, credentials, and parameters.
@@ -253,12 +254,7 @@ class _SettingsViewState extends State<_SettingsView> {
                   ),
                 );
               } else if (state is SettingsError) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(state.message),
-                    backgroundColor: Colors.redAccent,
-                  ),
-                );
+                AppToast.error(context, state.message);
               }
             },
           ),
@@ -296,12 +292,7 @@ class _SettingsViewState extends State<_SettingsView> {
                       state.activeProfile!.temperature.toString();
                 }
               } else if (state is ServerProfileError) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(state.message),
-                    backgroundColor: Colors.redAccent,
-                  ),
-                );
+                AppToast.error(context, state.message);
               }
             },
           ),

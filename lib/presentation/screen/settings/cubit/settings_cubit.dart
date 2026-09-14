@@ -1,4 +1,5 @@
 import 'package:flutter_ai_agent/common/constant.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/nfc_tag_prompt_binding.dart';
@@ -73,7 +74,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       ));
     } catch (e) {
       emit(SettingsError(
-        message: 'Failed to load settings: ${e.toString()}',
+        message: FailureMessage.humanize(e, context: 'Failed to load settings'),
         baseUrl: state.baseUrl,
         apiKey: state.apiKey,
         model: state.model,
@@ -156,7 +157,7 @@ class SettingsCubit extends Cubit<SettingsState> {
         model: model.trim(),
         temperature: clampedTemp,
         progressiveToolPruning: progressiveToolPruning,
-        message: 'Failed to save settings: ${e.toString()}',
+        message: FailureMessage.humanize(e, context: 'Failed to save settings'),
       ));
       return false;
     }
@@ -189,7 +190,7 @@ class SettingsCubit extends Cubit<SettingsState> {
         model: state.model,
         temperature: state.temperature,
         progressiveToolPruning: state.progressiveToolPruning,
-        message: 'Failed to reset settings: ${e.toString()}',
+        message: FailureMessage.humanize(e, context: 'Failed to reset settings'),
       ));
     }
   }
