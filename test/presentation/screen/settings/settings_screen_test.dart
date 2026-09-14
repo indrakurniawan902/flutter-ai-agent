@@ -631,7 +631,7 @@ void main() {
         (tester) async {
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: 'sk-key',
           model: 'ag-glm',
           temperature: 0.7,
@@ -671,7 +671,7 @@ void main() {
         (tester) async {
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: 'sk-key',
           model: 'ag-glm',
           temperature: 0.7,
@@ -699,7 +699,7 @@ void main() {
       const voiceId = 'id_ID-news_tts-medium';
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: 'sk-key',
           model: 'ag-glm',
           temperature: 0.7,
@@ -729,7 +729,7 @@ void main() {
       const voiceId = 'id_ID-news_tts-medium';
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: 'sk-key',
           model: 'ag-glm',
           temperature: 0.7,
@@ -763,7 +763,7 @@ void main() {
         const SettingsVoiceDownloadInProgress(
           downloadingVoiceId: voiceId,
           progress: 0.5,
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: 'sk-key',
           model: 'ag-glm',
           temperature: 0.7,
@@ -786,7 +786,7 @@ void main() {
     testWidgets('piperError renders the error text', (tester) async {
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: 'sk-key',
           model: 'ag-glm',
           temperature: 0.7,

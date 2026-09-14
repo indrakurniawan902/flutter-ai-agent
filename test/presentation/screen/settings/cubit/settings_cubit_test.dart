@@ -554,7 +554,7 @@ void main() {
         autoLoad: false,
       ),
       seed: () => const SettingsLoaded(
-        baseUrl: 'https://indra-9router.my.id/v1',
+        baseUrl: 'https://example.com/v1',
         apiKey: 'sk-key',
         model: 'ag-glm',
         temperature: 0.7,
@@ -599,7 +599,7 @@ void main() {
         autoLoad: false,
       ),
       seed: () => const SettingsLoaded(
-        baseUrl: 'https://indra-9router.my.id/v1',
+        baseUrl: 'https://example.com/v1',
         apiKey: 'sk-key',
         model: 'ag-glm',
         temperature: 0.7,
@@ -642,7 +642,7 @@ void main() {
         autoLoad: false,
       ),
       seed: () => const SettingsLoaded(
-        baseUrl: 'https://indra-9router.my.id/v1',
+        baseUrl: 'https://example.com/v1',
         apiKey: 'sk-key',
         model: 'ag-glm',
         temperature: 0.7,
@@ -675,7 +675,7 @@ void main() {
         autoLoad: false,
       ),
       seed: () => const SettingsLoaded(
-        baseUrl: 'https://indra-9router.my.id/v1',
+        baseUrl: 'https://example.com/v1',
         apiKey: 'sk-key',
         model: 'ag-glm',
         temperature: 0.7,
@@ -710,7 +710,7 @@ void main() {
         autoLoad: false,
       ),
       seed: () => const SettingsLoaded(
-        baseUrl: 'https://indra-9router.my.id/v1',
+        baseUrl: 'https://example.com/v1',
         apiKey: 'sk-key',
         model: 'ag-glm',
         temperature: 0.7,
