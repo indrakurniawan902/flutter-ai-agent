@@ -5,12 +5,14 @@ import 'package:flutter_ai_agent/domain/tools/pairing/pairing_parser.dart';
 import 'package:flutter_ai_agent/globals.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_routes.dart';
 import 'package:flutter_ai_agent/presentation/screen/action_center/action_center_screen.dart';
+import 'package:flutter_ai_agent/presentation/screen/settings/add_profile_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/chat_params.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/chat_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/memory_vault/memory_vault_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/navigation/main_navigation_shell.dart';
 import 'package:flutter_ai_agent/presentation/screen/navigation/navigation_params.dart';
+import 'package:flutter_ai_agent/presentation/screen/node/geofence_management_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/pairing/pairing_params.dart';
 import 'package:flutter_ai_agent/presentation/screen/pairing/qr_scanner_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/pocket_node/pocket_node_screen.dart';
@@ -87,6 +89,11 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => const PocketNodeScreen(),
     ),
     GoRoute(
+      path: AppRoutes.geofenceManagement,
+      name: AppRoutes.nrGeofenceManagement,
+      builder: (context, state) => const GeofenceManagementScreen(),
+    ),
+    GoRoute(
       path: '/vault',
       name: AppRoutes.nrVault,
       builder: (context, state) => const MemoryVaultScreen(),
@@ -123,6 +130,16 @@ final GoRouter appRouter = GoRouter(
       path: '/action-center',
       name: AppRoutes.nrActionCenter,
       builder: (context, state) => const ActionCenterScreen(),
+    ),
+    GoRoute(
+      path: '/settings/add-profile',
+      name: AppRoutes.nrAddProfile,
+      builder: (context, state) {
+        final params = state.extra as SettingsParams?;
+        return AddProfileScreen(
+          serverProfileCubit: params?.serverProfileCubit,
+        );
+      },
     ),
   ],
 );

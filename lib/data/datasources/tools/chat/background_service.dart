@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:injectable/injectable.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart';
 
 abstract class BackgroundServicePlatformWrapper {
@@ -84,7 +85,11 @@ class BackgroundService implements BackgroundServiceBase {
       });
       return Right(result == true);
     } catch (e) {
-      return Left(ServerFailure('Start service failed: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Start service failed'),
+        ),
+      );
     }
   }
 
@@ -94,7 +99,11 @@ class BackgroundService implements BackgroundServiceBase {
       final result = await _channel.invokeMethod('stopForegroundService');
       return Right(result == true);
     } catch (e) {
-      return Left(ServerFailure('Stop service failed: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Stop service failed'),
+        ),
+      );
     }
   }
 
@@ -120,7 +129,11 @@ class BackgroundService implements BackgroundServiceBase {
       });
       return Right(result == true);
     } catch (e) {
-      return Left(ServerFailure('Update notification failed: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Update notification failed'),
+        ),
+      );
     }
   }
 
@@ -133,7 +146,11 @@ class BackgroundService implements BackgroundServiceBase {
       });
       return Right(result == true);
     } catch (e) {
-      return Left(ServerFailure('Acquire wake lock failed: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Acquire wake lock failed'),
+        ),
+      );
     }
   }
 
@@ -143,7 +160,11 @@ class BackgroundService implements BackgroundServiceBase {
       final result = await _channel.invokeMethod('releaseWakeLock');
       return Right(result == true);
     } catch (e) {
-      return Left(ServerFailure('Release wake lock failed: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Release wake lock failed'),
+        ),
+      );
     }
   }
 
@@ -179,7 +200,11 @@ class BackgroundService implements BackgroundServiceBase {
       });
       return Right(result == true);
     } catch (e) {
-      return Left(ServerFailure('Set tile state failed: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Set tile state failed'),
+        ),
+      );
     }
   }
 

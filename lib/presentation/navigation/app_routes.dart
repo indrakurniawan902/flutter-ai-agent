@@ -10,7 +10,9 @@ abstract class AppRoutes {
   static const String nrVault = 'vault';
   static const String nrPairing = 'pairing';
   static const String nrServerProfiles = 'server-profiles';
+  static const String nrAddProfile = 'add-profile';
   static const String nrActionCenter = 'action-center';
+  static const String nrGeofenceManagement = 'geofence-management';
 
   static const String splash = '/splash';
   static const String home = '/home';
@@ -21,7 +23,9 @@ abstract class AppRoutes {
   static const String vault = '/vault';
   static const String pairing = '/pairing';
   static const String serverProfiles = '/server-profiles';
+  static const String addProfile = '/settings/add-profile';
   static const String actionCenter = '/action-center';
+  static const String geofenceManagement = '/node/geofence-management';
 
   static const String splashPath = splash;
   static const String homePath = home;
@@ -32,5 +36,7 @@ abstract class AppRoutes {
   static const String vaultPath = vault;
   static const String pairingPath = pairing;
   static const String serverProfilesPath = serverProfiles;
+  static const String addProfilePath = addProfile;
   static const String actionCenterPath = actionCenter;
+  static const String geofenceManagementPath = geofenceManagement;
 }

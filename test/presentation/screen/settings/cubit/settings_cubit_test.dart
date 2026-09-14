@@ -211,7 +211,7 @@ void main() {
         ),
         predicate<SettingsState>((state) {
           return state is SettingsError &&
-              state.message.contains('Storage read failure');
+              state.message.contains('Failed to load settings');
         }),
       ],
     );
@@ -411,7 +411,7 @@ void main() {
         ),
         predicate<SettingsState>((state) {
           return state is SettingsError &&
-              state.message.contains('Write failure');
+              state.message.contains('Failed to save settings');
         }),
       ],
     );

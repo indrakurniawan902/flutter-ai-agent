@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
-import 'package:flutter_ai_agent/domain/models/chat/tool_call_request.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/tool_call_request.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/security_policy.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
@@ -247,7 +247,10 @@ void main() {
             result: null,
             error: any(
               named: 'error',
-              that: contains('Camera sensor hardware fault'),
+              that: allOf(
+                contains('Tool execution error'),
+                isNot(contains('Exception')),
+              ),
             ),
           )).called(1);
     });

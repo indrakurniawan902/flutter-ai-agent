@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter_ai_agent/data/models/server_profiles/server_profile_model.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/ambient_event.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/ambient_trigger_settings.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/nfc_tag_prompt_binding.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
@@ -47,6 +48,7 @@ class SecureStorageService {
   static const String keyNfcPromptBindings = 'nfc_prompt_bindings';
   static const String keyTtsEngineMode = 'tts_engine_mode';
   static const String keyPiperVoiceId = 'piper_voice_id';
+  static const String keyGeofenceRegions = 'hermes_geofence_regions';
 
   final FlutterSecureStorage _storage;
 
@@ -318,6 +320,30 @@ class SecureStorageService {
         .whereType<Map<String, dynamic>>()
         .map(NfcTagPromptBinding.fromJson)
         .toList();
+  }
+
+  Future<void> saveGeofences(List<GeofenceRegion> regions) async {
+    final list = regions.map((r) => r.toJson()).toList();
+    await _storage.write(key: keyGeofenceRegions, value: jsonEncode(list));
+  }
+
+  Future<List<GeofenceRegion>> getGeofences() async {
+    final raw = await _storage.read(key: keyGeofenceRegions);
+    if (raw == null || raw.trim().isEmpty) return [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return [];
+      return decoded.map((item) {
+        if (item is Map<String, dynamic>) {
+          return GeofenceRegion.fromJson(item);
+        } else if (item is Map) {
+          return GeofenceRegion.fromJson(Map<String, dynamic>.from(item));
+        }
+        throw const FormatException('Invalid item in geofence regions list');
+      }).toList();
+    } catch (_) {
+      return [];
+    }
   }
 
   Future<void> clearAll() async {

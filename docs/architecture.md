@@ -203,7 +203,7 @@ presentation  ──▶  domain  ◀──  data
   its DTOs to `domain/entities/` via each model's `toDomain()`.
 - `presentation` depends on `domain` only — a cubit **never** imports a
   `data/` type. If a cubit needs something a datasource returns, that thing
-  belongs in `domain/entities/` or `domain/models/`.
+  belongs in `domain/entities/`.
 
 ### The standard call chain
 

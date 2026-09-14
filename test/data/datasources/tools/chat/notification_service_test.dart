@@ -123,7 +123,8 @@ void main() {
       result.fold(
         (failure) {
           expect(failure, isA<ServerFailure>());
-          expect(failure.message, contains('show failed'));
+          expect(failure.message, contains('Notification error'));
+          expect(failure.message, isNot(contains('Exception')));
         },
         (_) => fail('Expected Left'),
       );
@@ -243,7 +244,8 @@ void main() {
       result.fold(
         (failure) {
           expect(failure, isA<ServerFailure>());
-          expect(failure.message, contains('schedule failed'));
+          expect(failure.message, contains('Schedule error'));
+          expect(failure.message, isNot(contains('Exception')));
         },
         (_) => fail('Expected Left'),
       );

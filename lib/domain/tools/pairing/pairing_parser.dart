@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:dartz/dartz.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
 import 'package:injectable/injectable.dart';
 
@@ -32,7 +33,8 @@ class PairingParser {
     try {
       decoded = jsonDecode(trimmed);
     } catch (e) {
-      return Left(ParseFailure('Malformed JSON in pairing payload: $e'));
+      return Left(ParseFailure(FailureMessage.humanize(
+          e, context: 'Malformed JSON in pairing payload')));
     }
 
     if (decoded is! Map<String, dynamic>) {

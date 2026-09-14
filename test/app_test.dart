@@ -1,6 +1,9 @@
+import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/memory_item.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/local_memory_service.dart';
 import 'package:flutter_ai_agent/myapp.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_router.dart';
 import 'package:flutter_ai_agent/presentation/screen/splash/splash_screen.dart';
@@ -11,10 +14,12 @@ import 'helpers/mocks.dart';
 
 void main() {
   late MockSecureStorageService mockStorageService;
+  late MockLocalMemoryService mockMemoryService;
 
   setUp(() async {
     await sl.reset();
     mockStorageService = MockSecureStorageService();
+    mockMemoryService = MockLocalMemoryService();
     when(() => mockStorageService.getBaseUrl())
         .thenAnswer((_) async => 'https://indra-9router.my.id/v1');
     when(() => mockStorageService.getApiKey())
@@ -30,6 +35,33 @@ void main() {
       await sl.unregister<SecureStorageService>();
     }
     sl.registerLazySingleton<SecureStorageService>(() => mockStorageService);
+
+    if (sl.isRegistered<LocalMemoryServiceBase>()) {
+      await sl.unregister<LocalMemoryServiceBase>();
+    }
+    when(() => mockMemoryService.getAllMemories()).thenAnswer(
+      (_) async => Right(<MemoryItem>[
+        MemoryItem(
+          id: 1,
+          key: 'app.test.memory',
+          content: 'seed',
+          createdAt: DateTime(2026, 1, 1),
+          updatedAt: DateTime(2026, 1, 1),
+        ),
+      ]),
+    );
+    when(() => mockMemoryService.searchMemories(any(), any()))
+        .thenAnswer((_) async => const Right(<MemoryItem>[]));
+    when(() => mockMemoryService.saveMemory(any(), any(), any())).thenAnswer(
+      (_) async => Right(MemoryItem(
+        id: 1,
+        key: 'k',
+        content: 'c',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      )),
+    );
+    sl.registerLazySingleton<LocalMemoryServiceBase>(() => mockMemoryService);
 
     appRouter.go('/splash');
   });
@@ -50,16 +82,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Flames'), findsOneWidget);
-    expect(find.byKey(const Key('chat_settings_button')), findsOneWidget);
+    expect(find.byKey(const Key('nav_item_settings')), findsOneWidget);
   });
 
-  testWidgets('App navigates from Chat to SettingsScreen on settings button tap', (tester) async {
+  testWidgets('App switches to SettingsScreen via bottom nav settings item', (tester) async {
     await tester.pumpWidget(const MyApp());
     await tester.pump(const Duration(milliseconds: 2500));
     await tester.pumpAndSettle();
 
-    final settingsButton = find.byKey(const Key('chat_settings_button'));
-    await tester.tap(settingsButton);
+    final settingsNavItem = find.byKey(const Key('nav_item_settings'));
+    await tester.tap(settingsNavItem);
     await tester.pumpAndSettle();
 
     expect(find.text('LLM Settings'), findsOneWidget);

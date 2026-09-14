@@ -11,13 +11,13 @@
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 
 import 'package:dio/dio.dart' as _i361;
-import 'package:flutter_ai_agent/data/datasources/skills/doc_builder_skill.dart'
-    as _i701;
 import 'package:flutter_ai_agent/common/injection/modules.dart' as _i225;
 import 'package:flutter_ai_agent/data/datasources/local/action_center/action_center_datasource.dart'
     as _i561;
 import 'package:flutter_ai_agent/data/datasources/local/chat/chat_local_datasource.dart'
     as _i613;
+import 'package:flutter_ai_agent/data/datasources/local/memory/sqlite_memory_datasource.dart'
+    as _i445;
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart'
     as _i348;
 import 'package:flutter_ai_agent/data/datasources/remote/chat/chat_datasource.dart'
@@ -28,6 +28,10 @@ import 'package:flutter_ai_agent/data/datasources/remote/gateway/gateway_client.
     as _i122;
 import 'package:flutter_ai_agent/data/datasources/remote/pairing/scanner_controller_wrapper.dart'
     as _i319;
+import 'package:flutter_ai_agent/data/datasources/skills/doc_builder_skill.dart'
+    as _i701;
+import 'package:flutter_ai_agent/data/datasources/tools/chat/accessibility_inspector_service.dart'
+    as _i1021;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/ambient_trigger_service.dart'
     as _i315;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/background_service.dart'
@@ -44,6 +48,8 @@ import 'package:flutter_ai_agent/data/datasources/tools/chat/device_context_serv
     as _i205;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/file_workspace_service.dart'
     as _i70;
+import 'package:flutter_ai_agent/data/datasources/tools/chat/health_service.dart'
+    as _i137;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/intent_launcher_service_impl.dart'
     as _i313;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/local_memory_service.dart'
@@ -92,6 +98,8 @@ import 'package:flutter_ai_agent/domain/services/skills/skills_registry_service.
     as _i791;
 import 'package:flutter_ai_agent/domain/services/tools/tool_pruning_service.dart'
     as _i939;
+import 'package:flutter_ai_agent/domain/tools/chat/accessibility_inspector_service.dart'
+    as _i1022;
 import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart'
     as _i290;
 import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart'
@@ -110,6 +118,8 @@ import 'package:flutter_ai_agent/domain/tools/chat/device_context_service.dart'
     as _i3;
 import 'package:flutter_ai_agent/domain/tools/chat/file_workspace_service.dart'
     as _i745;
+import 'package:flutter_ai_agent/domain/tools/chat/health_service.dart'
+    as _i662;
 import 'package:flutter_ai_agent/domain/tools/chat/intent_launcher_service.dart'
     as _i173;
 import 'package:flutter_ai_agent/domain/tools/chat/local_memory_service.dart'
@@ -176,6 +186,9 @@ extension GetItInjectableX on _i174.GetIt {
     );
     gh.lazySingleton<_i777.UrlLauncherProvider>(
       () => toolsModule.provideUrlLauncherProvider(),
+    );
+    gh.lazySingleton<_i445.SqliteMemoryDatasource>(
+      () => _i445.SqliteMemoryDatasource.create(),
     );
     gh.lazySingleton<_i598.SseParser>(() => _i598.SseParser());
     gh.lazySingleton<_i791.SkillsRegistryService>(
@@ -264,6 +277,9 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i791.BackgroundServiceBase>(
       () => _i1033.BackgroundService.create(),
     );
+    gh.lazySingleton<_i662.HealthServiceBase>(
+      () => _i137.HealthService.create(),
+    );
     gh.lazySingleton<_i777.ContactLauncherTools>(
       () => _i777.ContactLauncherTools(
         contactsProvider: gh<_i777.ContactsProvider>(),
@@ -289,6 +305,9 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i396.NotificationTriageServiceBase>(
       () => _i447.NotificationTriageService.create(),
     );
+    gh.lazySingleton<_i1022.AccessibilityInspectorServiceBase>(
+      () => _i1021.AccessibilityInspectorService.create(),
+    );
     gh.lazySingleton<_i753.TtsClient>(
       () => _i753.DioTtsClient.create(
         gh<_i361.Dio>(),
@@ -306,6 +325,16 @@ extension GetItInjectableX on _i174.GetIt {
         nfcService: gh<_i350.NfcServiceBase>(),
         piperVoiceStore: gh<_i45.PiperVoiceStoreBase>(),
         voiceOutputService: gh<_i45.VoiceOutputServiceBase>(),
+      ),
+    );
+    gh.factory<_i96.SkillsCubit>(
+      () => _i96.SkillsCubit(
+        skillsRegistryService: gh<_i791.SkillsRegistryService>(),
+      ),
+    );
+    gh.lazySingleton<_i445.ChatLocalRepository>(
+      () => _i92.ChatLocalRepositoryImpl(
+        datasource: gh<_i613.ChatLocalDatasource>(),
       ),
     );
     gh.lazySingleton<_i732.ToolRegistry>(
@@ -328,20 +357,15 @@ extension GetItInjectableX on _i174.GetIt {
           intentLauncherService: gh<_i173.IntentLauncherServiceBase>(),
           urlReaderService: gh<_i14.UrlReaderServiceBase>(),
           nfcService: gh<_i350.NfcServiceBase>(),
+          healthService: gh<_i662.HealthServiceBase>(),
+          accessibilityInspectorService:
+              gh<_i1022.AccessibilityInspectorServiceBase>(),
         );
+        // MANUAL: build_runner cannot generate this - DocBuilderSkill is not
+        // annotated. Re-add after every DI regeneration.
         _i701.DocBuilderSkill.registerTools(registry);
         return registry;
       },
-    );
-    gh.factory<_i96.SkillsCubit>(
-      () => _i96.SkillsCubit(
-        skillsRegistryService: gh<_i791.SkillsRegistryService>(),
-      ),
-    );
-    gh.lazySingleton<_i445.ChatLocalRepository>(
-      () => _i92.ChatLocalRepositoryImpl(
-        datasource: gh<_i613.ChatLocalDatasource>(),
-      ),
     );
     gh.factory<_i15.AgentCubit>(
       () => _i15.AgentCubit.create(

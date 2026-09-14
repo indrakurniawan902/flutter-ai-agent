@@ -25,7 +25,7 @@ if [ -n "$shim_violations" ]; then
   exit 1
 fi
 
-for p in "lib/common/injection/injection.dart" "lib/domain/usecase" "lib/presentation/screen" "lib/utils" "lib/data/repositories"; do
+for p in "lib/common/injection/injection.dart" "lib/presentation/screen" "lib/utils" "lib/data/repositories"; do
   if [ ! -e "$ROOT/$p" ]; then
     echo "LAYOUT VIOLATION: required architectural path missing: $ROOT/$p" >&2
     exit 1

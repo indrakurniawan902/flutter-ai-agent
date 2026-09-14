@@ -82,6 +82,45 @@ void main() {
       expect(service.regions, isEmpty);
     });
 
+    test('toggleGeofence toggles isEnabled state', () {
+      service.addGeofence(homeRegion);
+      expect(service.regions.first.isEnabled, isTrue);
+
+      service.toggleGeofence('home', false);
+      expect(service.regions.first.isEnabled, isFalse);
+
+      service.toggleGeofence('home', true);
+      expect(service.regions.first.isEnabled, isTrue);
+    });
+
+    test('toggleGeofence ignores unknown region id', () {
+      service.addGeofence(homeRegion);
+      service.toggleGeofence('unknown', false);
+      expect(service.regions.first.isEnabled, isTrue);
+    });
+
+    test('toggleGeofence false clears inside state', () async {
+      service.addGeofence(homeRegion);
+      await service.checkGeofence(
+        latitude: 1.0,
+        longitude: 2.0,
+        now: fixedTime,
+      );
+
+      service.toggleGeofence('home', false);
+      service.toggleGeofence('home', true);
+      service.clearCooldowns();
+
+      final enterAgain = await service.checkGeofence(
+        latitude: 1.0,
+        longitude: 2.0,
+        now: fixedTime.add(const Duration(minutes: 5)),
+      );
+      final data = enterAgain.getOrElse(() => AmbientCheckResult.empty());
+      expect(data.triggered, isTrue);
+      expect(data.events.first.type, AmbientEventType.geofenceEnter);
+    });
+
     test('clearGeofences empties regions', () {
       service.addGeofence(homeRegion);
       service.clearGeofences();
@@ -412,6 +451,27 @@ void main() {
         reenter.getOrElse(() => AmbientCheckResult.empty()).triggered,
         isFalse,
       );
+    });
+
+    test('skips disabled geofences and does not emit enter or exit', () async {
+      const disabledRegion = GeofenceRegion(
+        id: 'office',
+        latitude: 10.0,
+        longitude: 20.0,
+        radiusMeters: 500.0,
+        isEnabled: false,
+      );
+      service.addGeofence(disabledRegion);
+
+      final result = await service.checkGeofence(
+        latitude: 10.0,
+        longitude: 20.0,
+        now: fixedTime,
+      );
+
+      final data = result.getOrElse(() => AmbientCheckResult.empty());
+      expect(data.triggered, isFalse);
+      expect(data.events, isEmpty);
     });
   });
 
