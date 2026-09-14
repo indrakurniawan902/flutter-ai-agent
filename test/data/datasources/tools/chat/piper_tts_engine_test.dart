@@ -236,10 +236,20 @@ void main() {
     });
 
     test(
-      'returns false when the audio stream closes without a terminal state',
+      'returns false promptly when the audio stream closes without a terminal '
+      'state',
       () async {
-        // A stream that emits a non-terminal state and then DONE: the engine
-        // must fail the wait instead of hanging or reporting success.
+        // A stream that emits a non-terminal state and then DONE. The wait must
+        // settle as a FAILURE (via the firstWhere StateError) rather than
+        // waiting the timeout out or coercing closure into success.
+        //
+        // NOTE: this is not the regression pin for the "silent success" bug -
+        // the old implementation also returned false here, because its
+        // `firstWhere` threw StateError which the outer catch swallowed. The
+        // pins for that bug are the timeout and stopped cases above. This test
+        // guards the adjacent regression of adding an `orElse` that turns a
+        // closed stream into `completed`, which is why it uses a long timeout:
+        // a correct implementation must not wait it out.
         when(() => player.onPlayerStateChanged).thenAnswer(
           (_) => Stream<PlayerState>.fromIterable([PlayerState.playing]),
         );
@@ -248,13 +258,19 @@ void main() {
           sherpa: sherpa,
           player: player,
           nativeSupported: () => true,
-          playbackTimeout: const Duration(milliseconds: 20),
+          playbackTimeout: const Duration(seconds: 30),
         );
         store.readiness['v1'] = true;
         expect(await timeoutEngine.prepare('v1'), isTrue);
         sherpa.samples = Float32List.fromList([0.1, 0.2]);
 
+        final started = DateTime.now();
         expect(await timeoutEngine.speak('hi'), isFalse);
+        expect(
+          DateTime.now().difference(started),
+          lessThan(const Duration(seconds: 5)),
+          reason: 'a closed stream must fail fast, not wait out playbackTimeout',
+        );
       },
     );
   });
