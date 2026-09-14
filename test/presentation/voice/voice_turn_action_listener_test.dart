@@ -424,6 +424,29 @@ void main() {
     ).called(1);
   });
 
+  testWidgets('cancelled phase posts an honest cancellation notification',
+      (tester) async {
+    // Arrange
+    when(() => mockBackgroundService.updateNotification(
+          title: any(named: 'title'),
+          content: any(named: 'content'),
+        )).thenAnswer((_) async => const Right(true));
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pump();
+
+    // Act
+    phaseController.add(VoiceTurnPhase.idle);
+    await tester.pump();
+
+    // Assert
+    verify(
+      () => mockBackgroundService.updateNotification(
+        title: 'Flames Agent Active',
+        content: any(named: 'content', that: contains('cancelled')),
+      ),
+    ).called(1);
+  });
+
   testWidgets('error phase posts an honest failure notification',
       (tester) async {
     // Arrange
@@ -497,6 +520,7 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     phaseController.add(VoiceTurnPhase.done);
     phaseController.add(VoiceTurnPhase.error);
+    phaseController.add(VoiceTurnPhase.idle);
     await tester.pump();
 
     // Assert

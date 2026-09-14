@@ -180,7 +180,8 @@ class _VoiceTurnActionListenerState extends State<VoiceTurnActionListener> {
   // The bubble indicator follows the turn phase stream; the native tap only
   // optimistically flips it, this stream is the authoritative correction.
   // The ongoing notification is the only user-visible surface of a headless
-  // turn, so a finished or failed turn must stop the "Voice turn running" claim.
+  // turn, so every terminal phase - finished, failed, or cancelled - must stop
+  // the "Voice turn running" claim.
   void _handlePhase(VoiceTurnPhase phase) {
     final recording = phase == VoiceTurnPhase.listening ||
         phase == VoiceTurnPhase.dispatching;
@@ -197,6 +198,13 @@ class _VoiceTurnActionListenerState extends State<VoiceTurnActionListener> {
         _updateNotification(
           title: 'Flames Agent Active',
           content: 'Voice turn failed - open Flames for details',
+        ),
+      );
+    } else if (phase == VoiceTurnPhase.idle) {
+      unawaited(
+        _updateNotification(
+          title: 'Flames Agent Active',
+          content: 'Voice turn cancelled',
         ),
       );
     }
