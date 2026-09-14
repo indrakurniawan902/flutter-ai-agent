@@ -20,6 +20,7 @@ import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart';
 import 'package:flutter_ai_agent/domain/services/tools/tool_pruning_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/security_policy.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
+import 'package:flutter_ai_agent/domain/services/chat/tool_call_text_parser.dart';
 import 'package:flutter_ai_agent/domain/services/skills/skills_registry_service.dart';
 import 'package:flutter_ai_agent/domain/services/tools/nfc_prompt_resolver.dart';
 import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
@@ -51,6 +52,7 @@ class AgentCubit extends Cubit<AgentState> {
 
   static const String _untitledSessionTitle = 'New chat';
   static const int _maxTitleLength = 40;
+  static const ToolCallTextParser _textToolCallParser = ToolCallTextParser();
 
   int? activeSessionId;
   final List<Session> _sessions = [];
@@ -1001,6 +1003,18 @@ class AgentCubit extends Cubit<AgentState> {
         if (_isCancelled || runGeneration != _runGeneration) return;
         // If no tool calls were generated, this is the final text answer.
         if (callIds.isEmpty && callNames.isEmpty && callArgs.isEmpty) {
+          final fallback = _textToolCallParser.parse(
+            contentBuffer.toString(),
+            isKnownTool: (name) => _toolRegistry.getTool(name) != null,
+          );
+          if (fallback.hasToolCalls) {
+            await _completeTurnWithToolCalls(
+              fallback.toolCalls,
+              fallback.cleanedText,
+              runGeneration,
+            );
+            return;
+          }
           final extraction =
               ThoughtExtractor.extract(contentBuffer.toString());
           final cleanText = extraction.cleanContent;
@@ -1033,24 +1047,43 @@ class AgentCubit extends Cubit<AgentState> {
           ));
         }
 
-        final toolExtraction =
-            ThoughtExtractor.extract(contentBuffer.toString());
-        _messages.add(ChatMessage(
-          role: 'assistant',
-          content: toolExtraction.cleanContent.isEmpty
-              ? null
-              : toolExtraction.cleanContent,
-          thoughtProcess: toolExtraction.thoughtProcess,
-          toolCalls: toolCalls,
-        ));
-        await _persistMessages();
-
-        // Enqueue tool calls for this turn and process sequentially.
-        _pendingTurnToolCalls.clear();
-        _pendingTurnToolCalls.addAll(toolCalls);
-
-        await _processPendingToolCalls(runGeneration);
+        await _completeTurnWithToolCalls(
+          toolCalls,
+          contentBuffer.toString(),
+          runGeneration,
+        );
       },
     );
+  }
+
+  /// Persists the assistant turn that requested [toolCalls] and runs them
+  /// through the existing ReAct loop.
+  Future<void> _completeTurnWithToolCalls(
+    List<ToolCallDelta> toolCalls,
+    String rawContent,
+    int runGeneration,
+  ) async {
+    if (_isCancelled || runGeneration != _runGeneration) return;
+
+    final normalizedCalls = toolCalls
+        .map((tc) => tc.id == null ? tc.copyWith(id: 'call_${tc.index}') : tc)
+        .toList();
+
+    final toolExtraction = ThoughtExtractor.extract(rawContent);
+    _messages.add(ChatMessage(
+      role: 'assistant',
+      content: toolExtraction.cleanContent.isEmpty
+          ? null
+          : toolExtraction.cleanContent,
+      thoughtProcess: toolExtraction.thoughtProcess,
+      toolCalls: normalizedCalls,
+    ));
+    await _persistMessages();
+
+    // Enqueue tool calls for this turn and process sequentially.
+    _pendingTurnToolCalls.clear();
+    _pendingTurnToolCalls.addAll(normalizedCalls);
+
+    await _processPendingToolCalls(runGeneration);
   }
 }
