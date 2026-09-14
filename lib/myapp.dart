@@ -10,6 +10,7 @@ import 'package:flutter_ai_agent/domain/repositories/action_center/action_center
 import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart';
 import 'package:flutter_ai_agent/utils/app_theme.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_router.dart';
+import 'package:flutter_ai_agent/presentation/voice/voice_turn_action_listener.dart';
 
 Future<void> bootstrap(FlavorConfig flavor) async {
   FlavorConfig.current = flavor;
@@ -76,6 +77,9 @@ class MyApp extends StatelessWidget {
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
+      builder: (context, child) => VoiceTurnActionListener(
+        child: child ?? const SizedBox.shrink(),
+      ),
       routeInformationProvider: effectiveRouter.routeInformationProvider,
       routeInformationParser: effectiveRouter.routeInformationParser,
       routerDelegate: effectiveRouter.routerDelegate,
