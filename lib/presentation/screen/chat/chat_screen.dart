@@ -32,10 +32,12 @@ import 'package:flutter_ai_agent/presentation/screen/share/cubit/share_target_cu
 import 'package:flutter_ai_agent/presentation/widget/app_toast.dart';
 import 'package:flutter_ai_agent/presentation/screen/share/cubit/share_target_state.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
+import 'package:flutter_ai_agent/domain/services/voice/voice_prompt_dispatcher.dart';
 import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_routes.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
+import 'package:flutter_ai_agent/presentation/voice/chat_voice_prompt_dispatcher.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_approval_sheet.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_confirmation_card.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/app_settings_opener.dart';
@@ -104,12 +106,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   VoiceInputServiceBase? _voiceService;
   VoiceOutputServiceBase? _voiceOutputService;
-  BackgroundServiceBase? _backgroundService;
+  VoicePromptDispatcherRegistry? _dispatcherRegistry;
   bool _isSpeakerMuted = false;
   StreamSubscription<VoiceInputStatus>? _voiceStatusSub;
   StreamSubscription<String>? _voiceErrorSub;
   StreamSubscription<String>? _voiceOutputErrorSub;
-  StreamSubscription<String>? _backgroundActionSub;
   bool _isVoiceRecording = false;
   bool _isHoldToSpeak = false;
   late ChatMode _mode;
@@ -200,21 +201,28 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             : null);
     _isSpeakerMuted = _voiceOutputService?.isMuted ?? false;
 
-    _backgroundService = widget.backgroundService ??
-        (sl.isRegistered<BackgroundServiceBase>()
-            ? sl<BackgroundServiceBase>()
-            : null);
-
-    _backgroundActionSub =
-        _backgroundService?.actionStream.listen(_handleBackgroundAction);
-    _checkPendingBackgroundAction();
-
     _rpcCubit = widget.gatewayRpcCubit ??
         (sl.isRegistered<GatewayRpcCubit>() ? sl<GatewayRpcCubit>() : null);
     _linkCubit = widget.gatewayLinkCubit ??
         (sl.isRegistered<GatewayLinkCubit>() ? sl<GatewayLinkCubit>() : null);
     _agentCubit = widget.agentCubit ??
         (sl.isRegistered<AgentCubit>() ? sl<AgentCubit>() : null);
+
+    // The mounted screen wins the registry over the headless fallback so an
+    // open Chat keeps updating; the notification action needs no screen.
+    _dispatcherRegistry = sl.isRegistered<VoicePromptDispatcherRegistry>()
+        ? sl<VoicePromptDispatcherRegistry>()
+        : null;
+    _dispatcherRegistry?.register(
+      ChatVoicePromptDispatcher(
+        resolveCubit: () => _agentCubit,
+        resolveGatewayClient: _resolveGatewayClient,
+        mode: () => _mode,
+        // This screen speaks AgentSuccess itself whenever it is mounted on the
+        // direct path, so the turn service must not speak the same reply.
+        speaksReply: () => _mode == ChatMode.direct,
+      ),
+    );
 
     _cameraVisionService = sl.isRegistered<CameraVisionServiceBase>()
         ? sl<CameraVisionServiceBase>()
@@ -415,7 +423,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _backgroundActionSub?.cancel();
+    _dispatcherRegistry?.unregister('chat');
     _voiceStatusSub?.cancel();
     _voiceErrorSub?.cancel();
     _voiceOutputErrorSub?.cancel();
@@ -508,30 +516,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       return await _permissionGate.requestWithRationale(context, type);
     } catch (_) {
       return true;
-    }
-  }
-
-  void _handleBackgroundAction(String action) {
-    if (!mounted) return;
-    switch (action.toLowerCase().trim()) {
-      case 'voice_input':
-        if (!_isVoiceRecording) {
-          _startVoiceInput();
-        }
-        break;
-      case 'quick_status':
-        _agentCubit?.sendMessage(
-          'Quick status check: summarize battery, device context, and agent readiness.',
-        );
-        break;
-    }
-  }
-
-  Future<void> _checkPendingBackgroundAction() async {
-    final pending = await _backgroundService?.getPendingAction();
-    if (pending != null && mounted) {
-      _handleBackgroundAction(pending);
-      await _backgroundService?.clearPendingAction();
     }
   }
 
