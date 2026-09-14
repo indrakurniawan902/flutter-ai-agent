@@ -23,6 +23,9 @@ class _RecordingDispatcher implements VoicePromptDispatcherBase {
   bool get isReady => true;
 
   @override
+  bool get speaksReply => false;
+
+  @override
   Future<Either<Failure, String>> dispatch(String prompt) async {
     dispatched.add(prompt);
     return const Right('ok');

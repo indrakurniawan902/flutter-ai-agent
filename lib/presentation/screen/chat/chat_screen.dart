@@ -218,6 +218,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         resolveCubit: () => _agentCubit,
         resolveGatewayClient: _resolveGatewayClient,
         mode: () => _mode,
+        // This screen speaks AgentSuccess itself whenever it is mounted on the
+        // direct path, so the turn service must not speak the same reply.
+        speaksReply: () => _mode == ChatMode.direct,
       ),
     );
 

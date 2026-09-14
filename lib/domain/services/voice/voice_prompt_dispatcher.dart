@@ -11,6 +11,12 @@ abstract class VoicePromptDispatcherBase {
   /// Whether this transport can accept a prompt right now.
   bool get isReady;
 
+  /// Whether the owning surface speaks the reply itself, so the turn service
+  /// must stay silent to avoid speaking it twice. A mounted ChatScreen speaks
+  /// `AgentSuccess` on the direct path; gateway replies and headless turns have
+  /// no other speaker.
+  bool get speaksReply => false;
+
   /// Sends [prompt] and resolves with the assistant's final reply text.
   Future<Either<Failure, String>> dispatch(String prompt);
 
