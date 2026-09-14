@@ -230,26 +230,39 @@ class PiperVoiceStore implements PiperVoiceStoreBase {
 
     // Peak memory ~230MB one-time: the bzip2 payload and the decoded
     // tar coexist briefly. Acceptable for a once-per-install operation.
-    final tarBytes = BZip2Decoder().decodeBytes(await tmpFile.readAsBytes());
-    final archive = TarDecoder().decodeBytes(tarBytes);
-    final prefix = 'vits-piper-${voice.id}/';
-    final destDir = _joinPath(modelsRoot, voice.id);
-    final sep = Platform.pathSeparator;
-    for (final entry in archive.files.toList()) {
-      if (!entry.isFile || entry.isSymbolicLink) continue;
-      final name = entry.name;
-      if (!name.startsWith(prefix)) continue;
-      final relative = name.substring(prefix.length);
-      if (relative.isEmpty || relative.contains('..')) continue;
-      final outFile = File(_joinPath(destDir, relative.replaceAll('/', sep)));
-      await outFile.parent.create(recursive: true);
-      await outFile.writeAsBytes(entry.content, flush: true);
-      archive.removeFile(entry);
+    try {
+      final tarBytes = BZip2Decoder().decodeBytes(await tmpFile.readAsBytes());
+      final archive = TarDecoder().decodeBytes(tarBytes);
+      final prefix = 'vits-piper-${voice.id}/';
+      final destDir = _joinPath(modelsRoot, voice.id);
+      final sep = Platform.pathSeparator;
+      for (final entry in archive.files.toList()) {
+        if (!entry.isFile || entry.isSymbolicLink) continue;
+        final name = entry.name;
+        if (!name.startsWith(prefix)) continue;
+        final relative = name.substring(prefix.length);
+        if (relative.isEmpty || relative.contains('..')) continue;
+        final outFile = File(_joinPath(destDir, relative.replaceAll('/', sep)));
+        await outFile.parent.create(recursive: true);
+        await outFile.writeAsBytes(entry.content, flush: true);
+        archive.removeFile(entry);
+      }
+    } finally {
+      try {
+        await tmpFile.delete();
+      } catch (_) {}
     }
 
-    try {
-      await tmpFile.delete();
-    } catch (_) {}
+    if (!await isVoiceReady(voice.id)) {
+      try {
+        final dest = Directory(_joinPath(modelsRoot, voice.id));
+        if (await dest.exists()) await dest.delete(recursive: true);
+      } catch (_) {}
+      throw VoiceModelIntegrityException(
+        'Archive for ${voice.id} did not contain the expected model files',
+      );
+    }
+    final destDir = _joinPath(modelsRoot, voice.id);
     final sidecar = File(_joinPath(destDir, '${voice.id}.onnx.json'));
     if (await sidecar.exists()) {
       try {
@@ -285,10 +298,12 @@ class PiperTtsEngine implements PiperTtsEngineBase {
     SherpaTtsWrapper? sherpa,
     AudioPlayerWrapper? player,
     bool Function()? nativeSupported,
+    Duration playbackTimeout = const Duration(seconds: 45),
   }) : _store = store,
        _sherpa = sherpa ?? DefaultSherpaTtsWrapper(),
        _player = player,
-       _nativeSupported = nativeSupported;
+       _nativeSupported = nativeSupported,
+       _playbackTimeout = playbackTimeout;
 
   /// Injectable-friendly creator.
   @factoryMethod
@@ -299,6 +314,7 @@ class PiperTtsEngine implements PiperTtsEngineBase {
   final SherpaTtsWrapper _sherpa;
   AudioPlayerWrapper? _player;
   final bool Function()? _nativeSupported;
+  final Duration _playbackTimeout;
 
   /// Lazily builds the audio player so DI resolution never touches a
   /// platform plugin in test environments.
@@ -310,13 +326,23 @@ class PiperTtsEngine implements PiperTtsEngineBase {
   String? _tokensPath;
   String? _dataDirPath;
 
+  void _clearPrepared() {
+    _preparedVoiceId = null;
+    _modelPath = null;
+    _tokensPath = null;
+    _dataDirPath = null;
+  }
+
   @override
   String? get activeVoiceId => _preparedVoiceId;
 
   @override
   Future<bool> prepare(String voiceId) async {
     try {
-      if (!await _store.isVoiceReady(voiceId)) return false;
+      if (!await _store.isVoiceReady(voiceId)) {
+        _clearPrepared();
+        return false;
+      }
       final dir = _store.modelDirFor(voiceId);
       final sep = Platform.pathSeparator;
       _modelPath = '$dir$sep${_voiceModelFileName(voiceId)}';
@@ -325,6 +351,7 @@ class PiperTtsEngine implements PiperTtsEngineBase {
       _preparedVoiceId = voiceId;
       return true;
     } catch (_) {
+      _clearPrepared();
       return false;
     }
   }
@@ -358,13 +385,21 @@ class PiperTtsEngine implements PiperTtsEngineBase {
       if (audio.samples.isEmpty) return false;
       final wav = _encodeWav16Mono(audio.samples, audio.sampleRate);
       await _audioPlayer.play(BytesSource(wav));
-      await _audioPlayer.onPlayerStateChanged
-          .firstWhere((state) => state == PlayerState.completed)
-          .timeout(
-            const Duration(seconds: 45),
-            onTimeout: () => PlayerState.completed,
-          );
-      return true;
+      final PlayerState finalState;
+      try {
+        finalState = await _audioPlayer.onPlayerStateChanged
+            .firstWhere(
+              (state) =>
+                  state == PlayerState.completed ||
+                  state == PlayerState.stopped,
+            )
+            .timeout(_playbackTimeout);
+      } on TimeoutException {
+        // Playback never settled: report failure so the caller can fall
+        // through to the system TTS / remote engine.
+        return false;
+      }
+      return finalState == PlayerState.completed;
     } catch (_) {
       return false;
     }

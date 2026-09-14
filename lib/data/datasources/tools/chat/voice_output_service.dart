@@ -93,10 +93,21 @@ class DefaultAudioPlayerWrapper implements AudioPlayerWrapper {
 
 @LazySingleton(as: PlatformTtsEngine)
 class FlutterTtsPlatformEngine implements PlatformTtsEngine {
-  FlutterTtsPlatformEngine() : _engine = _safeCreateEngine();
+  FlutterTtsPlatformEngine();
 
-  final FlutterTts? _engine;
+  FlutterTts? _engineInstance;
+  bool _engineResolved = false;
   bool _configured = false;
+
+  /// Built on first use: `FlutterTts()` schedules plugin channel traffic that
+  /// a test host cannot answer, so DI resolution must never create it.
+  FlutterTts? get _engine {
+    if (!_engineResolved) {
+      _engineResolved = true;
+      _engineInstance = _safeCreateEngine();
+    }
+    return _engineInstance;
+  }
 
   static FlutterTts? _safeCreateEngine() {
     try {
@@ -107,9 +118,11 @@ class FlutterTtsPlatformEngine implements PlatformTtsEngine {
   }
 
   Future<void> _configure() async {
-    if (_configured || _engine == null) return;
+    if (_configured) return;
+    final engine = _engine;
+    if (engine == null) return;
     try {
-      await _engine.awaitSpeakCompletion(true);
+      await engine.awaitSpeakCompletion(true);
       _configured = true;
     } catch (_) {}
   }
@@ -293,18 +306,13 @@ class VoiceOutputService implements VoiceOutputServiceBase {
     PiperVoiceStoreBase? piperVoiceStore,
     SecureStorageService? secureStorage,
   }) : _tts = ttsClient,
-       _player = audioPlayer ?? DefaultAudioPlayerWrapper(),
+       _injectedPlayer = audioPlayer,
        _platformTts = platformTts ?? FlutterTtsPlatformEngine(),
        _piperTts = piperTts,
        _piperVoiceStore = piperVoiceStore,
        _secureStorage = secureStorage {
-    StreamSubscription<PlayerState> sub;
-    try {
-      sub = _player.onPlayerStateChanged.listen(_onPlayerState);
-    } catch (_) {
-      sub = Stream<PlayerState>.empty().listen((_) {});
-    }
-    _playerStateSub = sub;
+    final provided = audioPlayer;
+    if (provided != null) _attachPlayer(provided);
   }
 
   @factoryMethod
@@ -325,12 +333,36 @@ class VoiceOutputService implements VoiceOutputServiceBase {
   static const _streamFlushThreshold = 120;
 
   final TtsClient _tts;
-  final AudioPlayerWrapper _player;
   final PlatformTtsEngine _platformTts;
   final PiperTtsEngineBase? _piperTts;
   final PiperVoiceStoreBase? _piperVoiceStore;
   final SecureStorageService? _secureStorage;
-  late final StreamSubscription<PlayerState> _playerStateSub;
+
+  final AudioPlayerWrapper? _injectedPlayer;
+  AudioPlayerWrapper? _playerInstance;
+  StreamSubscription<PlayerState>? _playerStateSub;
+
+  /// Built on first use: `AudioPlayer()` schedules an unawaited
+  /// `GlobalAudioScope.init` channel call that a test host cannot answer, so
+  /// DI resolution must never create it.
+  AudioPlayerWrapper get _player => _playerInstance ??= _createPlayer();
+
+  AudioPlayerWrapper _createPlayer() {
+    final player = _injectedPlayer ?? DefaultAudioPlayerWrapper();
+    _attachPlayer(player);
+    return player;
+  }
+
+  void _attachPlayer(AudioPlayerWrapper player) {
+    _playerInstance = player;
+    StreamSubscription<PlayerState> sub;
+    try {
+      sub = player.onPlayerStateChanged.listen(_onPlayerState);
+    } catch (_) {
+      sub = Stream<PlayerState>.empty().listen((_) {});
+    }
+    _playerStateSub = sub;
+  }
 
   /// Default catalog voice used when piper mode is selected.
   static const String defaultPiperVoiceId = 'id_ID-news_tts-medium';
@@ -342,6 +374,7 @@ class VoiceOutputService implements VoiceOutputServiceBase {
   TtsEngine? _lastEngineUsed;
 
   int _platformEpoch = 0;
+  int _piperEpoch = 0;
 
   final _statusController = StreamController<VoiceOutputStatus>.broadcast();
   final _errorController = StreamController<String>.broadcast();
@@ -470,6 +503,7 @@ class VoiceOutputService implements VoiceOutputServiceBase {
       }
       if (!prepared) return false;
       bool spoke = false;
+      final epoch = _piperEpoch;
       try {
         _setStatus(VoiceOutputStatus.loading);
         _playing = true;
@@ -478,6 +512,12 @@ class VoiceOutputService implements VoiceOutputServiceBase {
       } catch (_) {
         _playing = false;
         return false;
+      }
+      if (_piperEpoch != epoch) {
+        // Interrupted: stop() already emitted the stopped status, so do not
+        // overwrite it and do not continue down the chain.
+        _playing = false;
+        return true;
       }
       if (!spoke) {
         _playing = false;
@@ -741,11 +781,13 @@ class VoiceOutputService implements VoiceOutputServiceBase {
   @override
   Future<void> stop() async {
     _platformEpoch++;
+    _piperEpoch++;
     await _platformTts.stop();
     try {
       await _piperTts?.stop();
     } catch (_) {}
-    await _player.stop();
+    final player = _playerInstance;
+    if (player != null) await player.stop();
     _playing = false;
     _setStatus(VoiceOutputStatus.stopped);
   }
@@ -755,13 +797,16 @@ class VoiceOutputService implements VoiceOutputServiceBase {
     _queue.clear();
     _streamBuffer.clear();
     _platformEpoch++;
+    _piperEpoch++;
     await stop();
   }
 
   @override
   void dispose() {
-    unawaited(_playerStateSub.cancel());
-    unawaited(_player.dispose());
+    final sub = _playerStateSub;
+    if (sub != null) unawaited(sub.cancel());
+    final player = _playerInstance;
+    if (player != null) unawaited(player.dispose());
     _statusController.close();
     _errorController.close();
   }

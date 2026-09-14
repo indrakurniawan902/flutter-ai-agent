@@ -100,6 +100,22 @@ void main() {
       expect(await engine.prepare('v1'), isTrue);
       expect(engine.activeVoiceId, 'v1');
     });
+
+    test(
+      'clears the active voice when the store reports it is no longer ready',
+      () async {
+        store.readiness['v1'] = true;
+
+        expect(await engine.prepare('v1'), isTrue);
+        expect(engine.activeVoiceId, 'v1');
+
+        store.readiness['v1'] = false;
+
+        expect(await engine.prepare('v1'), isFalse);
+        expect(engine.activeVoiceId, isNull);
+        expect(engine.isAvailable, isFalse);
+      },
+    );
   });
 
   group('PiperTtsEngine.speak', () {
@@ -141,6 +157,106 @@ void main() {
       expect(await engine.speak('hello'), isFalse);
       verifyNever(() => player.play(any()));
     });
+  });
+
+  group('PiperTtsEngine.speak playback outcomes', () {
+    test('returns false when playback times out without completing', () async {
+      final controller = StreamController<PlayerState>();
+      addTearDown(() async {
+        if (!controller.isClosed) {
+          await controller.close();
+        }
+      });
+      when(
+        () => player.onPlayerStateChanged,
+      ).thenAnswer((_) => controller.stream);
+      final timeoutEngine = PiperTtsEngine(
+        store: store,
+        sherpa: sherpa,
+        player: player,
+        nativeSupported: () => true,
+        playbackTimeout: const Duration(milliseconds: 20),
+      );
+      store.readiness['v1'] = true;
+      expect(await timeoutEngine.prepare('v1'), isTrue);
+      sherpa.samples = Float32List.fromList([0.1, 0.2]);
+      controller.add(PlayerState.playing);
+
+      expect(await timeoutEngine.speak('hi'), isFalse);
+    });
+
+    test('returns false when playback ends in stopped', () async {
+      final controller = StreamController<PlayerState>();
+      addTearDown(() async {
+        if (!controller.isClosed) {
+          await controller.close();
+        }
+      });
+      when(
+        () => player.onPlayerStateChanged,
+      ).thenAnswer((_) => controller.stream);
+      final timeoutEngine = PiperTtsEngine(
+        store: store,
+        sherpa: sherpa,
+        player: player,
+        nativeSupported: () => true,
+        playbackTimeout: const Duration(milliseconds: 20),
+      );
+      store.readiness['v1'] = true;
+      expect(await timeoutEngine.prepare('v1'), isTrue);
+      sherpa.samples = Float32List.fromList([0.1, 0.2]);
+      controller.add(PlayerState.stopped);
+
+      expect(await timeoutEngine.speak('hi'), isFalse);
+    });
+
+    test('returns true when playback completes', () async {
+      final controller = StreamController<PlayerState>();
+      addTearDown(() async {
+        if (!controller.isClosed) {
+          await controller.close();
+        }
+      });
+      when(
+        () => player.onPlayerStateChanged,
+      ).thenAnswer((_) => controller.stream);
+      final timeoutEngine = PiperTtsEngine(
+        store: store,
+        sherpa: sherpa,
+        player: player,
+        nativeSupported: () => true,
+        playbackTimeout: const Duration(milliseconds: 20),
+      );
+      store.readiness['v1'] = true;
+      expect(await timeoutEngine.prepare('v1'), isTrue);
+      sherpa.samples = Float32List.fromList([0.1, 0.2]);
+      controller.add(PlayerState.completed);
+
+      expect(await timeoutEngine.speak('hi'), isTrue);
+    });
+
+    test(
+      'returns false when the audio stream closes without a terminal state',
+      () async {
+        // A stream that emits a non-terminal state and then DONE: the engine
+        // must fail the wait instead of hanging or reporting success.
+        when(() => player.onPlayerStateChanged).thenAnswer(
+          (_) => Stream<PlayerState>.fromIterable([PlayerState.playing]),
+        );
+        final timeoutEngine = PiperTtsEngine(
+          store: store,
+          sherpa: sherpa,
+          player: player,
+          nativeSupported: () => true,
+          playbackTimeout: const Duration(milliseconds: 20),
+        );
+        store.readiness['v1'] = true;
+        expect(await timeoutEngine.prepare('v1'), isTrue);
+        sherpa.samples = Float32List.fromList([0.1, 0.2]);
+
+        expect(await timeoutEngine.speak('hi'), isFalse);
+      },
+    );
   });
 
   group('PiperTtsEngine.stop', () {
@@ -260,5 +376,51 @@ void main() {
         isFalse,
       );
     });
+
+    test(
+      'throws and leaves no model dir when the archive has no matching entries',
+      () async {
+        final otherOnnx = Uint8List.fromList(
+          List<int>.generate(64, (i) => i % 256),
+        );
+        final otherTokens = Uint8List.fromList('x y z\n'.codeUnits);
+        final otherData = Uint8List.fromList([5, 6, 7, 8]);
+        final otherArchive = Archive()
+          ..addFile(
+            ArchiveFile('other-prefix/x.onnx', otherOnnx.length, otherOnnx),
+          )
+          ..addFile(
+            ArchiveFile(
+              'other-prefix/tokens.txt',
+              otherTokens.length,
+              otherTokens,
+            ),
+          )
+          ..addFile(
+            ArchiveFile(
+              'other-prefix/espeak-ng-data/x',
+              otherData.length,
+              otherData,
+            ),
+          );
+        final otherTarBytes = TarEncoder().encode(otherArchive);
+        final otherTarball = Uint8List.fromList(
+          BZip2Encoder().encode(otherTarBytes),
+        );
+        final otherMd5 = md5.convert(otherTarball).toString();
+        final voice = descriptor(otherMd5);
+        final probe = PiperVoiceStore(
+          rootDirPath: () => tmp.path,
+          fetchBytes: (url, progress) async => otherTarball,
+        );
+
+        await expectLater(
+          () => probe.downloadVoice(voice),
+          throwsA(isA<VoiceModelIntegrityException>()),
+        );
+        expect(Directory(join(tmp.path, voiceId)).existsSync(), isFalse);
+        expect(await probe.isVoiceReady(voiceId), isFalse);
+      },
+    );
   });
 }

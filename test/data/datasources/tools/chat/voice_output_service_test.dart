@@ -1001,6 +1001,34 @@ void main() {
       );
     });
 
+    test(
+      'stop during piper speech keeps stopped status and does not claim the piper engine',
+      () async {
+        stubStoragePiperMode();
+        final completer = Completer<bool>();
+        when(
+          () => mockPiper.speak(
+            any(),
+            voice: any(named: 'voice'),
+            speed: any(named: 'speed'),
+          ),
+        ).thenAnswer((_) => completer.future);
+        final piperService = buildPiperService();
+
+        final resultFuture = piperService.speakText('Hello piper stop');
+        await pumpEventQueue();
+
+        await piperService.stop();
+        completer.complete(true);
+        final result = await resultFuture;
+
+        expect(result.isRight(), true);
+        verify(() => mockPiper.stop()).called(1);
+        expect(piperService.currentStatus, VoiceOutputStatus.stopped);
+        expect(piperService.lastEngineUsed, isNull);
+      },
+    );
+
     test('setPreferredEngineMode + setPiperVoiceId persists', () async {
       final piperService = buildPiperService();
 
