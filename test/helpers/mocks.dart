@@ -228,4 +228,3 @@ class MockVoiceTurnService extends Mock implements VoiceTurnServiceBase {}
 
 class MockVoicePromptDispatcher extends Mock
     implements VoicePromptDispatcherBase {}
-

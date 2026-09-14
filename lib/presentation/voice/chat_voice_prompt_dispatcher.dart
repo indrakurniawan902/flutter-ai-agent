@@ -21,16 +21,19 @@ class ChatVoicePromptDispatcher implements VoicePromptDispatcherBase {
     required GatewayClientBase? Function() resolveGatewayClient,
     ChatMode Function()? mode,
     String transportId = 'chat',
+    bool Function()? speaksReply,
     this.dispatchTimeout = const Duration(seconds: 120),
   })  : _resolveCubit = resolveCubit,
         _resolveGatewayClient = resolveGatewayClient,
         _mode = mode,
-        _transportId = transportId;
+        _transportId = transportId,
+        _speaksReply = speaksReply;
 
   final AgentCubit? Function() _resolveCubit;
   final GatewayClientBase? Function() _resolveGatewayClient;
   final ChatMode Function()? _mode;
   final String _transportId;
+  final bool Function()? _speaksReply;
 
   /// Test-visible timeout for the direct-path terminal-state wait.
   final Duration dispatchTimeout;
@@ -60,6 +63,13 @@ class ChatVoicePromptDispatcher implements VoicePromptDispatcherBase {
     }
     return !_isBusy(cubit.state);
   }
+
+  /// Only a surface that speaks the reply itself (a mounted ChatScreen on the
+  /// direct path) sets this, so the turn service stays silent instead of
+  /// speaking the same reply twice. Gateway replies and headless turns have no
+  /// other speaker.
+  @override
+  bool get speaksReply => _speaksReply?.call() ?? false;
 
   @override
   Future<Either<Failure, String>> dispatch(String prompt) async {

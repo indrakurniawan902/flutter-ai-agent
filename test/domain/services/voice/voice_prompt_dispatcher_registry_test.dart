@@ -18,6 +18,9 @@ class _FakeDispatcher implements VoicePromptDispatcherBase {
   bool get isReady => _ready;
 
   @override
+  bool get speaksReply => false;
+
+  @override
   Future<Either<Failure, String>> dispatch(String prompt) async =>
       Right(prompt);
 

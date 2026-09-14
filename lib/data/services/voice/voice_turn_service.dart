@@ -170,7 +170,12 @@ class VoiceTurnService implements VoiceTurnServiceBase {
       }
 
       var spoken = false;
-      if (!_voiceOutput.isMuted && replyText.isNotEmpty) {
+      // A mounted surface that speaks the reply itself (ChatScreen on the
+      // direct path) owns the audio; speaking here too would double the reply.
+      final shouldSpeak = !dispatcher.speaksReply &&
+          !_voiceOutput.isMuted &&
+          replyText.isNotEmpty;
+      if (shouldSpeak) {
         _emitPhase(VoiceTurnPhase.speaking);
         final speakResult = await _voiceOutput.speakText(replyText);
         spoken = speakResult.isRight();
@@ -260,8 +265,12 @@ class VoiceTurnService implements VoiceTurnServiceBase {
       }
     } finally {
       guard?.cancel();
-      await statusSub?.cancel();
-      await errorSub?.cancel();
+      // Cancelling a subscription is teardown, not part of the turn's outcome:
+      // awaiting those futures stalls `runTurn` behind the stream teardown
+      // (the recogniser's own status stream), so the transcript never reaches
+      // the dispatcher.
+      unawaited(statusSub?.cancel() ?? Future<void>.value());
+      unawaited(errorSub?.cancel() ?? Future<void>.value());
     }
     return outcome;
   }

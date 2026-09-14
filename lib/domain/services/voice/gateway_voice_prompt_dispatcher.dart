@@ -31,6 +31,10 @@ class GatewayVoicePromptDispatcher implements VoicePromptDispatcherBase {
   @override
   bool get isReady => _client.state.isConnected;
 
+  /// Nothing else speaks a gateway reply, so the turn service owns the audio.
+  @override
+  bool get speaksReply => false;
+
   @override
   Future<Either<Failure, String>> dispatch(String prompt) async {
     final String trimmed = prompt.trim();
