@@ -15,6 +15,8 @@ import 'clipboard_service.dart';
 import 'contact_launcher_tools.dart';
 import 'device_context_service.dart';
 import 'file_workspace_service.dart';
+import 'health_metrics.dart';
+import 'health_service.dart';
 import 'intent_launcher_service.dart';
 import 'local_memory_service.dart';
 import 'location_service.dart';
@@ -88,6 +90,7 @@ class ToolRegistry {
     IntentLauncherServiceBase? intentLauncherService,
     UrlReaderServiceBase? urlReaderService,
     NfcServiceBase? nfcService,
+    HealthServiceBase? healthService,
   }) {
     if (clipboardService != null) registerClipboardTools(clipboardService);
     if (locationService != null) registerLocationTools(locationService);
@@ -120,6 +123,7 @@ class ToolRegistry {
     }
     if (urlReaderService != null) registerUrlReaderTools(urlReaderService);
     if (nfcService != null) registerNfcTools(nfcService);
+    if (healthService != null) registerHealthTools(healthService);
     registerMetaTools();
   }
 
@@ -1452,6 +1456,59 @@ class ToolRegistry {
           );
           return result.map((balance) => jsonEncode(balance.toJson()));
         },
+      ),
+    );
+  }
+
+  void registerHealthTools(HealthServiceBase service) {
+    register(
+      RegisteredTool(
+        name: 'health_status',
+        description:
+            'Reports whether the device health provider (Android Health Connect) is available and which health permissions are granted.',
+        parameters: const {
+          'type': 'object',
+          'properties': <String, dynamic>{},
+          'required': <String>[],
+        },
+        securityTier: SecurityTier.tier1Auto,
+        execute: (_) => service.healthStatusFormattedJson(),
+      ),
+    );
+
+    register(
+      RegisteredTool(
+        name: 'get_health_data',
+        description:
+            'Reads health metrics (steps, heart rate, calories, sleep, SpO2, weight) from Android Health Connect for a time range.',
+        parameters: const {
+          'type': 'object',
+          'properties': {
+            'metric': {
+              'type': 'string',
+              'enum': HealthMetrics.supported,
+              'description':
+                  'Health metric to read (${HealthMetrics.description})',
+            },
+            'startDate': {
+              'type': 'string',
+              'description':
+                  'Range start in ISO 8601 (default: 24 hours before endDate)',
+            },
+            'endDate': {
+              'type': 'string',
+              'description': 'Range end in ISO 8601 (default: now)',
+            },
+          },
+          'required': ['metric'],
+        },
+        securityTier: SecurityTier.tier2Permission,
+        checkPermission: () => service.checkPermission(),
+        execute: (args) => service.getHealthDataFormattedJson(
+          metric: args['metric']?.toString() ?? '',
+          startDate: args['startDate']?.toString(),
+          endDate: args['endDate']?.toString(),
+        ),
       ),
     );
   }

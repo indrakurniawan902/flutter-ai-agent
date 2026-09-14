@@ -110,6 +110,21 @@ const List<_ToolCategory> _categories = [
     ['background', 'service', 'headless'],
     ['manage_background_service'],
   ),
+  _ToolCategory(
+    [
+      'health',
+      'step',
+      'heart',
+      'sleep',
+      'calorie',
+      'spo2',
+      'oxygen',
+      'weight',
+      'fitness',
+      'workout',
+    ],
+    ['health_status', 'get_health_data'],
+  ),
 ];
 
 @LazySingleton(as: ToolPruningService)
