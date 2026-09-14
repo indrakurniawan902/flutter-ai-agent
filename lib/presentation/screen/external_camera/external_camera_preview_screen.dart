@@ -76,6 +76,7 @@ class _ExternalCameraScaffold extends StatelessWidget {
           ),
         ],
       ),
+      bottomNavigationBar: const SafeArea(child: _CaptureBar()),
       body: BlocBuilder<ExternalCameraPreviewCubit, ExternalCameraPreviewState>(
         builder: (context, state) {
           final cubit = context.read<ExternalCameraPreviewCubit>();
@@ -166,17 +167,9 @@ class _LivePreviewPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cubit = context.read<ExternalCameraPreviewCubit>();
     final mode = state.mode;
     final textureId = state.textureId;
     final capture = state.lastCapture;
-    // Mirrors the cubit's capture guard: the stream stays live through
-    // `captured` and `captureFailed`, so both must offer a working retry.
-    final canCapture =
-        (state.status == ExternalCameraPreviewStatus.previewing ||
-            state.status == ExternalCameraPreviewStatus.captured ||
-            state.status == ExternalCameraPreviewStatus.captureFailed) &&
-        !state.isCapturing;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -239,62 +232,6 @@ class _LivePreviewPane extends StatelessWidget {
             ],
           ),
         ],
-        const SizedBox(height: 14),
-        Row(
-          children: [
-            Expanded(
-              child: SizedBox(
-                height: 48,
-                child: FilledButton.icon(
-                  key: const Key('external_camera_capture_button'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: HermesColors.accentTeal,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  onPressed: canCapture ? () => cubit.capture() : null,
-                  icon: state.isCapturing
-                      ? const SizedBox(
-                          key: Key('external_camera_capture_progress'),
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.camera_alt_outlined, size: 16),
-                  label: const Text('Capture'),
-                ),
-              ),
-            ),
-            if (state.status == ExternalCameraPreviewStatus.captured) ...[
-              const SizedBox(width: 12),
-              Expanded(
-                child: SizedBox(
-                  height: 48,
-                  child: OutlinedButton(
-                    key: const Key('external_camera_retake_button'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: HermesColors.inkPrimary,
-                      backgroundColor: HermesColors.cardSurface,
-                      side: const BorderSide(color: HermesColors.border),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    // The stream keeps running, so a retake is just another
-                    // capture request.
-                    onPressed: () => cubit.capture(),
-                    child: const Text('Retake'),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
       ],
     );
   }
@@ -305,6 +242,94 @@ class _LivePreviewPane extends StatelessWidget {
     if (state.deviceName.isEmpty) return modePart;
     if (modePart.isEmpty) return state.deviceName;
     return '${state.deviceName} • $modePart';
+  }
+}
+
+/// Pinned bottom control row. Lives outside the scrolling [ListView] so the
+/// capture/retake actions stay reachable after a still is inserted above them.
+class _CaptureBar extends StatelessWidget {
+  const _CaptureBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<ExternalCameraPreviewCubit, ExternalCameraPreviewState>(
+      builder: (context, state) {
+        final cubit = context.read<ExternalCameraPreviewCubit>();
+        // Mirrors the cubit's capture guard: the stream stays live through
+        // `captured` and `captureFailed`, so both must offer a working retry.
+        final canCapture =
+            (state.status == ExternalCameraPreviewStatus.previewing ||
+                state.status == ExternalCameraPreviewStatus.captured ||
+                state.status == ExternalCameraPreviewStatus.captureFailed) &&
+            !state.isCapturing;
+
+        if (state.status != ExternalCameraPreviewStatus.previewing &&
+            state.status != ExternalCameraPreviewStatus.captured &&
+            state.status != ExternalCameraPreviewStatus.captureFailed) {
+          // The other panes carry their own action button; never double up.
+          return const SizedBox.shrink();
+        }
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: FilledButton.icon(
+                    key: const Key('external_camera_capture_button'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: HermesColors.accentTeal,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: canCapture ? () => cubit.capture() : null,
+                    icon: state.isCapturing
+                        ? const SizedBox(
+                            key: Key('external_camera_capture_progress'),
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.camera_alt_outlined, size: 16),
+                    label: const Text('Capture'),
+                  ),
+                ),
+              ),
+              if (state.status == ExternalCameraPreviewStatus.captured) ...[
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SizedBox(
+                    height: 48,
+                    child: OutlinedButton(
+                      key: const Key('external_camera_retake_button'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: HermesColors.inkPrimary,
+                        backgroundColor: HermesColors.cardSurface,
+                        side: const BorderSide(color: HermesColors.border),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      // The stream keeps running, so a retake is just another
+                      // capture request.
+                      onPressed: () => cubit.capture(),
+                      child: const Text('Retake'),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 
