@@ -161,6 +161,27 @@ class ToolSearchIndex {
     ),
     ToolCategorySpec(
       <String>[
+        'screen',
+        'ui',
+        'element',
+        'elements',
+        'button',
+        'click',
+        'tap',
+        'accessibility',
+        'reader',
+        'visible',
+        'field',
+        'form',
+        'label',
+        'widget',
+        'menu',
+        'dialog',
+      ],
+      <String>['ui_find_elements'],
+    ),
+    ToolCategorySpec(
+      <String>[
         'health',
         'step',
         'heart',

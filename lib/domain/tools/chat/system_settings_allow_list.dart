@@ -32,9 +32,12 @@ class SystemSettingsAllowList {
   ///   must reach after choosing "don't ask again"). `notification_app_settings`
   ///   is intentionally NOT a value — no such Android action exists; use
   ///   [appDetails] instead (it lands on the per-app notification/permission row).
+  /// - [accessibility]: the accessibility-services list page, required because
+  ///   accessibility cannot be requested through a runtime permission dialog.
   static const String notificationListener = 'notification_listener';
   static const String nfc = 'nfc';
   static const String appDetails = 'app_details';
+  static const String accessibility = 'accessibility';
 
   /// Every value accepted by `launch_system_setting`, in a stable order.
   static const List<String> values = <String>[
@@ -49,6 +52,7 @@ class SystemSettingsAllowList {
     notificationListener,
     nfc,
     appDetails,
+    accessibility,
   ];
 
   /// Fast membership check (used by the tool service).
