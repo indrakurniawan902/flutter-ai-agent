@@ -139,6 +139,7 @@ void main() {
           )).thenAnswer((_) async => const Right(null));
       when(() => mockAmbient.cancelPeriodicCheck())
           .thenAnswer((_) async => const Right(null));
+      when(() => mockAmbient.regions).thenAnswer((_) => const []);
 
       sl.registerSingleton<SecureStorageService>(mockStorage);
       sl.registerSingleton<AmbientTriggerServiceBase>(mockAmbient);
@@ -257,6 +258,7 @@ void main() {
       final mockAmbient = MockAmbientTriggerService();
       when(() => mockBattery.isBatteryOptimizationDisabled())
           .thenAnswer((_) async => const Right(false));
+      when(() => mockAmbient.regions).thenAnswer((_) => const []);
 
       sl.registerSingleton<BatteryOptimizationServiceBase>(mockBattery);
       sl.registerSingleton<AmbientTriggerServiceBase>(mockAmbient);
@@ -304,6 +306,15 @@ void main() {
 
       verify(() => mockBattery.isBatteryOptimizationDisabled()).called(2);
       expect(find.byKey(const Key('battery_opt_status_exempt')), findsOneWidget);
+    });
+
+    testWidgets('renders geofence empty state when no geofences are registered',
+        (tester) async {
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('geofence_empty_state')), findsOneWidget);
+      expect(find.text('No active geofences.'), findsOneWidget);
     });
   });
 }

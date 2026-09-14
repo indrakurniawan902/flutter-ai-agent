@@ -218,7 +218,7 @@ void main() {
   });
 
   group('SettingsCubit - saveSettings', () {
-    const validUrl = 'https://indra-9router.my.id/v1';
+    const validUrl = 'https://example.com/v1';
     const validApiKey = 'sk-valid-key-12345';
     const validModel = 'ag-glm';
     const validTemp = 0.7;
@@ -497,7 +497,7 @@ void main() {
       act: (cubit) => cubit.updateFromProfile(
         const ServerProfile(
           id: 'p1',
-          name: 'VPS Oracle',
+          name: 'Remote Node',
           gatewayUrl: 'https://profile-url.com/v1',
           token: 'sk-profile-token',
           model: 'profile-model',

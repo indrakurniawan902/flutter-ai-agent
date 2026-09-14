@@ -193,7 +193,13 @@ class MockWorkmanagerPlatformWrapper extends Mock
     implements WorkmanagerPlatformWrapper {}
 
 class MockAmbientTriggerService extends Mock
-    implements AmbientTriggerServiceBase {}
+    implements AmbientTriggerServiceBase {
+  MockAmbientTriggerService() {
+    // The Pocket Node screen reads `regions` to render geofence status;
+    // default the getter so tests that don't stub it don't hit a null cast.
+    when(() => regions).thenReturn(const []);
+  }
+}
 
 // Battery Optimization
 class MockBatteryOptimizationPlatformWrapper extends Mock

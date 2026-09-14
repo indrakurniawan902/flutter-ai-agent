@@ -96,7 +96,7 @@ void main() {
       await tester.pumpWidget(wrapDrawer(const SessionDrawer()));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('session_empty_label')), findsOneWidget);
-      expect(find.text('No chats yet'), findsOneWidget);
+      expect(find.text('Start a new conversation.'), findsOneWidget);
     });
 
     testWidgets('lists sessions and marks active one', (tester) async {

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/ambient_event.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/ambient_trigger_settings.dart';
 import 'package:flutter_ai_agent/domain/entities/gateway/gateway_connection_state.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
@@ -65,8 +66,9 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _permissionGate =
-        sl.isRegistered<PermissionGate>() ? sl<PermissionGate>() : PermissionGate();
+    _permissionGate = sl.isRegistered<PermissionGate>()
+        ? sl<PermissionGate>()
+        : PermissionGate();
     _initNodeTelemetry();
     _loadAmbientTriggerSettings();
     unawaited(_initialPermissionFlow());
@@ -109,34 +111,32 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
 
     if (_permissionGateCanRun) {
       try {
-        final status = await _permissionGate
-            .check(PermissionRationaleType.notifications);
+        final status = await _permissionGate.check(
+          PermissionRationaleType.notifications,
+        );
         notificationsGranted = status.isGranted;
       } catch (_) {}
     }
 
     if (sl.isRegistered<ExactAlarmServiceBase>()) {
       try {
-        exactAlarmAllowed =
-            await sl<ExactAlarmServiceBase>().canScheduleExactAlarms();
+        exactAlarmAllowed = await sl<ExactAlarmServiceBase>()
+            .canScheduleExactAlarms();
       } catch (_) {}
     }
 
     if (sl.isRegistered<NotificationTriageServiceBase>()) {
       try {
-        listenerGranted =
-            await sl<NotificationTriageServiceBase>().checkPermission();
+        listenerGranted = await sl<NotificationTriageServiceBase>()
+            .checkPermission();
       } catch (_) {}
     }
 
     if (sl.isRegistered<BatteryOptimizationServiceBase>()) {
       try {
-        final res =
-            await sl<BatteryOptimizationServiceBase>().isBatteryOptimizationDisabled();
-        res.fold(
-          (_) {},
-          (exempt) => batteryExempt = exempt,
-        );
+        final res = await sl<BatteryOptimizationServiceBase>()
+            .isBatteryOptimizationDisabled();
+        res.fold((_) {}, (exempt) => batteryExempt = exempt);
       } catch (_) {}
     }
 
@@ -183,8 +183,8 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
   Future<void> _loadAmbientTriggerSettings() async {
     if (sl.isRegistered<SecureStorageService>()) {
       try {
-        final settings =
-            await sl<SecureStorageService>().getAmbientTriggerSettings();
+        final settings = await sl<SecureStorageService>()
+            .getAmbientTriggerSettings();
         if (mounted) {
           setState(() {
             _geofenceEnabled = settings.geofenceEnabled;
@@ -298,13 +298,13 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
     if (!sl.isRegistered<SecureStorageService>()) return;
     try {
       await sl<SecureStorageService>().saveAmbientTriggerSettings(
-            AmbientTriggerSettings(
-              geofenceEnabled: _geofenceEnabled,
-              batteryWatchdogEnabled: _batteryWatchdogEnabled,
-              notificationListenerEnabled: _notificationListenerEnabled,
-              heartbeatEnabled: _heartbeatEnabled,
-            ),
-          );
+        AmbientTriggerSettings(
+          geofenceEnabled: _geofenceEnabled,
+          batteryWatchdogEnabled: _batteryWatchdogEnabled,
+          notificationListenerEnabled: _notificationListenerEnabled,
+          heartbeatEnabled: _heartbeatEnabled,
+        ),
+      );
     } catch (_) {}
   }
 
@@ -314,16 +314,13 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
         final service = sl<BatteryOptimizationServiceBase>();
         await service.requestDisableBatteryOptimization();
         final res = await service.isBatteryOptimizationDisabled();
-        res.fold(
-          (_) {},
-          (exempt) {
-            if (mounted) {
-              setState(() {
-                _batteryOptimizationExempt = exempt;
-              });
-            }
-          },
-        );
+        res.fold((_) {}, (exempt) {
+          if (mounted) {
+            setState(() {
+              _batteryOptimizationExempt = exempt;
+            });
+          }
+        });
       } catch (_) {}
     }
     _showFeedback('Battery optimization exemption requested.');
@@ -394,7 +391,8 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
       _latencyText = '$latency ms';
     });
     _showFeedback(
-        'Broadcast ping sent to connected gateway (${latency}ms RTT).');
+      'Broadcast ping sent to connected gateway (${latency}ms RTT).',
+    );
   }
 
   void _handleSelfDiagnostics() {
@@ -412,7 +410,8 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
     if (sl.isRegistered<AmbientTriggerServiceBase>()) operationalServices++;
     if (operationalServices < 6) operationalServices = 6;
     _showFeedback(
-        'Self diagnostics complete: $operationalServices services operational.');
+      'Self diagnostics complete: $operationalServices services operational.',
+    );
   }
 
   void _showFeedback(String message) {
@@ -445,9 +444,7 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
             tooltip: 'Action Center',
             onPressed: () {
               Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const ActionCenterScreen(),
-                ),
+                MaterialPageRoute(builder: (_) => const ActionCenterScreen()),
               );
             },
             icon: const Icon(Icons.notifications_active_outlined),
@@ -499,6 +496,7 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
             subtitle: 'Trigger ReAct actions on entry/exit radius',
             value: _geofenceEnabled,
             onChanged: (val) => _onTriggerChanged(geofence: val),
+            child: _buildGeofenceStatus(),
           ),
           const SizedBox(height: 8),
           SizedBox(
@@ -683,8 +681,7 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
           ctaLabel: 'Buka Pengaturan',
           onTap: _handleOpenExactAlarmSettings,
         ),
-      if (_notificationListenerEnabled &&
-          _notificationListenerGranted == false)
+      if (_notificationListenerEnabled && _notificationListenerGranted == false)
         _buildPermissionBannerRow(
           key: const Key('permission_banner_notification_listener'),
           message: 'Notification listener belum aktif',
@@ -780,8 +777,11 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
         children: [
           Row(
             children: [
-              const Icon(Icons.router_outlined,
-                  size: 20, color: HermesColors.electricTeal),
+              const Icon(
+                Icons.router_outlined,
+                size: 20,
+                color: HermesColors.electricTeal,
+              ),
               const SizedBox(width: 8),
               Text(
                 'RPC Node Telemetry',
@@ -841,6 +841,39 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
     );
   }
 
+  Widget _buildGeofenceStatus() {
+    final regions = sl.isRegistered<AmbientTriggerServiceBase>()
+        ? sl<AmbientTriggerServiceBase>().regions
+        : <GeofenceRegion>[];
+
+    if (regions.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 6),
+        child: Text(
+          'No active geofences.',
+          key: Key('geofence_empty_state'),
+          style: TextStyle(fontSize: 11, color: HermesColors.inkMuted),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: regions.map((region) {
+        return Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            '${region.id} (${region.radiusMeters.toStringAsFixed(0)}m)',
+            style: HermesTypography.monospace(
+              fontSize: 11,
+              color: HermesColors.inkSecondary,
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
   Widget _buildTriggerTile({
     required Key key,
     required Key switchKey,
@@ -848,6 +881,7 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
     required String subtitle,
     required bool value,
     required ValueChanged<bool> onChanged,
+    Widget? child,
   }) {
     return Container(
       key: key,
@@ -857,40 +891,48 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: HermesColors.border),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: HermesColors.inkPrimary,
-                  ),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: HermesColors.inkPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: HermesColors.inkMuted,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: HermesColors.inkMuted,
-                  ),
+              ),
+              Switch.adaptive(
+                key: switchKey,
+                value: value,
+                activeThumbColor: HermesColors.electricTeal,
+                activeTrackColor: HermesColors.electricTeal.withValues(
+                  alpha: 0.3,
                 ),
-              ],
-            ),
+                inactiveThumbColor: HermesColors.inkMuted,
+                inactiveTrackColor: HermesColors.deepObsidian,
+                onChanged: onChanged,
+              ),
+            ],
           ),
-          Switch.adaptive(
-            key: switchKey,
-            value: value,
-            activeThumbColor: HermesColors.electricTeal,
-            activeTrackColor: HermesColors.electricTeal.withValues(alpha: 0.3),
-            inactiveThumbColor: HermesColors.inkMuted,
-            inactiveTrackColor: HermesColors.deepObsidian,
-            onChanged: onChanged,
-          ),
+          ?child,
         ],
       ),
     );
@@ -909,18 +951,17 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
         backgroundColor: HermesColors.cardSurface,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         side: const BorderSide(color: HermesColors.border),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       icon: Icon(icon, size: 16, color: HermesColors.electricTeal),
       label: Text(
         label,
         style: HermesTypography.monospace(
-            fontSize: 11, fontWeight: FontWeight.w500),
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+        ),
       ),
       onPressed: onTap,
     );
   }
 }
-

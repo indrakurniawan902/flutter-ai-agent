@@ -404,7 +404,7 @@ class _SettingsViewState extends State<_SettingsView> {
                       keyboardType: TextInputType.url,
                       decoration: const InputDecoration(
                         labelText: 'Base URL',
-                        hintText: 'https://indra-9router.my.id/v1',
+                        hintText: 'https://api.openai.com/v1',
                         prefixIcon: Icon(Icons.dns),
                         border: OutlineInputBorder(),
                       ),
@@ -460,7 +460,7 @@ class _SettingsViewState extends State<_SettingsView> {
                       controller: _modelController,
                       decoration: const InputDecoration(
                         labelText: 'Model Name',
-                        hintText: 'ag-glm',
+                        hintText: 'gpt-4o',
                         prefixIcon: Icon(Icons.psychology),
                         border: OutlineInputBorder(),
                       ),

@@ -14,8 +14,8 @@ void main() {
 
   final profile1 = ServerProfile(
     id: 'profile-1',
-    name: 'VPS Oracle',
-    gatewayUrl: 'https://indra-9router.my.id/v1',
+    name: 'Remote Node',
+    gatewayUrl: 'https://example.com/v1',
     token: 'sk-token-1',
     isActive: true,
     lastConnected: DateTime.utc(2026, 9, 11, 10, 0),
@@ -182,8 +182,8 @@ void main() {
       },
       act: (cubit) async {
         await cubit.addProfile(
-          name: 'VPS Oracle',
-          gatewayUrl: 'https://indra-9router.my.id/v1',
+          name: 'Remote Node',
+          gatewayUrl: 'https://example.com/v1',
           token: 'sk-token-1',
         );
       },
@@ -191,7 +191,7 @@ void main() {
         verify(() => mockStorageService.saveServerProfile(any(
               that: isA<ServerProfile>().having((p) => p.isActive, 'isActive', isTrue),
             ))).called(1);
-        verify(() => mockStorageService.saveBaseUrl('https://indra-9router.my.id/v1')).called(1);
+        verify(() => mockStorageService.saveBaseUrl('https://example.com/v1')).called(1);
         verify(() => mockStorageService.saveApiKey('sk-token-1')).called(1);
       },
       expect: () => [
@@ -323,7 +323,7 @@ void main() {
                   .having((p) => p.temperature, 'temperature', 1.2),
             ))).called(1);
         verify(() => mockStorageService.saveSettings(
-              baseUrl: 'https://indra-9router.my.id/v1',
+              baseUrl: 'https://example.com/v1',
               apiKey: 'sk-token-1',
               model: 'm-new',
               temperature: 1.2,

@@ -21,7 +21,7 @@ void main() {
     mockStorageService = MockSecureStorageService();
     mockMemoryService = MockLocalMemoryService();
     when(() => mockStorageService.getBaseUrl())
-        .thenAnswer((_) async => 'https://indra-9router.my.id/v1');
+        .thenAnswer((_) async => 'https://example.com/v1');
     when(() => mockStorageService.getApiKey())
         .thenAnswer((_) async => 'sk-test');
     when(() => mockStorageService.getModel())

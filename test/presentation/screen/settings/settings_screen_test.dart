@@ -24,8 +24,8 @@ void main() {
 
   final profile1 = ServerProfile(
     id: 'p1',
-    name: 'VPS Oracle',
-    gatewayUrl: 'https://indra-9router.my.id/v1',
+    name: 'Remote Node',
+    gatewayUrl: 'https://example.com/v1',
     token: 'sk-token-1',
     isActive: true,
   );
@@ -84,7 +84,7 @@ void main() {
     testWidgets('renders all required input fields and save button', (tester) async {
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: 'sk-initial-key',
           model: 'ag-glm',
           temperature: 0.7,
@@ -105,7 +105,7 @@ void main() {
       final baseUrlField = tester.widget<TextFormField>(
         find.byKey(const Key('settings_base_url_field')),
       );
-      expect(baseUrlField.controller?.text, 'https://indra-9router.my.id/v1');
+      expect(baseUrlField.controller?.text, 'https://example.com/v1');
 
       final apiKeyField = tester.widget<TextFormField>(
         find.byKey(const Key('settings_api_key_field')),
@@ -126,7 +126,7 @@ void main() {
     testWidgets('renders progressive tool pruning toggle reflecting settings state', (tester) async {
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: 'sk-initial-key',
           model: 'ag-glm',
           temperature: 0.7,
@@ -145,7 +145,7 @@ void main() {
 
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: 'sk-initial-key',
           model: 'ag-glm',
           temperature: 0.7,
@@ -166,7 +166,7 @@ void main() {
     testWidgets('toggles API key obscureText when visibility icon is tapped', (tester) async {
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: 'sk-secret-key',
           model: 'ag-glm',
           temperature: 0.7,
@@ -247,7 +247,7 @@ void main() {
     testWidgets('calls saveSettings when valid data is submitted', (tester) async {
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: 'sk-valid-key',
           model: 'ag-glm',
           temperature: 0.7,
@@ -270,7 +270,7 @@ void main() {
       await tester.pump();
 
       verify(() => mockSettingsCubit.saveSettings(
-            baseUrl: 'https://indra-9router.my.id/v1',
+            baseUrl: 'https://example.com/v1',
             apiKey: 'sk-valid-key',
             model: 'ag-glm',
             temperature: 0.7,
@@ -283,7 +283,7 @@ void main() {
         mockSettingsCubit,
         Stream.fromIterable([
           const SettingsSuccess(
-            baseUrl: 'https://indra-9router.my.id/v1',
+            baseUrl: 'https://example.com/v1',
             apiKey: 'sk-key',
             model: 'ag-glm',
             temperature: 0.7,
@@ -291,7 +291,7 @@ void main() {
           ),
         ]),
         initialState: const SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: 'sk-key',
           model: 'ag-glm',
           temperature: 0.7,
@@ -308,7 +308,7 @@ void main() {
     testWidgets('calls resetToDefaults when reset button in AppBar is tapped', (tester) async {
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: 'sk-key',
           model: 'ag-glm',
           temperature: 0.7,
@@ -332,7 +332,7 @@ void main() {
     testWidgets('renders server profile switcher UI components', (tester) async {
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: '«reda...…»',
           model: 'ag-glm',
           temperature: 0.7,
@@ -350,13 +350,13 @@ void main() {
 
       expect(find.byKey(const Key('settings_server_profile_dropdown')), findsOneWidget);
       expect(find.byKey(const Key('settings_add_profile_button')), findsOneWidget);
-      expect(find.text('VPS Oracle (Active)'), findsOneWidget);
+      expect(find.text('Remote Node (Active)'), findsOneWidget);
     });
 
     testWidgets('selecting a profile in dropdown calls switchActiveProfile', (tester) async {
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: '«reda...…»',
           model: 'ag-glm',
           temperature: 0.7,
@@ -388,7 +388,7 @@ void main() {
     testWidgets('tapping add server profile button invokes the add-profile navigation callback', (tester) async {
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: 'sk-key',
           model: 'ag-glm',
           temperature: 0.7,
@@ -412,7 +412,7 @@ void main() {
     testWidgets('settings no longer renders the legacy add-profile dialog fields', (tester) async {
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: 'sk-key',
           model: 'ag-glm',
           temperature: 0.7,
@@ -435,7 +435,7 @@ void main() {
     testWidgets('tapping delete profile button calls deleteProfile on active profile', (tester) async {
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: '«reda...…»',
           model: 'ag-glm',
           temperature: 0.7,
@@ -464,7 +464,7 @@ void main() {
     testWidgets('displays SnackBar message when ServerProfileOperationSuccess is emitted', (tester) async {
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: '«reda...…»',
           model: 'ag-glm',
           temperature: 0.7,
@@ -477,7 +477,7 @@ void main() {
           ServerProfileOperationSuccess(
             profiles: [profile1],
             activeProfile: profile1,
-            message: 'Switched to profile "VPS Oracle"',
+            message: 'Switched to profile "Remote Node"',
           ),
         ]),
         initialState: const ServerProfileLoaded(profiles: [], activeProfile: null),
@@ -487,13 +487,13 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.text('Switched to profile "VPS Oracle"'), findsOneWidget);
+      expect(find.text('Switched to profile "Remote Node"'), findsOneWidget);
     });
 
     testWidgets('displays SnackBar error message when ServerProfileError is emitted', (tester) async {
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: 'test-api-key',
           model: 'ag-glm',
           temperature: 0.7,
@@ -585,7 +585,7 @@ void main() {
     testWidgets('saving settings also updates the active server profile', (tester) async {
       when(() => mockSettingsCubit.state).thenReturn(
         const SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: 'sk-valid-key',
           model: 'ag-glm',
           temperature: 0.7,
@@ -599,7 +599,7 @@ void main() {
             progressiveToolPruning: any(named: 'progressiveToolPruning'),
           )).thenAnswer((_) async => true);
       when(() => mockServerProfileCubit.updateActiveProfile(
-            gatewayUrl: 'https://indra-9router.my.id/v1',
+            gatewayUrl: 'https://example.com/v1',
             token: 'sk-valid-key',
             model: 'ag-glm',
             temperature: 0.7,
@@ -614,7 +614,7 @@ void main() {
       await tester.pumpAndSettle();
 
       verify(() => mockServerProfileCubit.updateActiveProfile(
-            gatewayUrl: 'https://indra-9router.my.id/v1',
+            gatewayUrl: 'https://example.com/v1',
             token: 'sk-valid-key',
             model: 'ag-glm',
             temperature: 0.7,
