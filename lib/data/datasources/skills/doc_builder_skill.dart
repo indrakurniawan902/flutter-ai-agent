@@ -4,6 +4,7 @@ import 'package:dartz/dartz.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/data/datasources/skills/markdown_pdf_renderer.dart';
 import 'package:flutter_ai_agent/domain/entities/skills/doc_builder_skill_descriptor.dart';
 import 'package:flutter_ai_agent/domain/entities/skills/skill.dart';
@@ -98,7 +99,11 @@ class DocBuilderSkill {
       await fileSystem.writeFileAsBytes(path, bytes);
       return Right('Document exported successfully to $path');
     } catch (e) {
-      return Left(CacheFailure('Failed to export PDF document: $e'));
+      return Left(
+        CacheFailure(
+          FailureMessage.humanize(e, context: 'Failed to export PDF document'),
+        ),
+      );
     }
   }
 

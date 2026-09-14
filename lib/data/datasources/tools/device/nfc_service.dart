@@ -7,6 +7,7 @@ import 'package:nfc_manager/nfc_manager.dart';
 import 'package:nfc_manager/nfc_manager_android.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
 
 /// Plain-Dart view of a discovered tag. Holding the [transceive] callback here
@@ -233,7 +234,11 @@ class NfcService implements NfcServiceBase {
       final availability = await _platform.availability();
       return Right(availability != 'unsupported');
     } catch (e) {
-      return Left(ServerFailure('Failed to check NFC availability: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Failed to check NFC availability'),
+        ),
+      );
     }
   }
 
@@ -243,7 +248,11 @@ class NfcService implements NfcServiceBase {
       final availability = await _platform.availability();
       return Right(availability == 'enabled');
     } catch (e) {
-      return Left(ServerFailure('Failed to check NFC state: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Failed to check NFC state'),
+        ),
+      );
     }
   }
 
@@ -259,7 +268,11 @@ class NfcService implements NfcServiceBase {
         ServerFailure('NFC scan timed out. Please tap the card again.'),
       );
     } catch (e) {
-      return Left(ServerFailure('Failed to read NFC card UID: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Failed to read NFC card UID'),
+        ),
+      );
     }
   }
 
@@ -301,7 +314,11 @@ class NfcService implements NfcServiceBase {
         ServerFailure('NFC scan timed out. Please tap the card again.'),
       );
     } catch (e) {
-      return Left(ServerFailure('Failed to read e-money balance: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Failed to read e-money balance'),
+        ),
+      );
     }
   }
 

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:injectable/injectable.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/clipboard_service.dart';
 
 abstract class ClipboardPlatformWrapper {
@@ -34,7 +35,11 @@ class ClipboardService implements ClipboardServiceBase {
       final data = await _clipboard.getData(Clipboard.kTextPlain);
       return Right(data?.text ?? '');
     } catch (e) {
-      return Left(ServerFailure('Clipboard read error: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Clipboard read error'),
+        ),
+      );
     }
   }
 
@@ -44,7 +49,11 @@ class ClipboardService implements ClipboardServiceBase {
       await _clipboard.setData(ClipboardData(text: text));
       return const Right('Text copied to clipboard');
     } catch (e) {
-      return Left(ServerFailure('Clipboard write error: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Clipboard write error'),
+        ),
+      );
     }
   }
 }

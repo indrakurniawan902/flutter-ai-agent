@@ -29,6 +29,7 @@ import 'package:flutter_ai_agent/domain/entities/gateway/gateway_message.dart';
 import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
 import 'package:flutter_ai_agent/domain/entities/share/shared_payload.dart';
 import 'package:flutter_ai_agent/presentation/screen/share/cubit/share_target_cubit.dart';
+import 'package:flutter_ai_agent/presentation/widget/app_toast.dart';
 import 'package:flutter_ai_agent/presentation/screen/share/cubit/share_target_state.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
 import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
@@ -258,12 +259,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _isVoiceRecording = false;
         _isHoldToSpeak = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
+      AppToast.error(context, error);
     });
 
     _voiceOutputErrorSub =
@@ -273,12 +269,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _isVoiceRecording = false;
         _isHoldToSpeak = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
+      AppToast.error(context, error);
     });
 
     _gatewayTextDeltaSub = client?.textDeltaStream.listen((delta) {
@@ -310,13 +301,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             if (_gatewayBusy) _gatewayBusy = false;
           });
           if (message.code != 'chat_cancelled') {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(message.message),
-                backgroundColor: Theme.of(context).colorScheme.error,
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
+            AppToast.error(context, message.message);
           }
         }
       }
@@ -579,21 +564,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           _isVoiceRecording = false;
           _isHoldToSpeak = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Izin mikrofon belum aktif — buka pengaturan aplikasi '
-              'untuk mengaktifkannya',
-            ),
-            backgroundColor: Colors.redAccent,
-            behavior: SnackBarBehavior.floating,
-            action: SnackBarAction(
-              label: 'Buka Pengaturan',
-              onPressed: () {
-                unawaited(AppSettingsOpenerRegistry.instance.openAppSettings());
-              },
-            ),
-          ),
+        AppToast.error(
+          context,
+          'Izin mikrofon belum aktif — buka pengaturan aplikasi '
+          'untuk mengaktifkannya',
+          actionLabel: 'Buka Pengaturan',
+          onAction: () {
+            unawaited(AppSettingsOpenerRegistry.instance.openAppSettings());
+          },
         );
       }
       return;
@@ -605,12 +583,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     result.fold(
       (failure) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(failure.message),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-          );
+          AppToast.error(context, failure.message);
         }
       },
       (_) {
@@ -647,12 +620,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     result.fold(
       (failure) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(failure.message),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-          );
+          AppToast.error(context, failure.message);
         }
       },
       (text) {
@@ -705,15 +673,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     return idx < 0 ? normalized : normalized.substring(idx + 1);
   }
 
-  void _showAttachmentSnackBar(String message, {SnackBarAction? action}) {
+  void _showAttachmentSnackBar(
+    String message, {
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.redAccent,
-        behavior: SnackBarBehavior.floating,
-        action: action,
-      ),
+    AppToast.error(
+      context,
+      message,
+      actionLabel: actionLabel,
+      onAction: onAction,
     );
   }
 
@@ -837,12 +807,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (!cameraGranted) {
       _showAttachmentSnackBar(
         'Izin kamera belum aktif',
-        action: SnackBarAction(
-          label: 'Buka Pengaturan',
-          onPressed: () {
-            unawaited(AppSettingsOpenerRegistry.instance.openAppSettings());
-          },
-        ),
+        actionLabel: 'Buka Pengaturan',
+        onAction: () {
+          unawaited(AppSettingsOpenerRegistry.instance.openAppSettings());
+        },
       );
       return;
     }
@@ -1180,20 +1148,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _scrollToBottom();
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(
-            'No prompt bound to this NFC tag. Bind it in Settings > NFC Tag Triggers.',
-          ),
-          backgroundColor: const Color(0xFF1E293B),
-          behavior: SnackBarBehavior.floating,
-          action: SnackBarAction(
-            label: 'Open Settings',
-            onPressed: () {
-              context.pushNamed(AppRoutes.nrSettings);
-            },
-          ),
-        ),
+      AppToast.error(
+        context,
+        'No prompt bound to this NFC tag. Bind it in Settings > NFC Tag Triggers.',
+        actionLabel: 'Open Settings',
+        onAction: () {
+          context.pushNamed(AppRoutes.nrSettings);
+        },
       );
     } finally {
       _isNfcScanning = false;
@@ -1219,14 +1180,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Could not read e-Money balance. Enable NFC and tap the card, or use Settings > NFC Tag Triggers.',
-            ),
-            backgroundColor: const Color(0xFF1E293B),
-            behavior: SnackBarBehavior.floating,
-          ),
+        AppToast.error(
+          context,
+          'Could not read e-Money balance. Enable NFC and tap the card, or use Settings > NFC Tag Triggers.',
         );
       }
     } finally {
@@ -1450,12 +1406,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       }
     } else {
       if (_stagedAttachment != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Attachments are only supported in direct mode'),
-            backgroundColor: Colors.redAccent,
-            behavior: SnackBarBehavior.floating,
-          ),
+        AppToast.error(
+          context,
+          'Attachments are only supported in direct mode',
         );
         _scrollToBottom();
         return;
@@ -1478,13 +1431,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           } catch (_) {}
         }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content:
-                Text('Gateway not connected. Please connect or scan QR code.'),
-            backgroundColor: Colors.redAccent,
-            behavior: SnackBarBehavior.floating,
-          ),
+        AppToast.error(
+          context,
+          'Gateway not connected. Please connect or scan QR code.',
         );
       }
     }
@@ -1509,8 +1458,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
     final rpcCubit = _resolveGatewayRpcCubit();
     final agentForProvider = _resolveAgentCubit();
 
@@ -1541,13 +1488,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           }
           _showPermissionRationaleForResponse(context, state.response);
         } else if (state is AgentError) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(state.message),
-              backgroundColor: colorScheme.error,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+          AppToast.error(context, state.message);
         }
       },
       builder: (context, state) {
@@ -1663,13 +1604,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               }
             }
           } else if (rpcState is GatewayRpcError) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(rpcState.message),
-                backgroundColor: colorScheme.error,
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
+            AppToast.error(context, rpcState.message);
           }
         },
         child: bodyContent,
