@@ -1,7 +1,9 @@
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/utils/app_theme.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/piper_voice.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_cubit.dart';
@@ -617,6 +619,192 @@ void main() {
             model: 'ag-glm',
             temperature: 0.7,
           )).called(1);
+    });
+  });
+
+  group('SettingsScreen - Voice section', () {
+    setUp(() {
+      registerFallbackValue(TtsEngineMode.system);
+    });
+
+    testWidgets('section renders with both engine segments and all catalog voice rows',
+        (tester) async {
+      when(() => mockSettingsCubit.state).thenReturn(
+        const SettingsLoaded(
+          baseUrl: 'https://indra-9router.my.id/v1',
+          apiKey: 'sk-key',
+          model: 'ag-glm',
+          temperature: 0.7,
+          ttsEngineMode: TtsEngineMode.system,
+          piperVoiceId: 'id_ID-news_tts-medium',
+          piperVoiceReady: {},
+        ),
+      );
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('settings_voice_section')), findsOneWidget);
+      expect(
+        find.byKey(const Key('settings_tts_engine_picker')),
+        findsOneWidget,
+      );
+      expect(find.text('System'), findsOneWidget);
+      expect(find.text('Piper (offline)'), findsOneWidget);
+      for (final voice in kPiperVoiceCatalog) {
+        expect(
+          find.byKey(Key('settings_piper_voice_row_${voice.id}')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(Key('settings_piper_voice_radio_${voice.id}')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(Key('settings_piper_voice_status_${voice.id}')),
+          findsOneWidget,
+        );
+      }
+    });
+
+    testWidgets('tapping Piper offline calls setTtsEngineMode with piper',
+        (tester) async {
+      when(() => mockSettingsCubit.state).thenReturn(
+        const SettingsLoaded(
+          baseUrl: 'https://indra-9router.my.id/v1',
+          apiKey: 'sk-key',
+          model: 'ag-glm',
+          temperature: 0.7,
+          ttsEngineMode: TtsEngineMode.system,
+        ),
+      );
+      when(() => mockSettingsCubit.setTtsEngineMode(any()))
+          .thenAnswer((_) async {});
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      final piperOption = find.text('Piper (offline)');
+      await tester.ensureVisible(piperOption);
+      await tester.tap(piperOption);
+      await tester.pump();
+
+      verify(
+        () => mockSettingsCubit.setTtsEngineMode(TtsEngineMode.piper),
+      ).called(1);
+    });
+
+    testWidgets('voice not ready shows Download and tapping calls download',
+        (tester) async {
+      const voiceId = 'id_ID-news_tts-medium';
+      when(() => mockSettingsCubit.state).thenReturn(
+        const SettingsLoaded(
+          baseUrl: 'https://indra-9router.my.id/v1',
+          apiKey: 'sk-key',
+          model: 'ag-glm',
+          temperature: 0.7,
+          piperVoiceId: voiceId,
+          piperVoiceReady: {voiceId: false},
+        ),
+      );
+      when(() => mockSettingsCubit.downloadPiperVoice(any()))
+          .thenAnswer((_) async {});
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Not downloaded'), findsWidgets);
+      final downloadButton =
+          find.byKey(const Key('settings_piper_voice_download_$voiceId'));
+      expect(downloadButton, findsOneWidget);
+      await tester.ensureVisible(downloadButton);
+      await tester.tap(downloadButton);
+      await tester.pump();
+
+      verify(() => mockSettingsCubit.downloadPiperVoice(voiceId)).called(1);
+    });
+
+    testWidgets('voice ready shows Downloaded plus delete button',
+        (tester) async {
+      const voiceId = 'id_ID-news_tts-medium';
+      when(() => mockSettingsCubit.state).thenReturn(
+        const SettingsLoaded(
+          baseUrl: 'https://indra-9router.my.id/v1',
+          apiKey: 'sk-key',
+          model: 'ag-glm',
+          temperature: 0.7,
+          piperVoiceId: voiceId,
+          piperVoiceReady: {voiceId: true},
+        ),
+      );
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('settings_piper_voice_status_$voiceId')),
+        findsOneWidget,
+      );
+      expect(find.text('Downloaded'), findsWidgets);
+      expect(
+        find.byKey(const Key('settings_piper_voice_delete_$voiceId')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('settings_piper_voice_download_$voiceId')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('download in progress renders LinearProgressIndicator',
+        (tester) async {
+      const voiceId = 'id_ID-news_tts-medium';
+      when(() => mockSettingsCubit.state).thenReturn(
+        const SettingsVoiceDownloadInProgress(
+          downloadingVoiceId: voiceId,
+          progress: 0.5,
+          baseUrl: 'https://indra-9router.my.id/v1',
+          apiKey: 'sk-key',
+          model: 'ag-glm',
+          temperature: 0.7,
+          piperVoiceId: voiceId,
+          piperVoiceReady: {voiceId: false},
+        ),
+      );
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('settings_piper_voice_progress_$voiceId')),
+        findsOneWidget,
+      );
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.text('50%'), findsOneWidget);
+    });
+
+    testWidgets('piperError renders the error text', (tester) async {
+      when(() => mockSettingsCubit.state).thenReturn(
+        const SettingsLoaded(
+          baseUrl: 'https://indra-9router.my.id/v1',
+          apiKey: 'sk-key',
+          model: 'ag-glm',
+          temperature: 0.7,
+          piperError: 'Voice model checksum mismatch - download rejected',
+        ),
+      );
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('settings_piper_error_text')),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Voice model checksum mismatch - download rejected'),
+        findsOneWidget,
+      );
     });
   });
 }

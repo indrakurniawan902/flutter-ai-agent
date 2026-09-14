@@ -85,7 +85,8 @@ class MockIosDeviceInfo extends Mock implements IosDeviceInfo {}
 
 class MockLinuxDeviceInfo extends Mock implements LinuxDeviceInfo {}
 
-class MockDeviceContextService extends Mock implements DeviceContextServiceBase {}
+class MockDeviceContextService extends Mock
+    implements DeviceContextServiceBase {}
 
 // Clipboard
 class MockClipboardService extends Mock implements ClipboardServiceBase {}
@@ -126,7 +127,8 @@ class MockNotificationListenerPlatformWrapper extends Mock
     implements NotificationListenerPlatformWrapper {}
 
 // File Workspace
-class MockFileWorkspaceService extends Mock implements FileWorkspaceServiceBase {}
+class MockFileWorkspaceService extends Mock
+    implements FileWorkspaceServiceBase {}
 
 class MockFileSystemWrapper extends Mock implements FileSystemWrapper {}
 
@@ -159,6 +161,10 @@ class MockPlatformTtsEngine extends Mock implements PlatformTtsEngine {}
 class MockTtsClient extends Mock implements TtsClient {}
 
 class MockVoiceOutputService extends Mock implements VoiceOutputServiceBase {}
+
+class MockPiperTtsEngine extends Mock implements PiperTtsEngineBase {}
+
+class MockPiperVoiceStore extends Mock implements PiperVoiceStoreBase {}
 
 // Background service
 class MockBackgroundServicePlatformWrapper extends Mock
@@ -208,5 +214,3 @@ class MockAccessibilityInspectorService extends Mock
 
 class MockAccessibilityInspectorPlatformWrapper extends Mock
     implements AccessibilityInspectorPlatformWrapper {}
-
-

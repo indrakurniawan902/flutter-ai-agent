@@ -62,6 +62,8 @@ import 'package:flutter_ai_agent/data/datasources/tools/chat/notification_triage
     as _i447;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/url_reader_service.dart'
     as _i840;
+import 'package:flutter_ai_agent/data/datasources/tools/chat/piper_tts_engine.dart'
+    as _i754;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/voice_input_service.dart'
     as _i845;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/voice_output_service.dart'
@@ -251,6 +253,12 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i45.PlatformTtsEngine>(
       () => _i753.FlutterTtsPlatformEngine(),
     );
+    gh.lazySingleton<_i45.PiperVoiceStoreBase>(
+      () => _i754.PiperVoiceStore.create(),
+    );
+    gh.lazySingleton<_i45.PiperTtsEngineBase>(
+      () => _i754.PiperTtsEngine.create(gh<_i45.PiperVoiceStoreBase>()),
+    );
     gh.lazySingleton<_i173.IntentLauncherServiceBase>(
       () => _i313.IntentLauncherServiceImpl.create(),
     );
@@ -315,6 +323,8 @@ extension GetItInjectableX on _i174.GetIt {
       () => _i452.SettingsCubit.create(
         secureStorageService: gh<_i348.SecureStorageService>(),
         nfcService: gh<_i350.NfcServiceBase>(),
+        piperVoiceStore: gh<_i45.PiperVoiceStoreBase>(),
+        voiceOutputService: gh<_i45.VoiceOutputServiceBase>(),
       ),
     );
     gh.factory<_i96.SkillsCubit>(
@@ -378,6 +388,9 @@ extension GetItInjectableX on _i174.GetIt {
       () => _i753.VoiceOutputService.create(
         gh<_i753.TtsClient>(),
         gh<_i45.PlatformTtsEngine>(),
+        gh<_i45.PiperTtsEngineBase>(),
+        gh<_i45.PiperVoiceStoreBase>(),
+        gh<_i348.SecureStorageService>(),
       ),
     );
     gh.lazySingleton<_i27.GatewayClientBase>(

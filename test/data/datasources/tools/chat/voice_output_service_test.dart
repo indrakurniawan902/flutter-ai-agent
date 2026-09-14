@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:dartz/dartz.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_ai_agent/common/exception.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
@@ -125,28 +126,30 @@ void main() {
       verify(() => mockPlayer.play(any(that: isA<BytesSource>()))).called(1);
     });
 
-    test('playing next item automatically when completed state emits',
-        () async {
-      final bytes1 = Uint8List.fromList([1, 2, 3]);
-      final bytes2 = Uint8List.fromList([4, 5, 6]);
+    test(
+      'playing next item automatically when completed state emits',
+      () async {
+        final bytes1 = Uint8List.fromList([1, 2, 3]);
+        final bytes2 = Uint8List.fromList([4, 5, 6]);
 
-      await service.queueAudio(bytes1);
-      await service.queueAudio(bytes2);
-      expect(service.queueLength, 1);
+        await service.queueAudio(bytes1);
+        await service.queueAudio(bytes2);
+        expect(service.queueLength, 1);
 
-      playerStateController.add(PlayerState.completed);
-      await pumpEventQueue();
+        playerStateController.add(PlayerState.completed);
+        await pumpEventQueue();
 
-      verify(() => mockPlayer.play(any(that: isA<BytesSource>()))).called(2);
-      expect(service.queueLength, 0);
-      expect(service.isPlaying, true);
+        verify(() => mockPlayer.play(any(that: isA<BytesSource>()))).called(2);
+        expect(service.queueLength, 0);
+        expect(service.isPlaying, true);
 
-      playerStateController.add(PlayerState.completed);
-      await pumpEventQueue();
+        playerStateController.add(PlayerState.completed);
+        await pumpEventQueue();
 
-      expect(service.isPlaying, false);
-      expect(service.currentStatus, VoiceOutputStatus.idle);
-    });
+        expect(service.isPlaying, false);
+        expect(service.currentStatus, VoiceOutputStatus.idle);
+      },
+    );
 
     test('queueAudio still plays at volume 0 when muted', () async {
       service.setMuted(true);
@@ -161,23 +164,25 @@ void main() {
   });
 
   group('VoiceOutputService - Barge-In / Interruption Handling', () {
-    test('interrupt stops player, clears queue and resets state to stopped',
-        () async {
-      final bytes1 = Uint8List.fromList([1, 2, 3]);
-      final bytes2 = Uint8List.fromList([4, 5, 6]);
+    test(
+      'interrupt stops player, clears queue and resets state to stopped',
+      () async {
+        final bytes1 = Uint8List.fromList([1, 2, 3]);
+        final bytes2 = Uint8List.fromList([4, 5, 6]);
 
-      await service.queueAudio(bytes1);
-      await service.queueAudio(bytes2);
-      expect(service.isPlaying, true);
-      expect(service.queueLength, 1);
+        await service.queueAudio(bytes1);
+        await service.queueAudio(bytes2);
+        expect(service.isPlaying, true);
+        expect(service.queueLength, 1);
 
-      await service.interrupt();
+        await service.interrupt();
 
-      expect(service.isPlaying, false);
-      expect(service.queueLength, 0);
-      expect(service.currentStatus, VoiceOutputStatus.stopped);
-      verify(() => mockPlayer.stop()).called(1);
-    });
+        expect(service.isPlaying, false);
+        expect(service.queueLength, 0);
+        expect(service.currentStatus, VoiceOutputStatus.stopped);
+        verify(() => mockPlayer.stop()).called(1);
+      },
+    );
 
     test('interrupt while idle is safe and does not throw', () async {
       await expectLater(service.interrupt(), completes);
@@ -224,31 +229,33 @@ void main() {
       verify(() => mockPlayer.play(any(that: isA<BytesSource>()))).called(1);
     });
 
-    test('speakText returns Left(Failure) when TTS throws and emits error',
-        () async {
-      when(
-        () => mockTtsClient.synthesize(
-          text: any(named: 'text'),
-          voice: any(named: 'voice'),
-          model: any(named: 'model'),
-          speed: any(named: 'speed'),
-        ),
-      ).thenThrow(Exception('TTS quota exceeded'));
+    test(
+      'speakText returns Left(Failure) when TTS throws and emits error',
+      () async {
+        when(
+          () => mockTtsClient.synthesize(
+            text: any(named: 'text'),
+            voice: any(named: 'voice'),
+            model: any(named: 'model'),
+            speed: any(named: 'speed'),
+          ),
+        ).thenThrow(Exception('TTS quota exceeded'));
 
-      final errors = <String>[];
-      final sub = service.errorStream.listen(errors.add);
+        final errors = <String>[];
+        final sub = service.errorStream.listen(errors.add);
 
-      final result = await service.speakText('Error text');
+        final result = await service.speakText('Error text');
 
-      await pumpEventQueue();
-      await sub.cancel();
+        await pumpEventQueue();
+        await sub.cancel();
 
-      expect(result.isLeft(), true);
-      expect(errors.isNotEmpty, true);
-      expect(errors.first, contains('Speech synthesis failed'));
-      expect(errors.first, isNot(contains('Exception')));
-      expect(service.currentStatus, VoiceOutputStatus.error);
-    });
+        expect(result.isLeft(), true);
+        expect(errors.isNotEmpty, true);
+        expect(errors.first, contains('Speech synthesis failed'));
+        expect(errors.first, isNot(contains('Exception')));
+        expect(service.currentStatus, VoiceOutputStatus.error);
+      },
+    );
 
     test('queueText synthesizes speech and queues audio chunk', () async {
       final audioBytes = Uint8List.fromList([7, 8, 9]);
@@ -269,46 +276,50 @@ void main() {
   });
 
   group('VoiceOutputService - Streaming Delta Chunking', () {
-    test('feedStreamingDelta buffers short deltas without synthesizing',
-        () async {
-      await service.feedStreamingDelta('Hello ');
-      await service.feedStreamingDelta('there! ');
+    test(
+      'feedStreamingDelta buffers short deltas without synthesizing',
+      () async {
+        await service.feedStreamingDelta('Hello ');
+        await service.feedStreamingDelta('there! ');
 
-      verifyNever(
-        () => mockTtsClient.synthesize(
-          text: any(named: 'text'),
-          voice: any(named: 'voice'),
-          model: any(named: 'model'),
-          speed: any(named: 'speed'),
-        ),
-      );
-    });
+        verifyNever(
+          () => mockTtsClient.synthesize(
+            text: any(named: 'text'),
+            voice: any(named: 'voice'),
+            model: any(named: 'model'),
+            speed: any(named: 'speed'),
+          ),
+        );
+      },
+    );
 
-    test('feedStreamingDelta synthesizes once buffer passes threshold',
-        () async {
-      final audio = Uint8List.fromList([1, 1]);
-      when(
-        () => mockTtsClient.synthesize(
-          text: any(named: 'text'),
-          voice: any(named: 'voice'),
-          model: any(named: 'model'),
-          speed: any(named: 'speed'),
-        ),
-      ).thenAnswer((_) async => audio);
+    test(
+      'feedStreamingDelta synthesizes once buffer passes threshold',
+      () async {
+        final audio = Uint8List.fromList([1, 1]);
+        when(
+          () => mockTtsClient.synthesize(
+            text: any(named: 'text'),
+            voice: any(named: 'voice'),
+            model: any(named: 'model'),
+            speed: any(named: 'speed'),
+          ),
+        ).thenAnswer((_) async => audio);
 
-      final longPrefix = List.filled(30, 'word ').join();
-      await service.feedStreamingDelta(longPrefix);
-      await service.feedStreamingDelta('final sentence. ');
+        final longPrefix = List.filled(30, 'word ').join();
+        await service.feedStreamingDelta(longPrefix);
+        await service.feedStreamingDelta('final sentence. ');
 
-      verify(
-        () => mockTtsClient.synthesize(
-          text: any(named: 'text'),
-          voice: any(named: 'voice'),
-          model: any(named: 'model'),
-          speed: any(named: 'speed'),
-        ),
-      ).called(1);
-    });
+        verify(
+          () => mockTtsClient.synthesize(
+            text: any(named: 'text'),
+            voice: any(named: 'voice'),
+            model: any(named: 'model'),
+            speed: any(named: 'speed'),
+          ),
+        ).called(1);
+      },
+    );
 
     test('flushStreaming synthesizes remaining partial text', () async {
       final audioTail = Uint8List.fromList([9, 9, 9]);
@@ -418,7 +429,10 @@ void main() {
         ),
       );
 
-      final result = await ttsClient.synthesize(text: 'Test TTS', voice: 'nova');
+      final result = await ttsClient.synthesize(
+        text: 'Test TTS',
+        voice: 'nova',
+      );
 
       expect(result, equals(Uint8List.fromList(bytes)));
     });
@@ -465,75 +479,80 @@ void main() {
       );
     });
 
-    test('synthesize uses AppConstants.defaultBaseUrl when baseUrl is empty',
-        () async {
-      final client = DioTtsClient(dio: mockDio);
-      when(
-        () => mockDio.post<List<int>>(
-          'https://indra-9router.my.id/v1/audio/speech',
-          data: any(named: 'data'),
-          options: any(named: 'options'),
-        ),
-      ).thenAnswer(
-        (_) async => Response<List<int>>(
-          data: [1, 2, 3],
-          statusCode: 200,
-          requestOptions: RequestOptions(path: '/audio/speech'),
-        ),
-      );
+    test(
+      'synthesize uses AppConstants.defaultBaseUrl when baseUrl is empty',
+      () async {
+        final client = DioTtsClient(dio: mockDio);
+        when(
+          () => mockDio.post<List<int>>(
+            'https://indra-9router.my.id/v1/audio/speech',
+            data: any(named: 'data'),
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer(
+          (_) async => Response<List<int>>(
+            data: [1, 2, 3],
+            statusCode: 200,
+            requestOptions: RequestOptions(path: '/audio/speech'),
+          ),
+        );
 
-      final result = await client.synthesize(text: 'Hello');
-      expect(result, equals(Uint8List.fromList([1, 2, 3])));
-    });
+        final result = await client.synthesize(text: 'Hello');
+        expect(result, equals(Uint8List.fromList([1, 2, 3])));
+      },
+    );
 
     test(
-        'synthesize throws UnsupportedEndpointException on 404 DioException',
-        () async {
-      when(
-        () => mockDio.post<List<int>>(
-          'https://api.openai.com/v1/audio/speech',
-          data: any(named: 'data'),
-          options: any(named: 'options'),
-        ),
-      ).thenThrow(
-        DioException(
-          requestOptions: RequestOptions(path: '/audio/speech'),
-          type: DioExceptionType.badResponse,
-          response: Response<dynamic>(
-            requestOptions: RequestOptions(path: '/audio/speech'),
-            statusCode: 404,
+      'synthesize throws UnsupportedEndpointException on 404 DioException',
+      () async {
+        when(
+          () => mockDio.post<List<int>>(
+            'https://api.openai.com/v1/audio/speech',
+            data: any(named: 'data'),
+            options: any(named: 'options'),
           ),
-        ),
-      );
+        ).thenThrow(
+          DioException(
+            requestOptions: RequestOptions(path: '/audio/speech'),
+            type: DioExceptionType.badResponse,
+            response: Response<dynamic>(
+              requestOptions: RequestOptions(path: '/audio/speech'),
+              statusCode: 404,
+            ),
+          ),
+        );
 
-      await expectLater(
-        () => ttsClient.synthesize(text: 'Test TTS'),
-        throwsA(isA<UnsupportedEndpointException>()),
-      );
-    });
+        await expectLater(
+          () => ttsClient.synthesize(text: 'Test TTS'),
+          throwsA(isA<UnsupportedEndpointException>()),
+        );
+      },
+    );
 
-    test('synthesize throws UnsupportedEndpointException on 404 response',
-        () async {
-      when(
-        () => mockDio.post<List<int>>(
-          'https://api.openai.com/v1/audio/speech',
-          data: any(named: 'data'),
-          options: any(named: 'options'),
-        ),
-      ).thenAnswer(
-        (_) async => Response<List<int>>(
-          data: [1],
-          statusCode: 404,
-          statusMessage: 'Not Found',
-          requestOptions: RequestOptions(path: '/audio/speech'),
-        ),
-      );
+    test(
+      'synthesize throws UnsupportedEndpointException on 404 response',
+      () async {
+        when(
+          () => mockDio.post<List<int>>(
+            'https://api.openai.com/v1/audio/speech',
+            data: any(named: 'data'),
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer(
+          (_) async => Response<List<int>>(
+            data: [1],
+            statusCode: 404,
+            statusMessage: 'Not Found',
+            requestOptions: RequestOptions(path: '/audio/speech'),
+          ),
+        );
 
-      await expectLater(
-        () => ttsClient.synthesize(text: 'Test TTS'),
-        throwsA(isA<UnsupportedEndpointException>()),
-      );
-    });
+        await expectLater(
+          () => ttsClient.synthesize(text: 'Test TTS'),
+          throwsA(isA<UnsupportedEndpointException>()),
+        );
+      },
+    );
   });
 
   group('VoiceOutputService - TTS engine selection & platform fallback', () {
@@ -679,6 +698,378 @@ void main() {
       verify(() => mockPlatformTts.stop()).called(1);
       expect(service.currentStatus, VoiceOutputStatus.stopped);
       expect(service.lastEngineUsed, isNull);
+    });
+  });
+
+  group('VoiceOutputService - Piper engine chain', () {
+    late MockPiperTtsEngine mockPiper;
+    late MockPiperVoiceStore mockVoiceStore;
+    late MockSecureStorageService mockSecureStorage;
+
+    setUp(() {
+      mockPiper = MockPiperTtsEngine();
+      mockVoiceStore = MockPiperVoiceStore();
+      mockSecureStorage = MockSecureStorageService();
+
+      when(() => mockPiper.isAvailable).thenReturn(true);
+      when(() => mockPiper.prepare(any())).thenAnswer((_) async => true);
+      when(
+        () => mockPiper.speak(
+          any(),
+          voice: any(named: 'voice'),
+          speed: any(named: 'speed'),
+        ),
+      ).thenAnswer((_) async => true);
+      when(() => mockPiper.setVolume(any())).thenAnswer((_) async {});
+      when(() => mockPiper.stop()).thenAnswer((_) async {});
+      when(
+        () => mockVoiceStore.modelDirFor(any()),
+      ).thenReturn('/tmp/piper_test');
+      when(
+        () => mockSecureStorage.saveTtsEngineMode(any()),
+      ).thenAnswer((_) async {});
+      when(
+        () => mockSecureStorage.savePiperVoiceId(any()),
+      ).thenAnswer((_) async {});
+      when(
+        () => mockSecureStorage.getTtsEngineMode(),
+      ).thenAnswer((_) async => null);
+      when(
+        () => mockSecureStorage.getPiperVoiceId(),
+      ).thenAnswer((_) async => null);
+    });
+
+    VoiceOutputService buildPiperService() {
+      final s = VoiceOutputService(
+        ttsClient: mockTtsClient,
+        audioPlayer: mockPlayer,
+        platformTts: mockPlatformTts,
+        piperTts: mockPiper,
+        piperVoiceStore: mockVoiceStore,
+        secureStorage: mockSecureStorage,
+      );
+      addTearDown(() async {
+        try {
+          s.dispose();
+        } catch (_) {}
+      });
+      return s;
+    }
+
+    void stubStoragePiperMode({
+      String mode = 'piper',
+      String? voiceId = 'id_ID-news_tts-medium',
+    }) {
+      when(
+        () => mockSecureStorage.getTtsEngineMode(),
+      ).thenAnswer((_) async => mode);
+      when(
+        () => mockSecureStorage.getPiperVoiceId(),
+      ).thenAnswer((_) async => voiceId);
+    }
+
+    test(
+      'piper ready + speak true uses piper, never touches platform or remote',
+      () async {
+        stubStoragePiperMode();
+        final piperService = buildPiperService();
+
+        final result = await piperService.speakText('Hello piper');
+
+        expect(result.isRight(), true);
+        expect(piperService.lastEngineUsed, TtsEngine.piperTts);
+        verifyNever(
+          () => mockPlatformTts.speak(
+            any(),
+            voice: any(named: 'voice'),
+            speed: any(named: 'speed'),
+          ),
+        );
+        verifyNever(
+          () => mockTtsClient.synthesize(
+            text: any(named: 'text'),
+            voice: any(named: 'voice'),
+            model: any(named: 'model'),
+            speed: any(named: 'speed'),
+          ),
+        );
+      },
+    );
+
+    test(
+      'piper NOT ready + remote configured -> system TTS wins, remote never tried',
+      () async {
+        stubStoragePiperMode();
+        when(() => mockPiper.prepare(any())).thenAnswer((_) async => false);
+        when(
+          () => mockPlatformTts.speak(
+            any(),
+            voice: any(named: 'voice'),
+            speed: any(named: 'speed'),
+          ),
+        ).thenAnswer((_) async => true);
+        final piperService = buildPiperService();
+
+        final result = await piperService.speakText('Hello fallback');
+
+        expect(result.isRight(), true);
+        verify(
+          () => mockPlatformTts.speak(
+            any(),
+            voice: any(named: 'voice'),
+            speed: any(named: 'speed'),
+          ),
+        ).called(1);
+        expect(piperService.lastEngineUsed, TtsEngine.androidTts);
+        verifyNever(
+          () => mockTtsClient.synthesize(
+            text: any(named: 'text'),
+            voice: any(named: 'voice'),
+            model: any(named: 'model'),
+            speed: any(named: 'speed'),
+          ),
+        );
+      },
+    );
+
+    test(
+      'piper NOT ready + platform false + remote configured -> remote used',
+      () async {
+        stubStoragePiperMode();
+        when(() => mockPiper.prepare(any())).thenAnswer((_) async => false);
+        when(
+          () => mockPlatformTts.speak(
+            any(),
+            voice: any(named: 'voice'),
+            speed: any(named: 'speed'),
+          ),
+        ).thenAnswer((_) async => false);
+        final audioBytes = Uint8List.fromList([4, 5, 6]);
+        when(
+          () => mockTtsClient.synthesize(
+            text: any(named: 'text'),
+            voice: any(named: 'voice'),
+            model: any(named: 'model'),
+            speed: any(named: 'speed'),
+          ),
+        ).thenAnswer((_) async => audioBytes);
+        final piperService = buildPiperService();
+
+        final result = await piperService.speakText('Hello remote-fallback');
+
+        expect(result.isRight(), true);
+        verify(
+          () => mockTtsClient.synthesize(
+            text: any(named: 'text'),
+            voice: any(named: 'voice'),
+            model: any(named: 'model'),
+            speed: any(named: 'speed'),
+          ),
+        ).called(1);
+        expect(piperService.lastEngineUsed, TtsEngine.remoteTts);
+      },
+    );
+
+    test(
+      'piper NOT ready + platform false + NO remote -> Left error, no crash',
+      () async {
+        stubStoragePiperMode();
+        when(() => mockPiper.prepare(any())).thenAnswer((_) async => false);
+        when(
+          () => mockPlatformTts.speak(
+            any(),
+            voice: any(named: 'voice'),
+            speed: any(named: 'speed'),
+          ),
+        ).thenAnswer((_) async => false);
+        when(
+          () => mockTtsClient.isRemoteConfigured(),
+        ).thenAnswer((_) async => false);
+        final piperService = buildPiperService();
+
+        final result = await piperService.speakText('Hello no-remote');
+
+        expect(result.isLeft(), true);
+        result.fold(
+          (failure) => expect(failure, isA<ServerFailure>()),
+          (_) => fail('Expected Left(ServerFailure)'),
+        );
+        expect(piperService.currentStatus, VoiceOutputStatus.error);
+      },
+    );
+
+    test(
+      'piper mode + platform throws -> remote still tried when configured',
+      () async {
+        stubStoragePiperMode();
+        when(() => mockPiper.prepare(any())).thenAnswer((_) async => false);
+        when(
+          () => mockPlatformTts.speak(
+            any(),
+            voice: any(named: 'voice'),
+            speed: any(named: 'speed'),
+          ),
+        ).thenThrow(Exception('platform crashed'));
+        final audioBytes = Uint8List.fromList([7, 8, 9]);
+        when(
+          () => mockTtsClient.synthesize(
+            text: any(named: 'text'),
+            voice: any(named: 'voice'),
+            model: any(named: 'model'),
+            speed: any(named: 'speed'),
+          ),
+        ).thenAnswer((_) async => audioBytes);
+        final piperService = buildPiperService();
+
+        Either<Failure, Unit>? result;
+        try {
+          result = await piperService.speakText('Hello platform-throw');
+        } catch (_) {
+          fail('speakText must never throw');
+        }
+
+        expect(result.isRight(), true);
+        verify(
+          () => mockTtsClient.synthesize(
+            text: any(named: 'text'),
+            voice: any(named: 'voice'),
+            model: any(named: 'model'),
+            speed: any(named: 'speed'),
+          ),
+        ).called(1);
+        expect(piperService.lastEngineUsed, TtsEngine.remoteTts);
+      },
+    );
+
+    test(
+      'system mode regression: remote used even when piper fully ready',
+      () async {
+        when(
+          () => mockSecureStorage.getTtsEngineMode(),
+        ).thenAnswer((_) async => 'system');
+        when(
+          () => mockSecureStorage.getPiperVoiceId(),
+        ).thenAnswer((_) async => null);
+        final audioBytes = Uint8List.fromList([1, 2, 3]);
+        when(
+          () => mockTtsClient.synthesize(
+            text: any(named: 'text'),
+            voice: any(named: 'voice'),
+            model: any(named: 'model'),
+            speed: any(named: 'speed'),
+          ),
+        ).thenAnswer((_) async => audioBytes);
+        final piperService = buildPiperService();
+
+        final result = await piperService.speakText('Hello system');
+
+        expect(result.isRight(), true);
+        expect(piperService.lastEngineUsed, TtsEngine.remoteTts);
+        verifyNever(
+          () => mockPiper.speak(
+            any(),
+            voice: any(named: 'voice'),
+            speed: any(named: 'speed'),
+          ),
+        );
+      },
+    );
+
+    test('queueText in piper mode falls back to system TTS first', () async {
+      stubStoragePiperMode();
+      when(() => mockPiper.prepare(any())).thenAnswer((_) async => false);
+      when(
+        () => mockPlatformTts.speak(
+          any(),
+          voice: any(named: 'voice'),
+          speed: any(named: 'speed'),
+        ),
+      ).thenAnswer((_) async => true);
+      final piperService = buildPiperService();
+
+      final result = await piperService.queueText('Hello queue');
+
+      expect(result.isRight(), true);
+      expect(piperService.lastEngineUsed, TtsEngine.androidTts);
+      verifyNever(
+        () => mockTtsClient.synthesize(
+          text: any(named: 'text'),
+          voice: any(named: 'voice'),
+          model: any(named: 'model'),
+          speed: any(named: 'speed'),
+        ),
+      );
+    });
+
+    test(
+      'stop during piper speech keeps stopped status and does not claim the piper engine',
+      () async {
+        stubStoragePiperMode();
+        final completer = Completer<bool>();
+        when(
+          () => mockPiper.speak(
+            any(),
+            voice: any(named: 'voice'),
+            speed: any(named: 'speed'),
+          ),
+        ).thenAnswer((_) => completer.future);
+        final piperService = buildPiperService();
+
+        final resultFuture = piperService.speakText('Hello piper stop');
+        await pumpEventQueue();
+
+        await piperService.stop();
+        completer.complete(true);
+        final result = await resultFuture;
+
+        expect(result.isRight(), true);
+        verify(() => mockPiper.stop()).called(1);
+        expect(piperService.currentStatus, VoiceOutputStatus.stopped);
+        expect(piperService.lastEngineUsed, isNull);
+      },
+    );
+
+    test('setPreferredEngineMode + setPiperVoiceId persists', () async {
+      final piperService = buildPiperService();
+
+      piperService.setPreferredEngineMode(TtsEngineMode.piper);
+      piperService.setPiperVoiceId('en_US-lessac-medium');
+      await pumpEventQueue();
+      await Future<void>.delayed(Duration.zero);
+
+      verify(() => mockSecureStorage.saveTtsEngineMode('piper')).called(1);
+      verify(
+        () => mockSecureStorage.savePiperVoiceId('en_US-lessac-medium'),
+      ).called(1);
+    });
+
+    test('loadPreferences with stored piper + voice id', () async {
+      when(
+        () => mockSecureStorage.getTtsEngineMode(),
+      ).thenAnswer((_) async => 'piper');
+      when(
+        () => mockSecureStorage.getPiperVoiceId(),
+      ).thenAnswer((_) async => 'en_US-lessac-medium');
+      final piperService = buildPiperService();
+
+      await piperService.loadPreferences();
+
+      expect(piperService.preferredEngineMode, TtsEngineMode.piper);
+      expect(piperService.piperVoiceId, 'en_US-lessac-medium');
+      verify(() => mockPiper.prepare('en_US-lessac-medium')).called(1);
+    });
+
+    test('loadPreferences when storage throws stays system', () async {
+      when(
+        () => mockSecureStorage.getTtsEngineMode(),
+      ).thenThrow(Exception('storage fail'));
+      when(
+        () => mockSecureStorage.getPiperVoiceId(),
+      ).thenThrow(Exception('storage fail'));
+      final piperService = buildPiperService();
+
+      await expectLater(piperService.loadPreferences(), completes);
+      expect(piperService.preferredEngineMode, TtsEngineMode.system);
     });
   });
 }
