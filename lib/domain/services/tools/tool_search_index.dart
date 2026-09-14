@@ -159,6 +159,21 @@ class ToolSearchIndex {
       <String>['background', 'service', 'headless'],
       <String>['manage_background_service'],
     ),
+    ToolCategorySpec(
+      <String>[
+        'health',
+        'step',
+        'heart',
+        'sleep',
+        'calorie',
+        'spo2',
+        'oxygen',
+        'weight',
+        'fitness',
+        'workout',
+      ],
+      <String>['health_status', 'get_health_data'],
+    ),
   ];
 
   /// Indonesian -> English expansions, applied per token.

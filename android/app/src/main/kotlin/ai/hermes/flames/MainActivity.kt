@@ -18,9 +18,14 @@ import androidx.annotation.NonNull
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.health.connect.client.PermissionController
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class MainActivity : FlutterActivity() {
     private val NOTIFICATION_CHANNEL = "ai.hermes.flames/notification_listener"
@@ -29,9 +34,17 @@ class MainActivity : FlutterActivity() {
     private val BATTERY_CHANNEL = "ai.hermes.flames/battery_optimization"
     private val INTENT_SETTINGS_CHANNEL = "ai.hermes.flames/intent_settings"
     private val EXACT_ALARM_CHANNEL = "ai.hermes.flames/exact_alarm"
+    private val HEALTH_CHANNEL = "ai.hermes.flames/health"
 
     private val CONTACTS_PERMISSION_REQUEST_CODE = 1001
     private var pendingContactsResult: MethodChannel.Result? = null
+
+    private val HEALTH_PERMISSION_REQUEST_CODE = 1002
+    private var pendingHealthResult: MethodChannel.Result? = null
+    private val healthScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val healthPermissionContract by lazy {
+        PermissionController.createRequestPermissionResultContract()
+    }
 
     private var backgroundMethodChannel: MethodChannel? = null
     private var pendingAction: String? = null
@@ -381,6 +394,89 @@ class MainActivity : FlutterActivity() {
                     }
                 }
             }
+
+        // Health Connect Channel
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, HEALTH_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                try {
+                    when (call.method) {
+                        "availability" -> {
+                            result.success(FlamesHealthConnect.availability(this))
+                        }
+                        "grantedPermissions" -> {
+                            healthScope.launch {
+                                try {
+                                    val granted = FlamesHealthConnect
+                                        .grantedPermissions(this@MainActivity)
+                                        .toList()
+                                    result.success(granted)
+                                } catch (e: Throwable) {
+                                    result.error("HEALTH_CONNECT_ERROR", e.message, null)
+                                }
+                            }
+                        }
+                        "requestPermission" -> {
+                            healthScope.launch {
+                                try {
+                                    val granted = FlamesHealthConnect
+                                        .grantedPermissions(this@MainActivity)
+                                    if (granted.containsAll(FlamesHealthConnect.readPermissions)) {
+                                        result.success(true)
+                                    } else {
+                                        pendingHealthResult = result
+                                        startActivityForResult(
+                                            healthPermissionContract.createIntent(
+                                                this@MainActivity,
+                                                FlamesHealthConnect.readPermissions
+                                            ),
+                                            HEALTH_PERMISSION_REQUEST_CODE
+                                        )
+                                    }
+                                } catch (e: Throwable) {
+                                    result.error("HEALTH_PERMISSION_ERROR", e.message, null)
+                                }
+                            }
+                        }
+                        "readMetric" -> {
+                            val metric = call.argument<String>("metric") ?: ""
+                            val startTimeMs = call.argument<Number>("startTimeMs")?.toLong() ?: 0L
+                            val endTimeMs = call.argument<Number>("endTimeMs")?.toLong() ?: 0L
+                            healthScope.launch {
+                                try {
+                                    val data = FlamesHealthConnect.readMetric(
+                                        this@MainActivity,
+                                        metric,
+                                        startTimeMs,
+                                        endTimeMs
+                                    )
+                                    result.success(data)
+                                } catch (e: Throwable) {
+                                    result.error("HEALTH_CONNECT_ERROR", e.message, null)
+                                }
+                            }
+                        }
+                        else -> {
+                            result.notImplemented()
+                        }
+                    }
+                } catch (e: Throwable) {
+                    result.error("HEALTH_CONNECT_ERROR", e.message, null)
+                }
+            }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == HEALTH_PERMISSION_REQUEST_CODE) {
+            try {
+                val granted = healthPermissionContract.parseResult(resultCode, data)
+                pendingHealthResult?.success(granted.isNotEmpty())
+            } catch (e: Throwable) {
+                pendingHealthResult?.error("HEALTH_PERMISSION_ERROR", e.message, null)
+            } finally {
+                pendingHealthResult = null
+            }
+        }
     }
 
     override fun onRequestPermissionsResult(
