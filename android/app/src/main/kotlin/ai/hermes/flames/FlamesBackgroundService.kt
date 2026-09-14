@@ -8,9 +8,12 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import io.flutter.plugin.common.MethodChannel
 
 class FlamesBackgroundService : Service() {
 
@@ -105,6 +108,21 @@ class FlamesBackgroundService : Service() {
         fun isWakeLockHeld(): Boolean {
             return wakeLock?.isHeld == true
         }
+
+        @Volatile
+        private var dartChannel: MethodChannel? = null
+
+        /** Called by MainActivity once the Flutter engine exists. */
+        fun attachDartChannel(channel: MethodChannel?) {
+            dartChannel = channel
+        }
+
+        /** Called when the activity (and therefore the engine) goes away. */
+        fun detachDartChannel() {
+            dartChannel = null
+        }
+
+        fun hasDartChannel(): Boolean = dartChannel != null
     }
 
     private var currentTitle: String = "Flames Agent Active"
@@ -140,6 +158,26 @@ class FlamesBackgroundService : Service() {
                 startForeground(NOTIFICATION_ID, notification)
                 isServiceRunning = true
                 FlamesQuickTile.updateTileState(true)
+                return START_STICKY
+            }
+            ACTION_VOICE_INPUT -> {
+                // Runs the turn inside this service: no MainActivity, no ChatScreen.
+                // The Dart seam only exists while a Flutter engine is alive, so an
+                // engine-less tap is reported honestly instead of opening the app.
+                val channel = dartChannel
+                if (channel != null) {
+                    Handler(Looper.getMainLooper()).post {
+                        try {
+                            channel.invokeMethod("onActionReceived", "voice_input")
+                        } catch (_: Exception) {
+                        }
+                    }
+                    currentContent = "Voice turn running"
+                } else {
+                    currentContent = "Flames is not running - open it once to enable voice turns"
+                }
+                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                notificationManager?.notify(NOTIFICATION_ID, buildForegroundNotification(currentTitle, currentContent))
                 return START_STICKY
             }
             else -> return START_STICKY
@@ -193,13 +231,12 @@ class FlamesBackgroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Action 1: Voice Input Action
-        val voiceIntent = Intent(this, MainActivity::class.java).apply {
+        // Voice Input is handled by this service and reaches the live Flutter
+        // engine through the Dart channel; it must not launch the UI.
+        val voiceIntent = Intent(this, FlamesBackgroundService::class.java).apply {
             action = ACTION_VOICE_INPUT
-            putExtra(EXTRA_ACTION, "voice_input")
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
-        val voicePendingIntent = PendingIntent.getActivity(
+        val voicePendingIntent = PendingIntent.getService(
             this,
             1,
             voiceIntent,

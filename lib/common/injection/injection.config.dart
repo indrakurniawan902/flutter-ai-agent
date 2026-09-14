@@ -31,7 +31,7 @@ import 'package:flutter_ai_agent/data/datasources/remote/pairing/scanner_control
 import 'package:flutter_ai_agent/data/datasources/skills/doc_builder_skill.dart'
     as _i701;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/accessibility_inspector_service.dart'
-    as _i1021;
+    as _i974;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/ambient_trigger_service.dart'
     as _i315;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/background_service.dart'
@@ -76,6 +76,8 @@ import 'package:flutter_ai_agent/data/repositories/chat_repository_impl.dart'
     as _i236;
 import 'package:flutter_ai_agent/data/services/tools/tool_pruning_service_impl.dart'
     as _i641;
+import 'package:flutter_ai_agent/data/services/voice/voice_turn_service.dart'
+    as _i599;
 import 'package:flutter_ai_agent/domain/repositories/action_center/action_center_repository.dart'
     as _i474;
 import 'package:flutter_ai_agent/domain/repositories/chat/chat_local_repository.dart'
@@ -96,8 +98,14 @@ import 'package:flutter_ai_agent/domain/services/skills/skills_registry_service.
     as _i791;
 import 'package:flutter_ai_agent/domain/services/tools/tool_pruning_service.dart'
     as _i939;
+import 'package:flutter_ai_agent/domain/services/voice/gateway_voice_prompt_dispatcher.dart'
+    as _i407;
+import 'package:flutter_ai_agent/domain/services/voice/voice_prompt_dispatcher.dart'
+    as _i31;
+import 'package:flutter_ai_agent/domain/services/voice/voice_turn_service.dart'
+    as _i316;
 import 'package:flutter_ai_agent/domain/tools/chat/accessibility_inspector_service.dart'
-    as _i1022;
+    as _i435;
 import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart'
     as _i290;
 import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart'
@@ -192,6 +200,9 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i791.SkillsRegistryService>(
       () => _i791.SkillsRegistryService(),
     );
+    gh.lazySingleton<_i31.VoicePromptDispatcherRegistry>(
+      () => _i31.VoicePromptDispatcherRegistry(),
+    );
     gh.lazySingleton<_i301.PairingParser>(() => const _i301.PairingParser());
     gh.lazySingleton<_i919.NotificationServiceBase>(
       () => _i89.NotificationService.create(),
@@ -218,6 +229,9 @@ extension GetItInjectableX on _i174.GetIt {
     );
     gh.lazySingleton<_i547.ClipboardServiceBase>(
       () => _i105.ClipboardService.create(),
+    );
+    gh.lazySingleton<_i435.AccessibilityInspectorServiceBase>(
+      () => _i974.AccessibilityInspectorService.create(),
     );
     gh.lazySingleton<_i192.LlmRepository>(
       () => _i236.LlmRepositoryImpl(
@@ -297,9 +311,6 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i396.NotificationTriageServiceBase>(
       () => _i447.NotificationTriageService.create(),
     );
-    gh.lazySingleton<_i1022.AccessibilityInspectorServiceBase>(
-      () => _i1021.AccessibilityInspectorService.create(),
-    );
     gh.lazySingleton<_i753.TtsClient>(
       () => _i753.DioTtsClient.create(
         gh<_i361.Dio>(),
@@ -349,7 +360,7 @@ extension GetItInjectableX on _i174.GetIt {
           nfcService: gh<_i350.NfcServiceBase>(),
           healthService: gh<_i662.HealthServiceBase>(),
           accessibilityInspectorService:
-              gh<_i1022.AccessibilityInspectorServiceBase>(),
+              gh<_i435.AccessibilityInspectorServiceBase>(),
         );
         // MANUAL: build_runner cannot generate this - DocBuilderSkill is not
         // annotated. Re-add after every DI regeneration.
@@ -389,6 +400,13 @@ extension GetItInjectableX on _i174.GetIt {
         toolRegistry: gh<_i732.ToolRegistry>(),
       ),
     );
+    gh.lazySingleton<_i316.VoiceTurnServiceBase>(
+      () => _i599.VoiceTurnService.create(
+        gh<_i652.VoiceInputServiceBase>(),
+        gh<_i45.VoiceOutputServiceBase>(),
+        gh<_i31.VoicePromptDispatcherRegistry>(),
+      ),
+    );
     gh.lazySingleton<_i806.GatewayRpcReceiverBase>(
       () => gatewayModule.provideGatewayRpcReceiver(
         gh<_i27.GatewayClientBase>(),
@@ -399,6 +417,11 @@ extension GetItInjectableX on _i174.GetIt {
       () => _i98.GatewayLinkCubit.create(
         gatewayClient: gh<_i27.GatewayClientBase>(),
         backgroundService: gh<_i791.BackgroundServiceBase>(),
+      ),
+    );
+    gh.lazySingleton<_i407.GatewayVoicePromptDispatcher>(
+      () => _i407.GatewayVoicePromptDispatcher(
+        client: gh<_i27.GatewayClientBase>(),
       ),
     );
     return this;

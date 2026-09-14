@@ -64,6 +64,11 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    override fun onDestroy() {
+        FlamesBackgroundService.detachDartChannel()
+        super.onDestroy()
+    }
+
     private fun extractActionFromIntent(intent: Intent?): String? {
         val actionExtra = intent?.getStringExtra("extra_flames_action")
         if (!actionExtra.isNullOrBlank()) {
@@ -191,6 +196,7 @@ class MainActivity : FlutterActivity() {
         // Background Service & Quick Settings Tile Channel
         val bgChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BACKGROUND_CHANNEL)
         backgroundMethodChannel = bgChannel
+        FlamesBackgroundService.attachDartChannel(bgChannel)
         bgChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "startForegroundService" -> {
