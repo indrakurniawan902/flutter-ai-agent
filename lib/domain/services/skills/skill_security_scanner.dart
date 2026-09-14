@@ -338,15 +338,104 @@ class SkillSecurityScanner {
   /// skill can never be enabled by an import, and every imported skill
   /// is marked as community.
   Skill applyImportPolicy(Skill skill) {
-    final compact = skill.tier.toLowerCase().replaceAll(
-      RegExp(r'[^a-z0-9]'),
-      '',
-    );
-    final isTier3 = compact.startsWith('3') || compact.contains('tier3');
+    final rank = _parseTierRank(skill.tier);
+    final autoEnableable = rank == 1 || rank == 2;
     return skill.copyWith(
-      isEnabled: isTier3 ? false : skill.isEnabled,
+      isEnabled: autoEnableable ? skill.isEnabled : false,
       isCommunity: true,
     );
+  }
+
+  static final RegExp _tierNoise = RegExp(r'[^a-z0-9 -]');
+  static final RegExp _tierSeparators = RegExp(r'[ -]+');
+
+  static const Map<String, int> _tierWordRanks = {
+    'one': 1,
+    'i': 1,
+    '1': 1,
+    'two': 2,
+    'ii': 2,
+    '2': 2,
+    'three': 3,
+    'iii': 3,
+    '3': 3,
+    'four': 4,
+    'iv': 4,
+    '4': 4,
+  };
+
+  static const Map<String, String> _tierUnicodeNumerals = {
+    'Ⅰ': 'i',
+    'ⅰ': 'i',
+    'Ⅱ': 'ii',
+    'ⅱ': 'ii',
+    'Ⅲ': 'iii',
+    'ⅲ': 'iii',
+    'Ⅳ': 'iv',
+    'ⅳ': 'iv',
+  };
+
+  static int? _parseTierRank(String tier) {
+    final normalised = _normaliseTier(tier);
+    if (normalised.isEmpty) {
+      return null;
+    }
+    int? rank;
+    for (final token in normalised.split(_tierSeparators)) {
+      final tokenRank = _rankOfTierToken(token);
+      if (tokenRank == null) {
+        continue;
+      }
+      if (tokenRank > 2) {
+        return tokenRank;
+      }
+      rank ??= tokenRank;
+    }
+    return rank;
+  }
+
+  static String _normaliseTier(String tier) {
+    final buffer = StringBuffer();
+    for (final rune in tier.toLowerCase().runes) {
+      if (rune >= 0x0660 && rune <= 0x0669) {
+        buffer.writeCharCode(0x30 + rune - 0x0660);
+      } else if (rune >= 0x06f0 && rune <= 0x06f9) {
+        buffer.writeCharCode(0x30 + rune - 0x06f0);
+      } else if (rune >= 0xff10 && rune <= 0xff19) {
+        buffer.writeCharCode(0x30 + rune - 0xff10);
+      } else {
+        buffer.writeCharCode(rune);
+      }
+    }
+    var normalised = buffer.toString();
+    for (final entry in _tierUnicodeNumerals.entries) {
+      normalised = normalised.replaceAll(entry.key, entry.value);
+    }
+    return normalised.replaceAll(_tierNoise, '');
+  }
+
+  static int? _rankOfTierToken(String token) {
+    if (token.isEmpty) {
+      return null;
+    }
+    final direct = _tierWordRanks[token];
+    if (direct != null) {
+      return direct;
+    }
+    if (token.startsWith('tier')) {
+      return _rankOfTierToken(token.substring(4));
+    }
+    if (token.startsWith('t')) {
+      return _rankOfTierToken(token.substring(1));
+    }
+    final digit = token.codeUnitAt(0) - 0x30;
+    if (digit >= 0 && digit <= 9) {
+      final rest = token.substring(1);
+      if (rest.isEmpty || rest == 'hitl') {
+        return digit;
+      }
+    }
+    return null;
   }
 
   static String _normalise(String value) {

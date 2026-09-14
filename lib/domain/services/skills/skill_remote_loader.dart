@@ -65,7 +65,8 @@ abstract class SkillRemoteLoaderBase {
   }
 
   /// Whether [host] embeds a private IPv4 literal in four consecutive
-  /// labels, as wildcard-DNS services such as `127.0.0.1.nip.io` do.
+  /// labels, as wildcard-DNS services such as `127.0.0.1.nip.io` do, or in
+  /// four hyphen-joined labels, as `127-0-0-1.nip.io` does.
   ///
   /// This is a pure, synchronous heuristic; no DNS resolution happens
   /// here. A hostname that resolves to private space without embedding a
@@ -78,22 +79,26 @@ abstract class SkillRemoteLoaderBase {
       final octets = _parseIpv4(labels.sublist(i, i + 4).join('.'));
       if (octets != null && _isDisallowedIpv4(octets)) return true;
     }
+    for (final label in labels) {
+      final octets = _parseIpv4Parts(label.split('-'));
+      if (octets != null && _isDisallowedIpv4(octets)) return true;
+    }
     return false;
   }
 
   /// Whether [host] is an IPv6 address that reaches loopback, unspecified,
-  /// mapped/compatible, link-local, unique-local, 6to4, or NAT64 space.
+  /// IPv4-mapped/translated, IPv4-compatible, link-local, unique-local,
+  /// 6to4, or NAT64 space.
+  ///
+  /// Every comparison runs on the parsed 16-bit groups, so uppercase hex,
+  /// expanded spellings, and a trailing zone id (`fe80::1%25eth0`) do not
+  /// bypass the checks.
   static bool _isDisallowedIpv6(String host) {
     final groups = _parseIpv6(host);
     if (groups == null) return false;
-    final leading = _leadingZeroGroups(groups);
-    if (leading == 8) return true;
-    if (leading == 5 && groups[5] == 0xffff) {
-      return _isDisallowedIpv4(_ipv4FromGroups(groups[6], groups[7]));
-    }
-    if (leading >= 6) {
-      return _isDisallowedIpv4(_ipv4FromGroups(groups[6], groups[7]));
-    }
+    if (_leadingZeroGroups(groups) == 8) return true;
+    final mapped = _mappedIpv4(groups);
+    if (mapped != null) return _isDisallowedIpv4(mapped);
     if ((groups[0] & 0xffc0) == 0xfe80) return true;
     if ((groups[0] & 0xfe00) == 0xfc00) return true;
     if (groups[0] == 0x2002) {
@@ -107,7 +112,29 @@ abstract class SkillRemoteLoaderBase {
         groups[5] == 0) {
       return _isDisallowedIpv4(_ipv4FromGroups(groups[6], groups[7]));
     }
+    if (_leadingZeroGroups(groups) >= 6) {
+      return _isDisallowedIpv4(_ipv4FromGroups(groups[6], groups[7]));
+    }
     return false;
+  }
+
+  /// Returns the embedded IPv4 address when [groups] has the IPv4-mapped
+  /// shape of RFC 4291 2.2.3.1: an `0xffff` group preceded only by zeros,
+  /// followed only by zero groups before the 32-bit address at the end.
+  /// Returns null for any other address.
+  static List<int>? _mappedIpv4(List<int> groups) {
+    var marker = -1;
+    for (var i = 0; i <= 5; i++) {
+      if (groups[i] == 0) continue;
+      if (groups[i] != 0xffff) return null;
+      marker = i;
+      break;
+    }
+    if (marker < 0) return null;
+    for (var i = marker + 1; i < groups.length - 2; i++) {
+      if (groups[i] != 0) return null;
+    }
+    return _ipv4FromGroups(groups[6], groups[7]);
   }
 
   /// Parses [host] as an IPv6 address into eight 16-bit groups, accepting
@@ -175,14 +202,19 @@ abstract class SkillRemoteLoaderBase {
     final first = octets[0];
     final second = octets[1];
     if (first == 0 || first == 10 || first == 127) return true;
+    if (first == 100 && second >= 64 && second <= 127) return true;
     if (first == 169 && second == 254) return true;
     if (first == 172 && second >= 16 && second <= 31) return true;
     if (first == 192 && second == 168) return true;
+    if (first == 198 && (second == 18 || second == 19)) return true;
     return false;
   }
 
-  static List<int>? _parseIpv4(String host) {
-    final parts = host.split('.');
+  static List<int>? _parseIpv4(String host) => _parseIpv4Parts(host.split('.'));
+
+  /// Parses [parts] as four decimal octets, each 1-3 digits and at most
+  /// 255. Returns null when the count or any part is invalid.
+  static List<int>? _parseIpv4Parts(List<String> parts) {
     if (parts.length != 4) return null;
     final octets = <int>[];
     for (final part in parts) {
