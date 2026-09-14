@@ -125,7 +125,7 @@ void main() {
       final validJson = jsonEncode({
         'gatewayUrl': 'https://vps.example.com:18789',
         'token': 'secret-token-abc',
-        'profileName': 'VPS Oracle',
+        'profileName': 'Remote Node',
         'timestamp': '2026-09-11T08:05:00.000Z',
       });
 
@@ -135,7 +135,7 @@ void main() {
       expect(scannedPayload, isNotNull);
       expect(scannedPayload?.gatewayUrl, 'https://vps.example.com:18789');
       expect(scannedPayload?.token, 'secret-token-abc');
-      expect(scannedPayload?.profileName, 'VPS Oracle');
+      expect(scannedPayload?.profileName, 'Remote Node');
     });
 
     testWidgets('negative: malformed JSON shows SnackBar error', (tester) async {
@@ -205,7 +205,7 @@ void main() {
       final expiredPayload = jsonEncode({
         'gatewayUrl': 'https://vps.example.com:18789',
         'token': 'secret-token-abc',
-        'profileName': 'VPS Oracle',
+        'profileName': 'Remote Node',
         'timestamp': '2026-09-11T07:40:00.000Z', // 30 mins ago (> 15 min maxAge)
       });
 
