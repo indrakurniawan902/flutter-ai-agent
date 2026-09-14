@@ -563,6 +563,43 @@ void main() {
       expect(result.toolCalls.single.name, 'get_battery');
     });
 
+    test('a deep-arguments sibling does not discard a shallow call beside it',
+        () {
+      // jsonEncode is recursive and overflows on a deeply nested arguments
+      // map. When that overflow escaped, the caller's catch treated the WHOLE
+      // span as unusable and skipped it, silently dropping a legitimate call
+      // sitting next to the pathological one. The guard is per-candidate, so
+      // only the un-serialisable candidate is skipped.
+      final deepArgs = '${'{"k":' * 3400}{} ${'}' * 3400}';
+      final raw = '{"tool_calls": [$deepArgs, '
+          '{"name": "get_battery", "arguments": {}}]}';
+
+      final result = parser.parse(raw, isKnownTool: (n) => n == 'get_battery');
+
+      expect(result.toolCalls, hasLength(1));
+      expect(result.toolCalls.single.name, 'get_battery');
+    });
+
+    test('a pathological deep-arguments call never escapes as an Error', () {
+      // jsonEncode recurses, and whether a given depth overflows depends on the
+      // runtime (JIT and AOT differ), so the recovered-call count here is NOT
+      // stable and must not be asserted. What IS invariant: parse() returns
+      // normally, and the result is self-consistent -- either the call was
+      // recovered and its text stripped, or nothing was accepted and the input
+      // is returned untouched.
+      final deepArgs = '${'{"k":' * 6000}{} ${'}' * 6000}';
+      final raw = '{"name": "get_battery", "arguments": $deepArgs}';
+
+      final result = parser.parse(raw, isKnownTool: (n) => n == 'get_battery');
+
+      if (result.toolCalls.isEmpty) {
+        expect(result.cleanedText, equals(raw));
+      } else {
+        expect(result.toolCalls, hasLength(1));
+        expect(result.cleanedText, isNot(contains('get_battery')));
+      }
+    });
+
     test('a deep nest with no call stays bounded and byte-identical', () {
       // The walk must not throw and must leave the text alone when there is
       // nothing to recover, however deep the payload is.

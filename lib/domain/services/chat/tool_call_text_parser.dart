@@ -350,7 +350,19 @@ class ToolCallTextParser {
       final arguments = candidate.arguments;
       String fragment;
       if (arguments is Map) {
-        fragment = jsonEncode(arguments);
+        // jsonEncode is recursive and overflows the VM stack on a deeply
+        // nested arguments map (~4300 AOT / ~3300 JIT). Letting that escape
+        // would make the caller's catch treat the WHOLE span as unusable and
+        // skip it, silently discarding every other call inside it. Guarding
+        // here drops only the candidate that cannot be serialised, which is
+        // the right blast radius: a pathological payload contributes no call
+        // (the documented behaviour for adversarial input) while a legitimate
+        // shallow sibling beside it is still recovered.
+        try {
+          fragment = jsonEncode(arguments);
+        } catch (_) {
+          continue;
+        }
       } else if (arguments is String) {
         final trimmed = arguments.trim();
         if (_tryDecode(trimmed) is! Map) continue;
