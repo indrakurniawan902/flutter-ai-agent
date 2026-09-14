@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_url.dart';
 import 'package:flutter_ai_agent/domain/services/settings/server_profile_probe_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_state.dart';
+import 'package:flutter_ai_agent/presentation/widget/app_toast.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -393,7 +395,8 @@ class _AddProfileViewState extends State<_AddProfileView> {
     } catch (e) {
       result = ProbeResult(
         isSuccess: false,
-        message: 'Connection test failed: $e',
+        message:
+            FailureMessage.humanize(e, context: 'Connection test failed'),
       );
     }
 
@@ -441,12 +444,8 @@ class _AddProfileViewState extends State<_AddProfileView> {
       );
     } else if (state is ServerProfileError) {
       _operationHandled = true;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(state.message),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      if (!mounted) return;
+      AppToast.error(context, state.message);
     }
   }
 }

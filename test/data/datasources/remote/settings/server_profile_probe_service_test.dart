@@ -209,7 +209,7 @@ void main() {
 
       expect(result.isSuccess, isFalse);
       expect(result.message, contains('Connection failed'));
-      expect(result.message, contains('Socket closed'));
+      expect(result.message, isNot(contains('Exception')));
     });
   });
 

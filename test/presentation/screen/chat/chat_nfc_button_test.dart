@@ -11,6 +11,7 @@ import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart';
 import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_routes.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/chat_screen.dart';
+import 'package:flutter_ai_agent/presentation/widget/app_toast.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/settings_screen.dart';
 import 'package:flutter_ai_agent/utils/app_theme.dart';
@@ -58,6 +59,7 @@ void main() {
   });
 
   tearDown(() async {
+    AppToast.dismissAll();
     await cubit.close();
     await sl.reset();
   });
@@ -106,8 +108,9 @@ void main() {
   });
 
   testWidgets(
-      'tapping scan with no matching binding shows next-action SnackBar with Open Settings action',
+      'tapping scan with no matching binding shows next-action toast with Open Settings action',
       (tester) async {
+    AppToast.dismissAll();
     when(() => fakeNfc.readCardUid()).thenAnswer(
       (_) async => const Right('aabbcc'),
     );
@@ -135,7 +138,8 @@ void main() {
     // both the message Text and the SnackBarAction label.
     expect(find.textContaining('Settings'), findsNWidgets(2));
     expect(find.text('Open Settings'), findsOneWidget);
-    expect(find.byType(SnackBarAction), findsOneWidget);
+    expect(find.byKey(const Key('app_toast_action')), findsOneWidget);
+    AppToast.dismissAll();
   });
 
   testWidgets(

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_ai_agent/common/exception.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/data/models/action_center/action_item_model.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:injectable/injectable.dart';
@@ -43,7 +44,9 @@ class ActionCenterDatasourceImpl implements ActionCenterDatasource {
       items.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       return items;
     } catch (e) {
-      throw CacheException('Failed to load action items: $e');
+      throw CacheException(
+        FailureMessage.humanize(e, context: 'Failed to load action items'),
+      );
     }
   }
 
@@ -52,7 +55,9 @@ class ActionCenterDatasourceImpl implements ActionCenterDatasource {
     try {
       await _box.put(item.id, jsonEncode(item.toJson()));
     } catch (e) {
-      throw CacheException('Failed to save action item: $e');
+      throw CacheException(
+        FailureMessage.humanize(e, context: 'Failed to save action item'),
+      );
     }
   }
 
@@ -72,7 +77,12 @@ class ActionCenterDatasourceImpl implements ActionCenterDatasource {
         ),
       );
     } catch (e) {
-      throw CacheException('Failed to mark action item as read: $e');
+      throw CacheException(
+        FailureMessage.humanize(
+          e,
+          context: 'Failed to mark action item as read',
+        ),
+      );
     }
   }
 
@@ -81,7 +91,12 @@ class ActionCenterDatasourceImpl implements ActionCenterDatasource {
     try {
       await _box.delete(id);
     } catch (e) {
-      throw CacheException('Failed to dismiss action item: $e');
+      throw CacheException(
+        FailureMessage.humanize(
+          e,
+          context: 'Failed to dismiss action item',
+        ),
+      );
     }
   }
 
@@ -90,7 +105,9 @@ class ActionCenterDatasourceImpl implements ActionCenterDatasource {
     try {
       await _box.clear();
     } catch (e) {
-      throw CacheException('Failed to clear action items: $e');
+      throw CacheException(
+        FailureMessage.humanize(e, context: 'Failed to clear action items'),
+      );
     }
   }
 

@@ -1,5 +1,6 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/data/datasources/local/chat/chat_local_datasource.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/session.dart';
@@ -34,7 +35,11 @@ class ChatLocalRepositoryImpl implements ChatLocalRepository {
       final messages = await _datasource.getMessages(sessionId);
       return Right(messages);
     } catch (e) {
-      return Left(CacheFailure('Failed to load chat history: $e'));
+      return Left(
+        CacheFailure(
+          FailureMessage.humanize(e, context: 'Failed to load chat history'),
+        ),
+      );
     }
   }
 
@@ -47,7 +52,11 @@ class ChatLocalRepositoryImpl implements ChatLocalRepository {
       await _datasource.saveMessages(sessionId, messages);
       return const Right(null);
     } catch (e) {
-      return Left(CacheFailure('Failed to save chat history: $e'));
+      return Left(
+        CacheFailure(
+          FailureMessage.humanize(e, context: 'Failed to save chat history'),
+        ),
+      );
     }
   }
 
@@ -57,7 +66,11 @@ class ChatLocalRepositoryImpl implements ChatLocalRepository {
       await _datasource.clearMessages(sessionId);
       return const Right(null);
     } catch (e) {
-      return Left(CacheFailure('Failed to clear chat history: $e'));
+      return Left(
+        CacheFailure(
+          FailureMessage.humanize(e, context: 'Failed to clear chat history'),
+        ),
+      );
     }
   }
 
@@ -67,7 +80,11 @@ class ChatLocalRepositoryImpl implements ChatLocalRepository {
       final sessions = await _datasource.getSessions(profileId);
       return Right(sessions);
     } catch (e) {
-      return Left(CacheFailure('Failed to load chat sessions: $e'));
+      return Left(
+        CacheFailure(
+          FailureMessage.humanize(e, context: 'Failed to load chat sessions'),
+        ),
+      );
     }
   }
 
@@ -84,7 +101,11 @@ class ChatLocalRepositoryImpl implements ChatLocalRepository {
       );
       return Right(session);
     } catch (e) {
-      return Left(CacheFailure('Failed to create chat session: $e'));
+      return Left(
+        CacheFailure(
+          FailureMessage.humanize(e, context: 'Failed to create chat session'),
+        ),
+      );
     }
   }
 
@@ -94,7 +115,11 @@ class ChatLocalRepositoryImpl implements ChatLocalRepository {
       final session = await _datasource.getSession(sessionId);
       return Right(session);
     } catch (e) {
-      return Left(CacheFailure('Failed to load chat session: $e'));
+      return Left(
+        CacheFailure(
+          FailureMessage.humanize(e, context: 'Failed to load chat session'),
+        ),
+      );
     }
   }
 
@@ -110,7 +135,14 @@ class ChatLocalRepositoryImpl implements ChatLocalRepository {
       );
       return const Right(null);
     } catch (e) {
-      return Left(CacheFailure('Failed to update chat session title: $e'));
+      return Left(
+        CacheFailure(
+          FailureMessage.humanize(
+            e,
+            context: 'Failed to update chat session title',
+          ),
+        ),
+      );
     }
   }
 
@@ -120,7 +152,11 @@ class ChatLocalRepositoryImpl implements ChatLocalRepository {
       await _datasource.deleteSession(sessionId);
       return const Right(null);
     } catch (e) {
-      return Left(CacheFailure('Failed to delete chat session: $e'));
+      return Left(
+        CacheFailure(
+          FailureMessage.humanize(e, context: 'Failed to delete chat session'),
+        ),
+      );
     }
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:injectable/injectable.dart';
 
 import 'package:flutter_ai_agent/domain/entities/share/shared_payload.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/services/share/share_target_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/share/cubit/share_target_state.dart';
 
@@ -24,7 +25,8 @@ class ShareTargetCubit extends Cubit<ShareTargetState> {
       await _subscription?.cancel();
       _subscription = _service.payloadStream.listen(
         _onPayloads,
-        onError: (Object e) => emit(ShareTargetError(e.toString())),
+        onError: (Object e) => emit(ShareTargetError(FailureMessage.humanize(
+            e, context: 'Failed to read the shared content'))),
       );
       await _service.startListening();
       final initial = await _service.getInitialPayloads();
@@ -32,7 +34,8 @@ class ShareTargetCubit extends Cubit<ShareTargetState> {
         _onPayloads(initial);
       }
     } catch (e) {
-      emit(ShareTargetError(e.toString()));
+      emit(ShareTargetError(FailureMessage.humanize(
+          e, context: 'Failed to read the shared content')));
     }
   }
 

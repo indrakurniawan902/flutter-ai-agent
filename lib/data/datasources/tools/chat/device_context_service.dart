@@ -9,6 +9,7 @@ import 'package:injectable/injectable.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/device_context_service.dart';
 
 @LazySingleton(as: DeviceContextServiceBase)
@@ -61,7 +62,11 @@ class DeviceContextService implements DeviceContextServiceBase {
 
       return Right(data);
     } catch (e) {
-      return Left(ServerFailure('Device status error: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Device status error'),
+        ),
+      );
     }
   }
 
@@ -88,7 +93,11 @@ class DeviceContextService implements DeviceContextServiceBase {
 
       return Right(info);
     } catch (e) {
-      return Left(ServerFailure('System info error: $e'));
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'System info error'),
+        ),
+      );
     }
   }
 

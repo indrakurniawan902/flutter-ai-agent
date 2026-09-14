@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/services/settings/server_profile_probe_service.dart';
 
 class ServerProfileProbeServiceImpl implements ServerProfileProbeService {
@@ -205,7 +206,10 @@ class ServerProfileProbeServiceImpl implements ServerProfileProbeService {
         );
       }
 
-      final detail = error.message ?? error.toString();
+      final detail = FailureMessage.humanize(
+        error,
+        context: 'Unexpected error',
+      );
       return ProbeResult(
         isSuccess: false,
         message: 'Connection failed: $detail',
@@ -214,7 +218,8 @@ class ServerProfileProbeServiceImpl implements ServerProfileProbeService {
 
     return ProbeResult(
       isSuccess: false,
-      message: 'Connection failed: $error',
+      message:
+          'Connection failed: ${FailureMessage.humanize(error, context: 'Unexpected error')}',
     );
   }
 }
