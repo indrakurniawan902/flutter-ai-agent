@@ -49,6 +49,7 @@ class SecureStorageService {
   static const String keyTtsEngineMode = 'tts_engine_mode';
   static const String keyPiperVoiceId = 'piper_voice_id';
   static const String keyGeofenceRegions = 'hermes_geofence_regions';
+  static const String keyOverlayBubbleEnabled = 'overlay_bubble_enabled';
 
   final FlutterSecureStorage _storage;
 
@@ -112,6 +113,18 @@ class SecureStorageService {
   Future<bool> getProgressiveToolPruning() async {
     final value = await _storage.read(key: keyProgressiveToolPruning);
     if (value == null) return true;
+    return value == 'true';
+  }
+
+  /// Persists whether the floating overlay bubble is enabled by the user.
+  Future<void> saveOverlayBubbleEnabled(bool value) async {
+    await _storage.write(key: keyOverlayBubbleEnabled, value: '$value');
+  }
+
+  /// Whether the floating overlay bubble is enabled; defaults to `false`.
+  Future<bool> getOverlayBubbleEnabled() async {
+    final value = await _storage.read(key: keyOverlayBubbleEnabled);
+    if (value == null) return false;
     return value == 'true';
   }
 
