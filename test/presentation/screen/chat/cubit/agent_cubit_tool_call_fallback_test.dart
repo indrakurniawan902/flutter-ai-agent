@@ -326,4 +326,54 @@ void main() {
     final toolMessage = cubit.messages.firstWhere((m) => m.role == 'tool');
     expect(toolMessage.toolCallId, equals('call_0'));
   });
+
+  test('recovered tool call carries an id that matches the tool result tool_call_id',
+      () async {
+    final counts = <String, int>{};
+    final order = <String>[];
+    registerCountingTool('get_battery', counts, order);
+
+    stubStream(
+      turn1: const [
+        ChatChunk(
+          contentDelta:
+              'Let me check.\n```json\n{"name": "get_battery", "arguments": {}}\n```',
+          finishReason: 'stop',
+        ),
+      ],
+      turn2: const [
+        ChatChunk(contentDelta: 'Battery is 85%.', finishReason: 'stop'),
+      ],
+    );
+
+    await cubit.sendMessage('How is my battery?');
+
+    final assistantToolMessage =
+        cubit.messages.firstWhere((m) => m.toolCalls != null);
+    final wire = assistantToolMessage.toWireJson();
+
+    final wireToolCalls = wire['tool_calls'] as List<dynamic>;
+    expect(wireToolCalls, hasLength(1));
+
+    final wireEntry = wireToolCalls.first as Map<String, dynamic>;
+    expect(wireEntry.containsKey('id'), isTrue);
+    final wireId = wireEntry['id'];
+    expect(wireId, isA<String>());
+    expect((wireId as String).isNotEmpty, isTrue);
+
+    final toolMessages =
+        cubit.messages.where((m) => m.role == 'tool').toList();
+    expect(toolMessages, isNotEmpty);
+    expect(toolMessages.first.toolCallId, equals(wireId));
+
+    final declaredIds = wireToolCalls
+        .map((e) => (e as Map<String, dynamic>)['id'])
+        .whereType<String>()
+        .toSet();
+    final referencedIds = toolMessages
+        .map((m) => m.toolCallId)
+        .whereType<String>()
+        .toSet();
+    expect(referencedIds.difference(declaredIds), isEmpty);
+  });
 }

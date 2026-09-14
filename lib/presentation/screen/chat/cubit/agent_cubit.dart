@@ -1065,6 +1065,10 @@ class AgentCubit extends Cubit<AgentState> {
   ) async {
     if (_isCancelled || runGeneration != _runGeneration) return;
 
+    final normalizedCalls = toolCalls
+        .map((tc) => tc.id == null ? tc.copyWith(id: 'call_${tc.index}') : tc)
+        .toList();
+
     final toolExtraction = ThoughtExtractor.extract(rawContent);
     _messages.add(ChatMessage(
       role: 'assistant',
@@ -1072,13 +1076,13 @@ class AgentCubit extends Cubit<AgentState> {
           ? null
           : toolExtraction.cleanContent,
       thoughtProcess: toolExtraction.thoughtProcess,
-      toolCalls: toolCalls,
+      toolCalls: normalizedCalls,
     ));
     await _persistMessages();
 
     // Enqueue tool calls for this turn and process sequentially.
     _pendingTurnToolCalls.clear();
-    _pendingTurnToolCalls.addAll(toolCalls);
+    _pendingTurnToolCalls.addAll(normalizedCalls);
 
     await _processPendingToolCalls(runGeneration);
   }
