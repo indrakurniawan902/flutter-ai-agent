@@ -32,15 +32,20 @@ class SkillsLocalDatasource implements SkillsLocalDatasourceBase {
   factory SkillsLocalDatasource.create() => SkillsLocalDatasource();
 
   Future<Database> get database async {
-    if (_database != null && _database!.isOpen) {
-      return _database!;
+    final existing = _database;
+    if (existing != null) {
+      if (!existing.isOpen) {
+        throw StateError('database is closed');
+      }
+      return existing;
     }
 
     DatabaseFactory factory;
     if (_databaseFactory != null) {
       factory = _databaseFactory;
     } else {
-      if (Platform.isAndroid) {
+      if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
+        sqfliteFfiInit();
         databaseFactory = databaseFactoryFfi;
       }
       factory = databaseFactory;

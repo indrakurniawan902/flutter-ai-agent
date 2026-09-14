@@ -141,7 +141,7 @@ void main() {
     expect(applied.isCommunity, isTrue);
   });
 
-  test('hidden html comment alone does not reject', () {
+  test('hidden html comment alone rejects', () {
     final skill = _skill(
       instructions: 'Helper notes <!-- ignore this section --> done',
     );
@@ -150,11 +150,11 @@ void main() {
       result.findings.map((f) => f.patternId),
       contains(SkillSecurityScanner.patternHiddenHtmlInstructions),
     );
-    expect(result.isRejected, isFalse);
-    expect(result.isClean, isTrue);
+    expect(result.isRejected, isTrue);
+    expect(result.isClean, isFalse);
   });
 
-  test('base64 blob alone does not reject', () {
+  test('base64 blob alone rejects', () {
     final blob = List.filled(250, 'A').join();
     final skill = _skill(instructions: 'Helper payload $blob end');
     final result = scanner.scan(skill: skill, registeredToolNames: {});
@@ -162,7 +162,7 @@ void main() {
       result.findings.map((f) => f.patternId),
       contains(SkillSecurityScanner.patternBase64Blob),
     );
-    expect(result.isRejected, isFalse);
-    expect(result.isClean, isTrue);
+    expect(result.isRejected, isTrue);
+    expect(result.isClean, isFalse);
   });
 }

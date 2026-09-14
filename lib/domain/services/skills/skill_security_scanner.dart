@@ -22,7 +22,12 @@ class SkillSecurityScanner {
       'hidden_html_instructions';
   static const String patternBase64Blob = 'base64_blob';
 
-  static final RegExp _zeroWidth = RegExp('[\u200b-\u200d\ufeff]');
+  static final RegExp _formatCharacters = RegExp(
+    '[\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]',
+  );
+  static final RegExp _markdownDelimiters = RegExp(
+    r'(?<!\w)[*_~`]+|[*_~`]+(?!\w)',
+  );
   static final RegExp _whitespaceRuns = RegExp(r'\s+');
 
   static final List<_ScanPattern> _patterns = [
@@ -30,15 +35,18 @@ class SkillSecurityScanner {
       patternIgnorePreviousInstructions,
       'Attempts to override prior instructions',
       SkillScanSeverity.critical,
-      r'ignore\s+(all\s+)?(the\s+)?(previous|prior|above|earlier)\s+'
-          r'(instruction|prompt|rule|message)',
+      r'(ignore|forget|discard|disregard)\s+'
+          r'(all\s+|the\s+|your\s+|any\s+|everything\s+)*'
+          r'(previous|prior|above|earlier|preceding)\s+'
+          r'(instruction|prompt|rule|message|direction|command|guideline)?s?',
     ),
     _ScanPattern(
       patternDisregardSystemPrompt,
       'Attempts to disregard the system prompt',
       SkillScanSeverity.critical,
-      r'disregard\s+(the\s+)?(system\s+prompt|previous|prior|above|earlier)'
-          r'\s*(instruction|prompt|rule|message)?',
+      r'(disregard|override)\s+(the\s+)?'
+          r'(system\s+prompt|previous|prior|above|earlier)'
+          r'\s*(instruction|prompt|rule|message|direction|command|guideline)?s?',
     ),
     _ScanPattern(
       patternExfiltrate,
@@ -103,19 +111,25 @@ class SkillSecurityScanner {
     _ScanPattern(
       patternHiddenHtmlInstructions,
       'Hides instructions inside HTML comments',
-      SkillScanSeverity.medium,
+      SkillScanSeverity.high,
       r'<!--[\s\S]{0,400}(ignore|instruction|system\s+prompt)',
     ),
     _ScanPattern(
       patternBase64Blob,
       'Contains a large base64 blob',
-      SkillScanSeverity.medium,
-      r'[A-Za-z0-9+\/]{200,}={0,2}',
+      SkillScanSeverity.high,
+      r'[A-Za-z0-9+\/]{120,}={0,2}',
     ),
   ];
 
   /// Scans [skill] for prompt-injection payloads and for tool requests
   /// that are not in [registeredToolNames].
+  ///
+  /// Invariant: the scan surface must cover every [Skill] field that
+  /// `SkillsRegistryService.buildSystemPrompt()` injects into the system
+  /// prompt (name, category, version, description, instructions, prompts)
+  /// plus [Skill.author] for defence in depth. Tools are validated
+  /// separately against [registeredToolNames].
   SkillScanResult scan({
     required Skill skill,
     required Set<String> registeredToolNames,
@@ -125,6 +139,9 @@ class SkillSecurityScanner {
       skill.description,
       ...skill.prompts,
       skill.name,
+      skill.category,
+      skill.version,
+      skill.author,
     ].join('\n');
     final text = _normalise(surface);
     final findings = <SkillScanFinding>[];
@@ -155,7 +172,11 @@ class SkillSecurityScanner {
   /// skill can never be enabled by an import, and every imported skill
   /// is marked as community.
   Skill applyImportPolicy(Skill skill) {
-    final isTier3 = skill.tier.toLowerCase().contains('tier 3');
+    final compact = skill.tier.toLowerCase().replaceAll(
+      RegExp(r'[^a-z0-9]'),
+      '',
+    );
+    final isTier3 = compact.contains('tier3') || compact == '3';
     return skill.copyWith(
       isEnabled: isTier3 ? false : skill.isEnabled,
       isCommunity: true,
@@ -163,8 +184,9 @@ class SkillSecurityScanner {
   }
 
   static String _normalise(String value) {
-    var result = value.replaceAll(_zeroWidth, '');
+    var result = value.replaceAll(_formatCharacters, '');
     result = result.toLowerCase();
+    result = result.replaceAll(_markdownDelimiters, ' ');
     return result.replaceAll(_whitespaceRuns, ' ');
   }
 }

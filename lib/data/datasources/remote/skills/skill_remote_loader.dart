@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dartz/dartz.dart';
 import 'package:dio/dio.dart';
 import 'package:injectable/injectable.dart';
@@ -36,14 +38,19 @@ class SkillRemoteLoader implements SkillRemoteLoaderBase {
         options: Options(
           responseType: ResponseType.plain,
           followRedirects: true,
+          maxRedirects: 3,
           headers: const {'User-Agent': _userAgent, 'Accept': _accept},
         ),
       );
+      final finalHost = response.realUri.host;
+      if (SkillRemoteLoaderBase.isDisallowedHost(finalHost)) {
+        return const Left(NetworkFailure('Redirected to a disallowed host'));
+      }
       final body = response.data;
       if (body == null || body.isEmpty) {
         return Left(ParseFailure('Empty skill document at $url'));
       }
-      if (body.length > maxDocumentBytes) {
+      if (utf8.encode(body).length > maxDocumentBytes) {
         return const Left(
           ParseFailure('Skill document too large (max 256 KB)'),
         );

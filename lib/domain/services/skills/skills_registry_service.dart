@@ -151,21 +151,38 @@ class SkillsRegistryService {
 
   /// Registers an imported community skill and persists it so it survives
   /// a restart.
+  ///
+  /// Collision rule: unless [allowOverride] is true, an import never
+  /// overwrites an existing skill id. The bundled skill is preserved and
+  /// the import is re-namespaced to `<id>__community`, then
+  /// `<id>__community2`, `<id>__community3`, ... until the id is free.
+  /// The persisted skill keeps its final id so hydration round-trips.
   Future<void> registerImportedSkill(
     Skill skill, {
     String? sourceUrl,
+    bool allowOverride = false,
   }) async {
-    registerSkill(skill);
+    var stored = skill;
+    if (!allowOverride && _skills.containsKey(skill.id)) {
+      var candidate = '${skill.id}__community';
+      var suffix = 2;
+      while (_skills.containsKey(candidate)) {
+        candidate = '${skill.id}__community$suffix';
+        suffix++;
+      }
+      stored = skill.copyWith(id: candidate, isCommunity: true);
+    }
+    registerSkill(stored);
     final datasource = _localDatasource;
     if (datasource == null) {
       return;
     }
     try {
       await datasource.saveImportedSkill(
-        skill,
+        stored,
         sourceUrl: sourceUrl,
       );
-      await datasource.saveSkillState(skill.id, skill.isEnabled);
+      await datasource.saveSkillState(stored.id, stored.isEnabled);
     } catch (_) {}
   }
 
