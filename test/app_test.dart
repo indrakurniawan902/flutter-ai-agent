@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
+import 'package:flutter_ai_agent/domain/entities/skills/skill.dart';
+import 'package:flutter_ai_agent/domain/services/skills/skills_local_datasource.dart';
 import 'package:flutter_ai_agent/myapp.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_router.dart';
 import 'package:flutter_ai_agent/presentation/screen/splash/splash_screen.dart';
@@ -11,6 +13,11 @@ import 'helpers/mocks.dart';
 
 void main() {
   late MockSecureStorageService mockStorageService;
+
+  setUpAll(() {
+    registerFallbackValue(
+        const Skill(id: 'x', name: 'x', description: 'x'));
+  });
 
   setUp(() async {
     await sl.reset();
@@ -30,6 +37,23 @@ void main() {
       await sl.unregister<SecureStorageService>();
     }
     sl.registerLazySingleton<SecureStorageService>(() => mockStorageService);
+
+    final mockSkillsLocal = MockSkillsLocalDatasource();
+    when(() => mockSkillsLocal.loadImportedSkills())
+        .thenAnswer((_) async => <Skill>[]);
+    when(() => mockSkillsLocal.loadSkillStates())
+        .thenAnswer((_) async => <String, bool>{});
+    when(() => mockSkillsLocal.saveSkillState(any(), any()))
+        .thenAnswer((_) async {});
+    when(() => mockSkillsLocal.saveImportedSkill(any()))
+        .thenAnswer((_) async {});
+    when(() => mockSkillsLocal.deleteImportedSkill(any()))
+        .thenAnswer((_) async {});
+    if (sl.isRegistered<SkillsLocalDatasourceBase>()) {
+      await sl.unregister<SkillsLocalDatasourceBase>();
+    }
+    sl.registerLazySingleton<SkillsLocalDatasourceBase>(
+        () => mockSkillsLocal);
 
     appRouter.go('/splash');
   });

@@ -7,6 +7,7 @@ import 'package:flutter_ai_agent/domain/services/skills/skills_registry_service.
 import 'package:flutter_ai_agent/presentation/screen/skills/cubit/skills_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/skills/cubit/skills_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/skills/skill_detail_sheet.dart';
+import 'package:flutter_ai_agent/presentation/screen/skills/skill_import_dialog.dart';
 import 'package:flutter_ai_agent/utils/hermes_theme.dart';
 
 /// Tab 2: Skills Hub
@@ -118,6 +119,19 @@ class _SkillsHubViewState extends State<_SkillsHubView> {
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
             actions: [
+              IconButton(
+                key: const Key('skills_import_button'),
+                icon: const Icon(Icons.download_outlined),
+                tooltip: 'Import skill from URL',
+                color: HermesColors.inkSecondary,
+                onPressed: () {
+                  final cubit = context.read<SkillsCubit>();
+                  showDialog<void>(
+                    context: context,
+                    builder: (_) => SkillImportDialog(cubit: cubit),
+                  );
+                },
+              ),
               Container(
                 margin: const EdgeInsets.only(right: 16),
                 padding:

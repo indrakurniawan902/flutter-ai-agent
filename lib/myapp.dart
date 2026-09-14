@@ -6,6 +6,7 @@ import 'package:flutter_ai_agent/common/flavor_config.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/common/constant.dart';
 import 'package:flutter_ai_agent/domain/repositories/action_center/action_center_repository.dart';
+import 'package:flutter_ai_agent/domain/services/skills/skills_registry_service.dart';
 import 'package:flutter_ai_agent/utils/app_theme.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_router.dart';
 
@@ -14,6 +15,7 @@ Future<void> bootstrap(FlavorConfig flavor) async {
   WidgetsFlutterBinding.ensureInitialized();
   await _initHiveAdapters();
   configureInjection();
+  await _primeSkillsRegistry();
   await _primeActionCenterStore();
   runApp(MyApp(flavor: flavor));
 }
@@ -26,6 +28,16 @@ Future<void> _initHiveAdapters() async {
     await Hive.initFlutter('flames');
   } catch (e) {
     debugPrint('Hive init skipped: $e');
+  }
+}
+
+/// Hydrates persisted imported skills once so the registry (and the agent
+/// system prompt) includes them even when the Skills Hub tab never opens.
+Future<void> _primeSkillsRegistry() async {
+  try {
+    await getIt<SkillsRegistryService>().hydrateFromStorage();
+  } catch (e) {
+    debugPrint('Skills registry hydration skipped: $e');
   }
 }
 
