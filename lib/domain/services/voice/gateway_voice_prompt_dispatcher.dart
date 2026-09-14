@@ -10,9 +10,9 @@ import 'package:flutter_ai_agent/domain/services/voice/voice_prompt_dispatcher.d
 
 /// Dispatches a voice transcript over the already-connected gateway WebSocket.
 ///
-/// Reuses the existing `chat_message` frame (in) and the `text_delta` +
-/// `chat_message role=assistant` frames (out) that the bridge relay already
-/// speaks; no protocol change is required.
+/// Reuses the existing `chat_message` frame (in) and the `chat_message
+/// role=assistant` frame (out) that the bridge relay already speaks; no
+/// protocol change is required.
 @lazySingleton
 class GatewayVoicePromptDispatcher implements VoicePromptDispatcherBase {
   static const dispatchTimeout = Duration(seconds: 120);
@@ -54,11 +54,7 @@ class GatewayVoicePromptDispatcher implements VoicePromptDispatcherBase {
     final Completer<Either<Failure, String>> completer =
         Completer<Either<Failure, String>>();
     _inFlight = completer;
-    // Buffer keeps delta flow drained while the assistant frame stays
-    // the single source of truth for the reply.
-    final StringBuffer deltaBuffer = StringBuffer();
     StreamSubscription<GatewayMessage>? messageSub;
-    StreamSubscription<GatewayTextDeltaMessage>? deltaSub;
     try {
       messageSub = _client.messageStream.listen((GatewayMessage message) {
         if (message is GatewayChatMessage &&
@@ -75,11 +71,6 @@ class GatewayVoicePromptDispatcher implements VoicePromptDispatcherBase {
           }
         }
       });
-      deltaSub = _client.textDeltaStream.listen(
-        (GatewayTextDeltaMessage delta) {
-          deltaBuffer.write(delta.delta);
-        },
-      );
       _client.sendChatMessage(trimmed);
       final Either<Failure, String> result = await completer.future.timeout(
         dispatchTimeout,
@@ -93,7 +84,6 @@ class GatewayVoicePromptDispatcher implements VoicePromptDispatcherBase {
       return result;
     } finally {
       await messageSub?.cancel();
-      await deltaSub?.cancel();
       _inFlight = null;
     }
   }

@@ -38,8 +38,6 @@ void main() {
         .thenReturn(GatewayConnectionState.connected);
     when(() => mockGatewayClient.messageStream)
         .thenAnswer((_) => messageController.stream);
-    when(() => mockGatewayClient.textDeltaStream)
-        .thenAnswer((_) => const Stream.empty());
   });
 
   tearDown(() async {
@@ -188,5 +186,51 @@ void main() {
     // Assert
     expect(result.isLeft(), isTrue);
     verifyNever(() => mockGatewayClient.sendChatMessage(any()));
+  });
+
+  test('gateway cancel aborts the in-flight dispatch', () async {
+    // Arrange
+    final dispatcher = gatewayDispatcher();
+
+    // Act
+    final future = dispatcher.dispatch('hi');
+    await Future<void>.delayed(Duration.zero);
+    await dispatcher.cancel();
+
+    // Assert
+    final result = await future;
+    expect(result.isLeft(), isTrue);
+    result.fold(
+      (failure) => expect(
+        failure.message,
+        'voice_turn_cancelled: voice turn cancelled',
+      ),
+      (_) => fail('expected Left'),
+    );
+    verify(() => mockGatewayClient.sendChatCancel()).called(1);
+  });
+
+  test('gateway single-flight rejects a concurrent dispatch', () async {
+    // Arrange
+    final dispatcher = gatewayDispatcher();
+
+    // Act
+    final first = dispatcher.dispatch('hi');
+    await Future<void>.delayed(Duration.zero);
+    final second = await dispatcher.dispatch('again');
+
+    // Assert
+    second.fold(
+      (failure) => expect(failure, isA<VoiceTurnBusyFailure>()),
+      (_) => fail('expected Left'),
+    );
+    verify(() => mockGatewayClient.sendChatMessage('hi')).called(1);
+    verifyNever(() => mockGatewayClient.sendChatMessage('again'));
+
+    // Act: finish the first dispatch.
+    messageController.add(
+      const GatewayChatMessage(role: 'assistant', content: 'reply'),
+    );
+    expect(await first, const Right<Failure, String>('reply'));
   });
 }

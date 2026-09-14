@@ -38,6 +38,21 @@ class ChatVoicePromptDispatcher implements VoicePromptDispatcherBase {
   /// Test-visible timeout for the direct-path terminal-state wait.
   final Duration dispatchTimeout;
 
+  GatewayClientBase? _gatewayClient;
+  GatewayVoicePromptDispatcher? _gatewayDispatcher;
+
+  /// One gateway dispatcher per resolved client, so [cancel] reaches the same
+  /// `_inFlight` state [dispatch] created instead of a fresh no-op instance.
+  GatewayVoicePromptDispatcher _gatewayDispatcherFor(
+    GatewayClientBase client,
+  ) {
+    if (!identical(_gatewayClient, client)) {
+      _gatewayClient = client;
+      _gatewayDispatcher = GatewayVoicePromptDispatcher(client: client);
+    }
+    return _gatewayDispatcher!;
+  }
+
   @override
   String get transportId => _transportId;
 
@@ -82,7 +97,7 @@ class ChatVoicePromptDispatcher implements VoicePromptDispatcherBase {
       if (client == null) {
         return const Left(VoiceTurnNoTransportFailure());
       }
-      return GatewayVoicePromptDispatcher(client: client).dispatch(trimmed);
+      return _gatewayDispatcherFor(client).dispatch(trimmed);
     }
     final cubit = _resolveCubit();
     if (cubit == null || cubit.isClosed) {
@@ -122,7 +137,7 @@ class ChatVoicePromptDispatcher implements VoicePromptDispatcherBase {
       if (client == null) {
         return;
       }
-      await GatewayVoicePromptDispatcher(client: client).cancel();
+      await _gatewayDispatcherFor(client).cancel();
       return;
     }
     await _resolveCubit()?.stop();

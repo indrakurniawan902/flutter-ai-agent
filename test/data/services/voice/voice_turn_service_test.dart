@@ -255,6 +255,87 @@ void main() {
     expect(firstResult.isRight(), isTrue);
   });
 
+  test('mic already owned by another surface is rejected without listening',
+      () async {
+    // Arrange: a mounted ChatScreen (or the overlay bubble) owns the mic.
+    when(() => mockVoiceInput.isListening).thenReturn(true);
+
+    // Act
+    final result = await service.runTurn();
+
+    // Assert
+    expect(result.isLeft(), isTrue);
+    result.fold(
+      (failure) => expect(failure, isA<VoiceTurnBusyFailure>()),
+      (_) => fail('expected Left'),
+    );
+    verifyNever(
+      () => mockVoiceInput.startListening(
+        listenFor: any(named: 'listenFor'),
+        pauseFor: any(named: 'pauseFor'),
+        localeId: any(named: 'localeId'),
+      ),
+    );
+    verifyNever(() => mockVoiceInput.checkPermission());
+  });
+
+  test('single-flight guard survives cancelTurn of an in-flight turn',
+      () async {
+    // Arrange: start a turn and leave it waiting for the transcript.
+    final first = service.runTurn();
+    await Future<void>.delayed(Duration.zero);
+
+    // Act: cancel while the first turn is still unwinding.
+    await service.cancelTurn();
+    final second = await service.runTurn();
+
+    // Assert: the canceller did not clear the flag the running turn owns.
+    expect(second.isLeft(), isTrue);
+    second.fold(
+      (failure) => expect(failure, isA<VoiceTurnBusyFailure>()),
+      (_) => fail('expected Left'),
+    );
+    verify(() => mockVoiceInput.cancelListening()).called(1);
+
+    // Act: let the first turn finish.
+    statusController.add(VoiceInputStatus.done);
+    final firstResult = await first;
+
+    // Assert: the cancelled turn resolves Left instead of dispatching.
+    expect(firstResult.isLeft(), isTrue);
+    firstResult.fold(
+      (failure) => expect(
+        failure.message,
+        'voice_turn_cancelled: voice turn cancelled',
+      ),
+      (_) => fail('expected Left'),
+    );
+    expect(dispatcher.dispatched, isEmpty);
+  });
+
+  test('a throwing stopListening still releases the microphone', () async {
+    // Arrange: the recognizer fails during teardown.
+    when(() => mockVoiceInput.stopListening())
+        .thenThrow(StateError('teardown broke'));
+
+    // Act
+    final future = service.runTurn();
+    await Future<void>.delayed(Duration.zero);
+    statusController.add(VoiceInputStatus.done);
+    final result = await future;
+
+    // Assert
+    expect(result.isLeft(), isTrue);
+    result.fold(
+      (failure) {
+        expect(failure, isA<ServerFailure>());
+        expect(failure.message, startsWith('voice_turn_stt_error:'));
+      },
+      (_) => fail('expected Left'),
+    );
+    verify(() => mockVoiceInput.cancelListening()).called(1);
+  });
+
   test('no transport returns VoiceTurnNoTransportFailure before mic opens',
       () async {
     // Arrange

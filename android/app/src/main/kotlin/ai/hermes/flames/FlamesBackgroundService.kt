@@ -7,6 +7,8 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -182,14 +184,14 @@ class FlamesBackgroundService : Service() {
                 intent?.getStringExtra(EXTRA_TITLE)?.let { currentTitle = it }
                 intent?.getStringExtra(EXTRA_CONTENT)?.let { currentContent = it }
                 val notification = buildForegroundNotification(currentTitle, currentContent)
-                startForeground(NOTIFICATION_ID, notification)
+                startForegroundTyped(notification)
                 isServiceRunning = true
                 FlamesQuickTile.updateTileState(true)
                 return START_STICKY
             }
             ACTION_SHOW_BUBBLE -> {
                 val notification = buildForegroundNotification(currentTitle, currentContent)
-                startForeground(NOTIFICATION_ID, notification)
+                startForegroundTyped(notification)
                 isServiceRunning = true
                 FlamesOverlayBubble.show(this) { handleBubbleTap() }
                 return START_STICKY
@@ -198,7 +200,7 @@ class FlamesBackgroundService : Service() {
                 // hideBubble() enters through startForegroundService, so a
                 // cold-started service must satisfy the 5s contract first.
                 if (!isServiceRunning) {
-                    startForeground(NOTIFICATION_ID, buildForegroundNotification(currentTitle, currentContent))
+                    startForegroundTyped(buildForegroundNotification(currentTitle, currentContent))
                     isServiceRunning = true
                 }
                 FlamesOverlayBubble.hide(this)
@@ -292,6 +294,54 @@ class FlamesBackgroundService : Service() {
             stopForeground(true)
         }
         stopSelf()
+    }
+
+    /**
+     * Starts the foreground notification with an EXPLICIT type mask.
+     *
+     * A 2-arg startForeground() defaults to every type declared in the manifest, so
+     * the `microphone` type's runtime prerequisite (a granted RECORD_AUDIO) would be
+     * asserted on every start - including the gateway-driven start long before the
+     * user ever touches the mic button. The mask therefore includes microphone only
+     * when that permission is actually held, and each attempt degrades to a smaller
+     * mask instead of letting a SecurityException kill the app.
+     */
+    private fun startForegroundTyped(notification: Notification) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            // Foreground service types are not enforced before Android 10.
+            startForeground(NOTIFICATION_ID, notification)
+            return
+        }
+        for (types in foregroundServiceTypeCandidates()) {
+            try {
+                startForeground(NOTIFICATION_ID, notification, types)
+                return
+            } catch (_: Exception) {
+                // Try the next, smaller mask.
+            }
+        }
+        // Last resort: still satisfy the 5-second startForeground contract.
+        startForeground(NOTIFICATION_ID, notification)
+    }
+
+    private fun foregroundServiceTypeCandidates(): List<Int> {
+        val dataSync = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        val specialUse = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+        } else {
+            0
+        }
+        val microphone = if (
+            checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        } else {
+            0
+        }
+        val full = dataSync or specialUse or microphone
+        val safe = dataSync or specialUse
+        return if (full == safe) listOf(full) else listOf(full, safe)
     }
 
     private fun createNotificationChannel() {

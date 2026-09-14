@@ -17,12 +17,10 @@ void main() {
   late MockAgentCubit mockAgentCubit;
   late MockVoiceInputService mockVoiceInputService;
   late MockVoiceOutputService mockVoiceOutputService;
-  late MockBackgroundService mockBackgroundService;
   late VoicePromptDispatcherRegistry registry;
 
   late StreamController<AgentState> agentStateController;
   late StreamController<VoiceInputStatus> voiceInputStatusController;
-  late StreamController<String> backgroundActionController;
 
   setUp(() async {
     await sl.reset();
@@ -30,13 +28,11 @@ void main() {
     mockAgentCubit = MockAgentCubit();
     mockVoiceInputService = MockVoiceInputService();
     mockVoiceOutputService = MockVoiceOutputService();
-    mockBackgroundService = MockBackgroundService();
     registry = VoicePromptDispatcherRegistry();
 
     agentStateController = StreamController<AgentState>.broadcast();
     voiceInputStatusController =
         StreamController<VoiceInputStatus>.broadcast();
-    backgroundActionController = StreamController<String>.broadcast();
 
     when(() => mockAgentCubit.state).thenReturn(const AgentIdle());
     when(() => mockAgentCubit.isClosed).thenReturn(false);
@@ -92,17 +88,6 @@ void main() {
     when(() => mockVoiceOutputService.interrupt()).thenAnswer((_) async {});
     when(() => mockVoiceOutputService.dispose()).thenReturn(null);
 
-    when(
-      () => mockBackgroundService.actionStream,
-    ).thenAnswer((_) => backgroundActionController.stream);
-    when(
-      () => mockBackgroundService.getPendingAction(),
-    ).thenAnswer((_) async => null);
-    when(
-      () => mockBackgroundService.clearPendingAction(),
-    ).thenAnswer((_) async {});
-    when(() => mockBackgroundService.dispose()).thenReturn(null);
-
     sl.registerFactory<AgentCubit>(() => mockAgentCubit);
     sl.registerSingleton<VoicePromptDispatcherRegistry>(registry);
   });
@@ -110,7 +95,6 @@ void main() {
   tearDown(() async {
     await agentStateController.close();
     await voiceInputStatusController.close();
-    await backgroundActionController.close();
     await sl.reset();
   });
 
@@ -119,7 +103,6 @@ void main() {
       home: ChatScreen(
         voiceInputService: mockVoiceInputService,
         voiceOutputService: mockVoiceOutputService,
-        backgroundService: mockBackgroundService,
       ),
     );
   }
@@ -151,17 +134,26 @@ void main() {
   });
 
   testWidgets(
-      'ChatScreen no longer starts the microphone on voice_input actions',
+      'a mounted ChatScreen owns a READY chat transport until it unmounts',
       (tester) async {
-    // Arrange
+    // Act: mount the screen.
     await tester.pumpWidget(createWidgetUnderTest());
     await tester.pump();
 
-    // Act
-    backgroundActionController.add('voice_input');
+    // Assert: the registry sees a ready transport registered by the screen.
+    final mounted = registry.active;
+    expect(mounted, isNotNull);
+    final transport = mounted!;
+    expect(transport.isReady, isTrue);
+    expect(transport.transportId, 'chat');
+    expect(registry.hasReadyTransport, isTrue);
+
+    // Act: unmount the screen.
+    await tester.pumpWidget(const SizedBox());
     await tester.pump();
 
-    // Assert
-    verifyNever(() => mockVoiceInputService.startListening());
+    // Assert: the transport is gone, so the headless fallback can take over.
+    expect(registry.active, isNull);
+    expect(registry.hasReadyTransport, isFalse);
   });
 }

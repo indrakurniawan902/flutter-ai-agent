@@ -42,7 +42,6 @@ import 'package:flutter_ai_agent/domain/tools/chat/url_reader_service.dart';
 import 'package:flutter_ai_agent/data/datasources/remote/gateway/gateway_socket.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_rpc_receiver.dart';
-import 'package:flutter_ai_agent/domain/services/voice/voice_prompt_dispatcher.dart';
 import 'package:flutter_ai_agent/domain/services/voice/voice_turn_service.dart';
 import 'package:flutter_ai_agent/domain/services/tools/tool_pruning_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/gateway/cubit/gateway_rpc_cubit.dart';
@@ -225,6 +224,3 @@ class MockAccessibilityInspectorPlatformWrapper extends Mock
 
 // Voice turn seam
 class MockVoiceTurnService extends Mock implements VoiceTurnServiceBase {}
-
-class MockVoicePromptDispatcher extends Mock
-    implements VoicePromptDispatcherBase {}

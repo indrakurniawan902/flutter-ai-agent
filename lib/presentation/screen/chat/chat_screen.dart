@@ -15,7 +15,6 @@ import 'package:flutter_ai_agent/domain/entities/chat/chat_attachment.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_mode.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
-import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/battery_optimization_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/file_workspace_service.dart';
@@ -70,7 +69,6 @@ class ChatScreen extends StatefulWidget {
   final Widget Function(BuildContext context)? qrScannerBuilder;
   final VoiceInputServiceBase? voiceInputService;
   final VoiceOutputServiceBase? voiceOutputService;
-  final BackgroundServiceBase? backgroundService;
   final PermissionGate? permissionGate;
 
   const ChatScreen({
@@ -84,7 +82,6 @@ class ChatScreen extends StatefulWidget {
     this.qrScannerBuilder,
     this.voiceInputService,
     this.voiceOutputService,
-    this.backgroundService,
     this.permissionGate,
   });
 

@@ -35,11 +35,22 @@ class VoiceTurnService implements VoiceTurnServiceBase {
   static const defaultPauseFor = Duration(seconds: 3);
   static const transcriptGracePeriod = Duration(seconds: 2);
 
+  /// Same cancellation outcome the gateway dispatcher reports, so callers see
+  /// one consistent failure for a cancelled turn on every transport.
+  static const _cancelledFailure =
+      ServerFailure('voice_turn_cancelled: voice turn cancelled');
+
   final VoiceInputServiceBase _voiceInput;
   final VoiceOutputServiceBase _voiceOutput;
   final VoicePromptDispatcherRegistry _registry;
 
   bool _active = false;
+
+  /// Set by [cancelTurn] while a turn is in flight. The running turn owns
+  /// `_active` and is the ONLY writer that clears it (in its `finally`); the
+  /// canceller must never clear it or a second turn could start while the
+  /// first is still unwinding and both would drive the recognizer.
+  bool _cancelRequested = false;
   VoiceTurnPhase _phase = VoiceTurnPhase.idle;
   final _phaseController = StreamController<VoiceTurnPhase>.broadcast();
   final _errorController = StreamController<String>.broadcast();
@@ -66,12 +77,22 @@ class VoiceTurnService implements VoiceTurnServiceBase {
       return const Left(VoiceTurnBusyFailure());
     }
     _active = true;
+    _cancelRequested = false;
     _emitPhase(VoiceTurnPhase.listening);
     try {
       // A missing transport must never open the microphone.
       final dispatcher = _registry.active;
       if (dispatcher == null) {
         const failure = VoiceTurnNoTransportFailure();
+        _emitPhase(VoiceTurnPhase.error);
+        _pushError(failure.message);
+        return const Left(failure);
+      }
+
+      // Another surface (mounted ChatScreen, overlay bubble) may already own
+      // the recognizer: never open a second capture session over it.
+      if (_voiceInput.isListening) {
+        const failure = VoiceTurnBusyFailure();
         _emitPhase(VoiceTurnPhase.error);
         _pushError(failure.message);
         return const Left(failure);
@@ -109,6 +130,12 @@ class VoiceTurnService implements VoiceTurnServiceBase {
         return Left(initFailure);
       }
 
+      // A cancel that landed while permission/init was resolving must not open
+      // the microphone afterwards.
+      if (_cancelRequested) {
+        return const Left(_cancelledFailure);
+      }
+
       final effectiveListenFor = listenFor ?? defaultListenFor;
       final effectivePauseFor = pauseFor ?? defaultPauseFor;
       final started = await _voiceInput.startListening(
@@ -124,6 +151,12 @@ class VoiceTurnService implements VoiceTurnServiceBase {
         _emitPhase(VoiceTurnPhase.error);
         _pushError(startFailure.message);
         return Left(startFailure);
+      }
+
+      // A cancel that landed while the recognizer was starting has already
+      // torn the capture session down; do not wait on a dead recognizer.
+      if (_cancelRequested) {
+        return const Left(_cancelledFailure);
       }
 
       final transcriptResult = await _awaitTranscript(effectiveListenFor);
@@ -150,6 +183,11 @@ class VoiceTurnService implements VoiceTurnServiceBase {
         return const Left(VoiceTurnEmptyFailure());
       }
 
+      // A cancel may have landed while the transcript was being recognized.
+      if (_cancelRequested) {
+        return const Left(_cancelledFailure);
+      }
+
       _emitPhase(VoiceTurnPhase.dispatching);
       final reply = await dispatcher.dispatch(transcript);
       final String? replyText = reply.fold(
@@ -167,6 +205,11 @@ class VoiceTurnService implements VoiceTurnServiceBase {
             (_) => const ServerFailure('voice_turn_dispatch_failed'),
           ),
         );
+      }
+
+      // A cancel that landed during dispatch must not be followed by audio.
+      if (_cancelRequested) {
+        return const Left(_cancelledFailure);
       }
 
       var spoken = false;
@@ -195,14 +238,19 @@ class VoiceTurnService implements VoiceTurnServiceBase {
     }
   }
 
+  /// Requests cancellation of the in-flight turn.
+  ///
+  /// The running turn clears `_active` in its `finally`, never this method:
+  /// clearing it here would let a second [runTurn] start while the first is
+  /// still unwinding and both would drive one recognizer.
   @override
   Future<void> cancelTurn() async {
     if (!_active) {
       return;
     }
+    _cancelRequested = true;
     await _voiceInput.cancelListening();
     await _registry.active?.cancel();
-    _active = false;
     _emitPhase(VoiceTurnPhase.idle);
   }
 
@@ -224,6 +272,9 @@ class VoiceTurnService implements VoiceTurnServiceBase {
     StreamSubscription<VoiceInputStatus>? statusSub;
     StreamSubscription<String>? errorSub;
     Timer? guard;
+    // Assigned on every path (both branches, and the catch) and returned after
+    // the finally: returning from inside the try would let the finally's
+    // teardown run after the caller already has the value.
     late final Either<Failure, String> outcome;
     try {
       statusSub = _voiceInput.statusStream.listen((status) {
@@ -263,6 +314,15 @@ class VoiceTurnService implements VoiceTurnServiceBase {
             : lastError!;
         outcome = Left(ServerFailure('voice_turn_stt_error: $detail'));
       }
+    } catch (error) {
+      // Anything thrown after startListening must still release the mic, or
+      // the recognizer keeps running for the rest of the session.
+      try {
+        await _voiceInput.cancelListening();
+      } catch (_) {
+        // A throwing cancel must not mask the original STT error.
+      }
+      outcome = Left(ServerFailure('voice_turn_stt_error: $error'));
     } finally {
       guard?.cancel();
       // Cancelling a subscription is teardown, not part of the turn's outcome:

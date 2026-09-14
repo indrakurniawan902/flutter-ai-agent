@@ -243,6 +243,113 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('done phase posts an honest completion notification',
+      (tester) async {
+    // Arrange
+    when(() => mockBackgroundService.updateNotification(
+          title: any(named: 'title'),
+          content: any(named: 'content'),
+        )).thenAnswer((_) async => const Right(true));
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pump();
+
+    // Act
+    phaseController.add(VoiceTurnPhase.done);
+    await tester.pump();
+
+    // Assert
+    verify(
+      () => mockBackgroundService.updateNotification(
+        title: 'Flames Agent Active',
+        content: any(named: 'content', that: contains('finished')),
+      ),
+    ).called(1);
+  });
+
+  testWidgets('error phase posts an honest failure notification',
+      (tester) async {
+    // Arrange
+    when(() => mockBackgroundService.updateNotification(
+          title: any(named: 'title'),
+          content: any(named: 'content'),
+        )).thenAnswer((_) async => const Right(true));
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pump();
+
+    // Act
+    phaseController.add(VoiceTurnPhase.error);
+    await tester.pump();
+
+    // Assert
+    verify(
+      () => mockBackgroundService.updateNotification(
+        title: 'Flames Agent Active',
+        content: any(named: 'content', that: contains('failed')),
+      ),
+    ).called(1);
+  });
+
+  testWidgets('a throwing updateNotification never breaks the listener',
+      (tester) async {
+    // Arrange
+    when(() => mockBackgroundService.updateNotification(
+          title: any(named: 'title'),
+          content: any(named: 'content'),
+        )).thenThrow(StateError('notification seam down'));
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pump();
+
+    // Act
+    phaseController.add(VoiceTurnPhase.done);
+    await tester.pump();
+    phaseController.add(VoiceTurnPhase.error);
+    await tester.pump();
+
+    // Assert
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a Left updateNotification never breaks the listener',
+      (tester) async {
+    // Arrange
+    when(() => mockBackgroundService.updateNotification(
+          title: any(named: 'title'),
+          content: any(named: 'content'),
+        )).thenAnswer((_) async => const Left(CacheFailure('nope')));
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pump();
+
+    // Act
+    phaseController.add(VoiceTurnPhase.done);
+    await tester.pump();
+    phaseController.add(VoiceTurnPhase.error);
+    await tester.pump();
+
+    // Assert
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('disposing the widget unsubscribes from the phase stream',
+      (tester) async {
+    // Arrange
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pump();
+
+    // Act
+    await tester.pumpWidget(const SizedBox());
+    phaseController.add(VoiceTurnPhase.done);
+    phaseController.add(VoiceTurnPhase.error);
+    await tester.pump();
+
+    // Assert
+    verifyNever(
+      () => mockBackgroundService.updateNotification(
+        title: any(named: 'title'),
+        content: any(named: 'content'),
+      ),
+    );
+  });
+
   testWidgets('cancel_voice cancels the turn and never starts one',
       (tester) async {
     // Arrange
