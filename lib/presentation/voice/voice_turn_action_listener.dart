@@ -53,6 +53,7 @@ class _VoiceTurnActionListenerState extends State<VoiceTurnActionListener> {
   StreamSubscription<String>? _actionSub;
   StreamSubscription<VoiceTurnPhase>? _phaseSub;
   AgentCubit? _cachedHeadlessCubit;
+  bool _turnInFlight = false;
 
   @override
   void initState() {
@@ -161,10 +162,10 @@ class _VoiceTurnActionListenerState extends State<VoiceTurnActionListener> {
   void _handleAction(String action) {
     switch (action.toLowerCase().trim()) {
       case 'voice_input':
-        unawaited(_voiceTurnService?.runTurn());
+        unawaited(_runTurnWithTileSync());
         break;
       case 'cancel_voice':
-        unawaited(_voiceTurnService?.cancelTurn());
+        unawaited(_cancelTurnAndResetTile());
         break;
       case 'quick_status':
         unawaited(
@@ -206,6 +207,46 @@ class _VoiceTurnActionListenerState extends State<VoiceTurnActionListener> {
     } catch (_) {
       // A broken overlay seam must never block startup.
     }
+  }
+
+  /// Runs exactly one headless turn and mirrors it on the Quick Settings tile:
+  /// active while recording, inactive once the turn settles. Fire-and-forget
+  /// for the stream handler; awaited here so the tile reset is real.
+  Future<void> _runTurnWithTileSync() async {
+    final turnService = _voiceTurnService;
+    if (turnService == null) {
+      return;
+    }
+    if (_turnInFlight) {
+      // The in-flight turn owns the tile; let the single-flight service
+      // reject this one without touching the tile state.
+      await turnService.runTurn();
+      return;
+    }
+    _turnInFlight = true;
+    await _setTileState(QuickTileState.active);
+    try {
+      await turnService.runTurn();
+    } finally {
+      _turnInFlight = false;
+      await _setTileState(QuickTileState.inactive);
+    }
+  }
+
+  /// Tile removed mid-turn: stop the recorder and never leave the tile active.
+  Future<void> _cancelTurnAndResetTile() async {
+    try {
+      await _voiceTurnService?.cancelTurn();
+    } catch (_) {}
+    await _setTileState(QuickTileState.inactive);
+  }
+
+  /// Best-effort tile push. A missing service or a throwing channel must never
+  /// break the turn; the returned Either is deliberately ignored.
+  Future<void> _setTileState(QuickTileState state) async {
+    try {
+      await _backgroundService?.setTileState(state);
+    } catch (_) {}
   }
 
   Future<void> _checkPendingAction() async {

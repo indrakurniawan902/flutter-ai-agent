@@ -26,10 +26,10 @@ class FlamesBackgroundService : Service() {
         const val ACTION_STOP_SERVICE = "ai.hermes.flames.action.STOP_SERVICE"
         const val ACTION_UPDATE_NOTIFICATION = "ai.hermes.flames.action.UPDATE_NOTIFICATION"
         const val ACTION_VOICE_INPUT = "ai.hermes.flames.action.VOICE_INPUT"
+        const val ACTION_CANCEL_VOICE = "ai.hermes.flames.action.CANCEL_VOICE"
         const val ACTION_QUICK_STATUS = "ai.hermes.flames.action.QUICK_STATUS"
         const val ACTION_SHOW_BUBBLE = "ai.hermes.flames.action.SHOW_BUBBLE"
         const val ACTION_HIDE_BUBBLE = "ai.hermes.flames.action.HIDE_BUBBLE"
-        const val ACTION_CANCEL_VOICE = "ai.hermes.flames.action.CANCEL_VOICE"
 
         const val EXTRA_TITLE = "extra_title"
         const val EXTRA_CONTENT = "extra_content"
@@ -174,8 +174,13 @@ class FlamesBackgroundService : Service() {
                 intent?.getStringExtra(EXTRA_TITLE)?.let { currentTitle = it }
                 intent?.getStringExtra(EXTRA_CONTENT)?.let { currentContent = it }
                 val notification = buildForegroundNotification(currentTitle, currentContent)
-                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-                notificationManager?.notify(NOTIFICATION_ID, notification)
+                if (isServiceRunning) {
+                    val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                    notificationManager?.notify(NOTIFICATION_ID, notification)
+                } else {
+                    startForeground(NOTIFICATION_ID, notification)
+                    isServiceRunning = true
+                }
                 return START_STICKY
             }
             ACTION_START_SERVICE -> {
@@ -184,7 +189,6 @@ class FlamesBackgroundService : Service() {
                 val notification = buildForegroundNotification(currentTitle, currentContent)
                 startForeground(NOTIFICATION_ID, notification)
                 isServiceRunning = true
-                FlamesQuickTile.updateTileState(true)
                 return START_STICKY
             }
             ACTION_SHOW_BUBBLE -> {
@@ -211,6 +215,8 @@ class FlamesBackgroundService : Service() {
                 // Runs the turn inside this service: no MainActivity, no ChatScreen.
                 // The Dart seam only exists while a Flutter engine is alive, so an
                 // engine-less tap is reported honestly instead of opening the app.
+                startForeground(NOTIFICATION_ID, buildForegroundNotification(currentTitle, currentContent))
+                isServiceRunning = true
                 val channel = dartChannel
                 if (channel != null) {
                     Handler(Looper.getMainLooper()).post {
@@ -228,6 +234,11 @@ class FlamesBackgroundService : Service() {
                 return START_STICKY
             }
             ACTION_CANCEL_VOICE -> {
+                // Removing the tile mid-turn must not leave the microphone hanging.
+                // The Dart seam only exists while a Flutter engine is alive, so an
+                // engine-less cancel is reported honestly instead of opening the app.
+                startForeground(NOTIFICATION_ID, buildForegroundNotification(currentTitle, currentContent))
+                isServiceRunning = true
                 val channel = dartChannel
                 if (channel != null) {
                     Handler(Looper.getMainLooper()).post {
@@ -238,7 +249,7 @@ class FlamesBackgroundService : Service() {
                     }
                     currentContent = "Voice turn cancelled"
                 } else {
-                    currentContent = "Flames is not running - open it once to enable voice turns"
+                    currentContent = "Flames is not running - nothing to cancel"
                 }
                 val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
                 notificationManager?.notify(NOTIFICATION_ID, buildForegroundNotification(currentTitle, currentContent))
@@ -276,7 +287,9 @@ class FlamesBackgroundService : Service() {
         FlamesOverlayBubble.hide(this)
         releaseWakeLock()
         isServiceRunning = false
-        FlamesQuickTile.updateTileState(false)
+        if (!FlamesQuickTile.isTileActive) {
+            FlamesQuickTile.updateTileState(false)
+        }
         super.onDestroy()
     }
 
@@ -284,7 +297,9 @@ class FlamesBackgroundService : Service() {
         releaseWakeLock()
         bubbleRecording = false
         isServiceRunning = false
-        FlamesQuickTile.updateTileState(false)
+        if (!FlamesQuickTile.isTileActive) {
+            FlamesQuickTile.updateTileState(false)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } else {
