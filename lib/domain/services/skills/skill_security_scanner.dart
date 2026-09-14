@@ -32,11 +32,46 @@ class SkillSecurityScanner {
     r'(?<!\w)[*_~`]+|[*_~`]+(?!\w)',
   );
   static final RegExp _whitespaceRuns = RegExp(r'\s+');
-  static final RegExp _base64Candidate = RegExp(r'[A-Za-z0-9+/]{40,}={0,2}');
 
-  /// Largest base64 candidate that is decoded; longer runs are skipped so a
-  /// hostile document cannot force a huge decode (decode bomb).
+  /// Base64-looking runs of at least 40 characters. A run that is exactly a
+  /// sha512 hex digest (128 hex characters, not surrounded by more hex) is
+  /// excluded: it is a checksum, not an encoded payload.
+  static final RegExp _base64Candidate = RegExp(
+    r'(?<![0-9a-fA-F])'
+    r'(?![0-9a-fA-F]{128}(?![0-9a-fA-F]))'
+    r'[A-Za-z0-9+/]{40,}={0,2}',
+  );
+
+  /// Markdown delimiters plus the base64url hyphen, stripped outright by
+  /// the strict squeeze pass wherever they appear; [_markdownDelimiters]
+  /// only strips a delimiter that sits at a word boundary.
+  static final RegExp _embeddedDelimiters = RegExp(r'[*_~`-]+');
+
+  /// Shortest run the blob detector treats as a large blob; below this a
+  /// run is only decoded when it looks like it hides an injection.
+  static const int _minBase64BlobLength = 120;
+
+  /// Largest single base64 candidate that is decoded; longer runs are
+  /// skipped so one run cannot force a huge decode (decode bomb). The work
+  /// across a whole decode pass is bounded separately by
+  /// [_maxBase64DecodeWork], because [_squeeze] removes whitespace and a
+  /// large surface can otherwise be decoded in many medium runs.
   static const int _maxBase64CandidateLength = 64 * 1024;
+
+  /// Total candidate characters one decode pass may submit to the decoder,
+  /// summed over every field of the scan surface. Each candidate is decoded
+  /// at up to four phase offsets and each phase is retried with at most
+  /// three trailing characters dropped, so decoded work is bounded by a
+  /// small constant times this budget; a document full of medium runs
+  /// cannot force a multi-megabyte decode. Each of the three passes gets a
+  /// fresh budget so one pass cannot starve the others, and a pass stops
+  /// once spent.
+  static const int _maxBase64DecodeWork = 256 * 1024;
+
+  /// How many leading non-printable bytes of a decoded candidate are skipped
+  /// before its printable run is matched, so a single leading binary byte
+  /// cannot hide a payload. Bounded so the skip itself stays cheap.
+  static const int _maxNonPrintableSkip = 32;
 
   /// Verbs that turn an override phrase into an instruction.
   static const String _directiveVerb =
@@ -159,12 +194,6 @@ class SkillSecurityScanner {
       SkillScanSeverity.high,
       r'<!--[\s\S]{0,400}(ignore|instruction|system\s+prompt)',
     ),
-    _ScanPattern(
-      patternBase64Blob,
-      'Contains a large base64 blob',
-      SkillScanSeverity.high,
-      r'[A-Za-z0-9+\/]{120,}={0,2}',
-    ),
   ];
 
   /// Scans [skill] for prompt-injection payloads and for tool requests
@@ -204,6 +233,10 @@ class SkillSecurityScanner {
         );
       }
     }
+    final blobFinding = _scanBase64Blobs(surface);
+    if (blobFinding != null) {
+      findings.add(blobFinding);
+    }
     final encodedFinding = _scanBase64Payloads(surface);
     if (encodedFinding != null) {
       findings.add(encodedFinding);
@@ -220,47 +253,117 @@ class SkillSecurityScanner {
   /// Decodes base64-looking runs from [surface] and reports at most one
   /// critical finding when a decoded payload matches an injection pattern.
   ///
-  /// Two passes run over the case-preserving [surface]:
+  /// Three passes run over the case-preserving [surface]:
   /// 1. the original text, so an unwrapped blob keeps its exact excerpt;
   /// 2. a "squeezed" view with whitespace, format characters, and markdown
   ///    delimiters removed and the base64url alphabet mapped, so line
   ///    wrapping, indentation, inserted spaces, and inserted format
-  ///    characters cannot split a payload into undecodable runs.
+  ///    characters cannot split a payload into undecodable runs;
+  /// 3. a strict squeeze that additionally removes markdown delimiters and
+  ///    hyphens wherever they appear, so a delimiter inserted mid-blob
+  ///    cannot cut a payload into two runs that each fall under the
+  ///    candidate floor.
   ///
-  /// Each field is scanned separately so squeezing one field cannot glue
-  /// unrelated fields together into a bogus candidate.
+  /// Detection is an OR over the passes: the first pass that decodes a run
+  /// to an injection payload wins, so a payload is found even when it is
+  /// only recoverable after squeezing. Each field is scanned separately so
+  /// squeezing one field cannot glue unrelated fields together. Each pass
+  /// draws from one shared work budget, so the total decode work per scan
+  /// stays bounded no matter how the payload is spread across fields.
   static SkillScanFinding? _scanBase64Payloads(List<String> surface) {
-    for (final field in surface) {
-      final direct = _findEncodedPayloadIn(field, trimWhitespace: true);
-      if (direct != null) {
-        return direct;
-      }
-      final squeezed = _findEncodedPayloadIn(
-        _squeeze(field),
-        allowPrintableTail: true,
-      );
-      if (squeezed != null) {
-        return squeezed;
+    for (final view in [_identity, _squeeze, _strictSqueeze]) {
+      final budget = _DecodeBudget(_maxBase64DecodeWork);
+      for (final field in surface) {
+        final finding = _findEncodedPayloadIn(view(field), budget);
+        if (finding != null) {
+          return finding;
+        }
+        if (budget.isExhausted) {
+          break;
+        }
       }
     }
     return null;
   }
 
+  static String _identity(String value) => value;
+
+  /// Reports at most one high-severity finding for a large base64 run that
+  /// is not ordinary printable text, so a binary blob or an encoded
+  /// injection is caught while printable documentation is not. A 128-char
+  /// sha512 hex digest never matches [_base64Candidate].
+  ///
+  /// Only the raw fields are scanned: squeezing can glue surrounding prose
+  /// onto a blob and turn benign documentation into undecodable bytes.
+  static SkillScanFinding? _scanBase64Blobs(List<String> surface) {
+    final budget = _DecodeBudget(_maxBase64DecodeWork);
+    for (final field in surface) {
+      for (final candidate in _base64Candidate.allMatches(field)) {
+        final run = candidate.group(0)!;
+        if (run.length < _minBase64BlobLength) {
+          continue;
+        }
+        if (run.length > _maxBase64CandidateLength) {
+          return _blobFinding(run);
+        }
+        if (!budget.tryConsume(run.length)) {
+          if (budget.isExhausted) {
+            return null;
+          }
+          continue;
+        }
+        final bytes = _decodeBase64BytesLenient(run);
+        if (bytes == null) {
+          continue;
+        }
+        if (_isTextLike(bytes) &&
+            _matchDecoded(String.fromCharCodes(bytes)) == null) {
+          continue;
+        }
+        return _blobFinding(run);
+      }
+    }
+    return null;
+  }
+
+  /// Whether [bytes] read as text: printable from the first byte, with at
+  /// most a short partial tail left over by [_decodeBase64BytesLenient].
+  static bool _isTextLike(List<int> bytes) {
+    var end = 0;
+    while (end < bytes.length && _isPrintableByte(bytes[end])) {
+      end++;
+    }
+    return bytes.length - end <= 3;
+  }
+
+  static SkillScanFinding _blobFinding(String run) {
+    return SkillScanFinding(
+      patternId: patternBase64Blob,
+      description: 'Contains a large base64 blob',
+      severity: SkillScanSeverity.high,
+      excerpt: run.length > 120 ? run.substring(0, 120) : run,
+    );
+  }
+
   static SkillScanFinding? _findEncodedPayloadIn(
-    String text, {
-    bool trimWhitespace = false,
-    bool allowPrintableTail = false,
-  }) {
+    String text,
+    _DecodeBudget budget,
+  ) {
+    if (budget.isExhausted) {
+      return null;
+    }
     for (final candidate in _base64Candidate.allMatches(text)) {
       final run = candidate.group(0)!;
       if (run.length > _maxBase64CandidateLength) {
         continue;
       }
-      final finding = _decodeAndMatch(
-        run,
-        trimWhitespace: trimWhitespace,
-        allowPrintableTail: allowPrintableTail,
-      );
+      if (!budget.tryConsume(run.length)) {
+        if (budget.isExhausted) {
+          return null;
+        }
+        continue;
+      }
+      final finding = _decodeAndMatch(run);
       if (finding != null) {
         return finding;
       }
@@ -270,45 +373,44 @@ class SkillSecurityScanner {
 
   /// Decodes [run] at each of the four base64 phases and returns a finding
   /// when any decoding yields an injection payload. The phase offsets make
-  /// the match independent of how many characters precede the payload.
+  /// the match independent of how many characters precede the payload, and
+  /// [_decodeBase64BytesLenient] tolerates prose glued straight onto a blob.
   ///
-  /// When squeezing glued ordinary text after the payload, the decoded tail
-  /// stops being printable; with [allowPrintableTail] the printable prefix
-  /// of each decoding is matched, so such a tail cannot hide the payload.
-  static SkillScanFinding? _decodeAndMatch(
-    String run, {
-    bool trimWhitespace = false,
-    bool allowPrintableTail = false,
-  }) {
+  /// Up to [_maxNonPrintableSkip] leading non-printable bytes are skipped
+  /// before the printable run is matched, so a binary byte inserted before
+  /// the payload cannot hide it. The same rule keeps the printable prefix
+  /// of a decoding whose tail turned non-printable, which is what squeezing
+  /// ordinary text after a payload produces.
+  static SkillScanFinding? _decodeAndMatch(String run) {
     for (var phase = 0; phase < 4; phase++) {
-      var candidate = run.substring(phase);
-      if (trimWhitespace) {
-        candidate = candidate.replaceAll(_whitespaceRuns, '');
-      }
-      final bytes = _decodeBase64Bytes(candidate);
+      final bytes = _decodeBase64BytesLenient(run.substring(phase));
       if (bytes == null) {
         continue;
       }
-      var end = bytes.length;
-      if (allowPrintableTail) {
-        end = 0;
-        while (end < bytes.length && _isPrintableByte(bytes[end])) {
-          end++;
-        }
-      } else if (!bytes.every(_isPrintableByte)) {
-        continue;
-      }
-      if (end < 8) {
-        continue;
-      }
-      final finding = _matchDecoded(
-        String.fromCharCodes(bytes.sublist(0, end)),
-      );
+      final finding = _matchPrintableRun(bytes);
       if (finding != null) {
         return finding;
       }
     }
     return null;
+  }
+
+  static SkillScanFinding? _matchPrintableRun(List<int> bytes) {
+    var start = 0;
+    while (start < bytes.length && !_isPrintableByte(bytes[start])) {
+      start++;
+    }
+    if (start > _maxNonPrintableSkip) {
+      return null;
+    }
+    var end = start;
+    while (end < bytes.length && _isPrintableByte(bytes[end])) {
+      end++;
+    }
+    if (end - start < 8) {
+      return null;
+    }
+    return _matchDecoded(String.fromCharCodes(bytes.sublist(start, end)));
   }
 
   static SkillScanFinding? _matchDecoded(String decodedText) {
@@ -339,6 +441,17 @@ class SkillSecurityScanner {
     return result.replaceAll('-', '+').replaceAll('_', '/');
   }
 
+  /// Like [_squeeze], but also removes markdown delimiters and hyphens that
+  /// sit inside a run, so a single `*` inserted mid-blob cannot split the
+  /// payload into two runs that each fall under the candidate floor. Runs
+  /// of base64 text never contain `-` or `_` (the alphabet is `+/`), and a
+  /// real `*_~\`` inside a run only ever appears as an inserted delimiter.
+  static String _strictSqueeze(String value) {
+    var result = value.replaceAll(_formatCharacters, '');
+    result = result.replaceAll(_whitespaceRuns, '');
+    return result.replaceAll(_embeddedDelimiters, '');
+  }
+
   static List<int>? _decodeBase64Bytes(String candidate) {
     final stripped = candidate.replaceAll(_whitespaceRuns, '');
     final remainder = stripped.length % 4;
@@ -350,6 +463,27 @@ class SkillSecurityScanner {
     } catch (_) {
       return null;
     }
+  }
+
+  /// [_decodeBase64Bytes] with up to three trailing characters dropped.
+  /// A run that glues prose straight onto the end of a blob is otherwise a
+  /// length that cannot decode, and dropping the stray tail recovers the
+  /// blob. Bounded so the retry cost stays constant per candidate.
+  static List<int>? _decodeBase64BytesLenient(String candidate) {
+    final direct = _decodeBase64Bytes(candidate);
+    if (direct != null) {
+      return direct;
+    }
+    final stripped = candidate.replaceAll(_whitespaceRuns, '');
+    for (var trim = 1; trim <= 3 && trim < stripped.length; trim++) {
+      final decoded = _decodeBase64Bytes(
+        stripped.substring(0, stripped.length - trim),
+      );
+      if (decoded != null) {
+        return decoded;
+      }
+    }
+    return null;
   }
 
   static bool _isPrintableByte(int byte) =>
@@ -467,6 +601,27 @@ class SkillSecurityScanner {
     result = result.toLowerCase();
     result = result.replaceAll(_markdownDelimiters, ' ');
     return result.replaceAll(_whitespaceRuns, ' ');
+  }
+}
+
+/// Tracks how much base64 candidate work one scan may still decode.
+class _DecodeBudget {
+  final int limit;
+  int _spent = 0;
+
+  _DecodeBudget(this.limit);
+
+  bool get isExhausted => _spent >= limit;
+
+  /// Reserves [length] characters. Returns false when the budget cannot
+  /// cover them, in which case nothing is reserved and [isExhausted] tells
+  /// the caller whether scanning should stop.
+  bool tryConsume(int length) {
+    if (_spent + length > limit) {
+      return false;
+    }
+    _spent += length;
+    return true;
   }
 }
 
