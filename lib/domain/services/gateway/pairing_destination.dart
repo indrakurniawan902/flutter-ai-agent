@@ -76,43 +76,98 @@ class PairingDestination {
 ///    Any other scheme - including a scheme-less string - returns null.
 /// 3. Parse the rewritten string; return null when parsing fails or the host
 ///    is empty.
-/// 4. Port: explicit when present, otherwise 80 for `ws` / 443 for `wss`.
+/// 4. Port: explicit when present and inside 1..65535, otherwise 80 for `ws` /
+///    443 for `wss`. A present-but-nonsense port (0, negative, oversized)
+///    makes the whole destination unresolvable.
 /// 5. An empty or `/` path falls back to [defaultGatewayPath].
+///
+/// Total function: no input string makes it throw; anything the resolver
+/// cannot turn into a usable destination yields null.
 PairingDestination? resolvePairingDestination(String rawUrl) {
-  final trimmed = rawUrl.trim();
-  if (trimmed.isEmpty) return null;
+  // Total function: `Uri` members such as `port` and `replace` can throw on
+  // attacker-controlled input (for example an oversized port), so any parse
+  // surprise degrades to "unresolvable" instead of escaping to the caller.
+  try {
+    final trimmed = rawUrl.trim();
+    if (trimmed.isEmpty) return null;
 
-  final lower = trimmed.toLowerCase();
-  final String rewritten;
-  if (lower.startsWith('http://')) {
-    rewritten = 'ws://${trimmed.substring(7)}';
-  } else if (lower.startsWith('https://')) {
-    rewritten = 'wss://${trimmed.substring(8)}';
-  } else {
+    final lower = trimmed.toLowerCase();
+    final String rewritten;
+    if (lower.startsWith('http://')) {
+      rewritten = 'ws://${trimmed.substring(7)}';
+    } else if (lower.startsWith('https://')) {
+      rewritten = 'wss://${trimmed.substring(8)}';
+    } else {
+      return null;
+    }
+
+    final uri = Uri.tryParse(rewritten);
+    if (uri == null || uri.host.isEmpty) return null;
+
+    final scheme = uri.scheme.toLowerCase();
+    final isPlaintext = scheme == 'ws';
+    final port = _resolvePort(rewritten, isPlaintext: isPlaintext);
+    if (port == null) return null;
+
+    final socketUri = (uri.path.isEmpty || uri.path == '/')
+        ? uri.replace(path: defaultGatewayPath)
+        : uri;
+
+    final host = uri.host;
+
+    return PairingDestination(
+      socketUri: socketUri,
+      scheme: scheme,
+      host: host,
+      port: port,
+      isPrivateRange: isPrivateRangeHost(host),
+      isPlaintext: isPlaintext,
+    );
+  } catch (_) {
     return null;
   }
+}
 
-  final uri = Uri.tryParse(rewritten);
-  if (uri == null || uri.host.isEmpty) return null;
+/// Reads the effective port, or null when the URL carries a nonsense port.
+///
+/// The port text is read from the raw URL because `Uri` normalizes `:0` away
+/// (both `hasPort` and `authority` drop it), which would make an explicit zero
+/// indistinguishable from an absent port. A present-but-invalid port (0,
+/// negative, above 65535, empty, or too large for `int`) makes the destination
+/// unresolvable rather than being clamped to a default. A missing port keeps
+/// the transport default.
+int? _resolvePort(String rewritten, {required bool isPlaintext}) {
+  final int defaultPort = isPlaintext ? 80 : 443;
+  try {
+    final authorityStart = rewritten.indexOf('//') + 2;
+    var authority = rewritten.substring(authorityStart);
+    for (final separator in const ['/', '?', '#']) {
+      final index = authority.indexOf(separator);
+      if (index >= 0) authority = authority.substring(0, index);
+    }
+    final atIndex = authority.lastIndexOf('@');
+    if (atIndex >= 0) authority = authority.substring(atIndex + 1);
 
-  final scheme = uri.scheme.toLowerCase();
-  final isPlaintext = scheme == 'ws';
-  final port = uri.hasPort ? uri.port : (isPlaintext ? 80 : 443);
+    final String? portText;
+    if (authority.startsWith('[')) {
+      final close = authority.indexOf(']');
+      if (close < 0) return null;
+      final rest = authority.substring(close + 1);
+      if (rest.isEmpty) return defaultPort;
+      if (!rest.startsWith(':')) return null;
+      portText = rest.substring(1);
+    } else {
+      final colon = authority.lastIndexOf(':');
+      if (colon < 0) return defaultPort;
+      portText = authority.substring(colon + 1);
+    }
 
-  final socketUri = (uri.path.isEmpty || uri.path == '/')
-      ? uri.replace(path: defaultGatewayPath)
-      : uri;
-
-  final host = uri.host;
-
-  return PairingDestination(
-    socketUri: socketUri,
-    scheme: scheme,
-    host: host,
-    port: port,
-    isPrivateRange: isPrivateRangeHost(host),
-    isPlaintext: isPlaintext,
-  );
+    final port = int.tryParse(portText);
+    if (port == null || port < 1 || port > 65535) return null;
+    return port;
+  } catch (_) {
+    return null;
+  }
 }
 
 /// Whether [host] is a local-network address.

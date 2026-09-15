@@ -157,48 +157,56 @@ class _QrScannerScreenState extends State<QrScannerScreen>
     if (_isProcessing) return;
     _isProcessing = true;
 
-    final result = widget.parser.parse(
-      rawBarcode,
-      currentTime: widget.currentTime,
-    );
-
-    PairingPayload? parsed;
-    result.fold(
-      (failure) {
-        _isProcessing = false;
-        if (!mounted) return;
-        AppToast.error(context, failure.message);
-      },
-      (value) => parsed = value,
-    );
-    final payload = parsed;
-    if (payload == null) return;
-
-    final destination = resolvePairingDestination(payload.gatewayUrl);
-    if (destination == null) {
-      _isProcessing = false;
-      if (!mounted) return;
-      AppToast.error(
-        context,
-        'Invalid pairing payload: gatewayUrl could not be resolved',
+    // The guard reset lives in `finally`: an unexpected throw anywhere below
+    // (including a parser regression) must never latch the scanner dead.
+    try {
+      final result = widget.parser.parse(
+        rawBarcode,
+        currentTime: widget.currentTime,
       );
-      return;
-    }
 
-    final confirmed = await showPairingDestinationConfirmation(
-      context,
-      payload: payload,
-      currentGatewayOrigin: widget.currentGatewayOrigin,
-    );
-    if (!mounted) return;
+      PairingPayload? parsed;
+      result.fold(
+        (failure) {
+          if (!mounted) return;
+          AppToast.error(context, failure.message);
+        },
+        (value) => parsed = value,
+      );
+      final payload = parsed;
+      if (payload == null) return;
 
-    if (!confirmed) {
+      final destination = resolvePairingDestination(payload.gatewayUrl);
+      if (destination == null) {
+        if (!mounted) return;
+        AppToast.error(
+          context,
+          'Invalid pairing payload: gatewayUrl could not be resolved',
+        );
+        return;
+      }
+
+      final confirmed = await showPairingDestinationConfirmation(
+        context,
+        payload: payload,
+        currentGatewayOrigin: widget.currentGatewayOrigin,
+      );
+      if (!mounted) return;
+
+      if (!confirmed) return;
+
+      widget.onPayloadScanned?.call(payload);
+      Navigator.of(context).pop(payload);
+    } catch (_) {
+      if (mounted) {
+        AppToast.error(
+          context,
+          'Could not process the pairing code. Please try again.',
+        );
+      }
+    } finally {
       _isProcessing = false;
-      return;
     }
-
-    widget.onPayloadScanned?.call(payload);
-    Navigator.of(context).pop(payload);
   }
 
   Future<void> _showManualInputDialog() async {

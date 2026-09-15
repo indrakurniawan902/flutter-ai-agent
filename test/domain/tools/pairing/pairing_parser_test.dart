@@ -309,6 +309,60 @@ void main() {
 
         expect(result.isRight(), isTrue);
       });
+
+      test('returns ParseFailure without throwing for an oversized port on https', () {
+        final json = jsonEncode({
+          'gatewayUrl': 'https://pair.evil.example:99999999999999999999',
+          'token': 'secret-token-abc',
+          'profileName': 'Remote Node',
+          'timestamp': testNow.toIso8601String(),
+        });
+
+        final result = parser.parse(json, currentTime: testNow);
+
+        expect(result.isLeft(), isTrue);
+        result.fold(
+          (failure) => expect(failure, isA<ParseFailure>()),
+          (_) => fail('Should fail on an oversized port'),
+        );
+      });
+
+      test('returns ParseFailure without throwing for an oversized port on a plaintext private host', () {
+        final json = jsonEncode({
+          'gatewayUrl': 'http://192.168.1.50:99999999999999999999',
+          'token': 'secret-token-abc',
+          'profileName': 'Remote Node',
+          'timestamp': testNow.toIso8601String(),
+        });
+
+        final result = parser.parse(json, currentTime: testNow);
+
+        expect(result.isLeft(), isTrue);
+        result.fold(
+          (failure) => expect(failure, isA<ParseFailure>()),
+          (_) => fail('Should fail on an oversized port'),
+        );
+      });
+
+      test('rejects an empty host without skipping the transport policy', () {
+        final json = jsonEncode({
+          'gatewayUrl': 'http://',
+          'token': 'secret-token-abc',
+          'profileName': 'Remote Node',
+          'timestamp': testNow.toIso8601String(),
+        });
+
+        final result = parser.parse(json, currentTime: testNow);
+
+        expect(result.isLeft(), isTrue);
+        result.fold(
+          (failure) {
+            expect(failure, isA<ParseFailure>());
+            expect(failure.message, isNot(contains('valid HTTP/HTTPS')));
+          },
+          (_) => fail('Should fail when the destination is unresolvable'),
+        );
+      });
     });
 
     group('Negative Cases: Expired Token', () {

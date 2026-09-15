@@ -47,6 +47,27 @@ void main() {
       expect(resolvePairingDestination('https://example.com:8443')!.port, 8443);
     });
 
+    test('returns null without throwing for a port that exceeds int64', () {
+      expect(
+        resolvePairingDestination(
+          'https://pair.evil.example:99999999999999999999',
+        ),
+        isNull,
+      );
+      expect(
+        resolvePairingDestination(
+          'http://192.168.1.50:99999999999999999999',
+        ),
+        isNull,
+      );
+    });
+
+    test('returns null without throwing for port 0, 65536 and -1', () {
+      expect(resolvePairingDestination('https://example.com:0'), isNull);
+      expect(resolvePairingDestination('https://example.com:65536'), isNull);
+      expect(resolvePairingDestination('https://example.com:-1'), isNull);
+    });
+
     test('appends $defaultGatewayPath when the path is empty', () {
       final destination = resolvePairingDestination('https://example.com');
 
@@ -142,6 +163,18 @@ void main() {
 
     test('is false for garbage input', () {
       expect(isPlaintextPairingAllowed('not a url'), isFalse);
+    });
+
+    test('does not throw and is false for nonsense ports', () {
+      expect(
+        isPlaintextPairingAllowed(
+          'http://192.168.1.50:99999999999999999999',
+        ),
+        isFalse,
+      );
+      expect(isPlaintextPairingAllowed('http://192.168.1.50:0'), isFalse);
+      expect(isPlaintextPairingAllowed('http://192.168.1.50:65536'), isFalse);
+      expect(isPlaintextPairingAllowed('http://192.168.1.50:-1'), isFalse);
     });
   });
 }

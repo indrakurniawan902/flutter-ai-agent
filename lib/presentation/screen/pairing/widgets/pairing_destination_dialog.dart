@@ -25,11 +25,11 @@ class PairingDestinationDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final destination = resolvePairingDestination(payload.gatewayUrl);
-    // The parser already validated the URL, so the fallback is unreachable in
-    // practice; it exists only so a hypothetical regression cannot crash the
-    // confirmation step.
-    final resolvedOrigin =
-        destination?.displayOrigin ?? payload.gatewayUrl;
+    // Never fall back to the raw payload string: that would silently downgrade
+    // this control from "the resolved origin" to attacker-controlled text.
+    // An unresolvable destination is shown as an explicit failure instead.
+    final resolvedOrigin = destination?.displayOrigin ??
+        'Destination could not be resolved';
     final isPlaintext = destination?.isPlaintext ?? false;
     // Producers hand over the raw stored profile URL, so normalize it through
     // the same resolver before comparing: re-pairing to the gateway already in

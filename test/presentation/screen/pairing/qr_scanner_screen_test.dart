@@ -286,6 +286,55 @@ void main() {
       expect(find.byKey(const Key('pairing_destination_dialog')), findsNothing);
       expect(find.textContaining('user-info'), findsOneWidget);
     });
+
+    testWidgets(
+        'scanner survives an oversized-port payload: a later valid scan still reaches the dialog',
+        (tester) async {
+      PairingPayload? scannedPayload;
+      void Function(String)? triggerScan;
+
+      await tester.pumpWidget(
+        buildTestWidget(
+          onPayloadScanned: (payload) => scannedPayload = payload,
+          scannerWidgetBuilder: (context, onDetect) {
+            triggerScan = onDetect;
+            return const SizedBox();
+          },
+        ),
+      );
+      await tester.pump();
+
+      final oversizedPortJson = jsonEncode({
+        'gatewayUrl': 'https://pair.evil.example:99999999999999999999',
+        'token': 'secret-token-abc',
+        'profileName': 'Remote Node',
+        'timestamp': '2026-09-11T08:05:00.000Z',
+      });
+
+      triggerScan!(oversizedPortJson);
+      await tester.pumpAndSettle();
+
+      expect(scannedPayload, isNull);
+      expect(find.byKey(const Key('pairing_destination_dialog')), findsNothing);
+
+      final validJson = jsonEncode({
+        'gatewayUrl': 'https://vps.example.com:18789',
+        'token': 'secret-token-abc',
+        'profileName': 'Remote Node',
+        'timestamp': '2026-09-11T08:05:00.000Z',
+      });
+
+      triggerScan!(validJson);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('pairing_destination_dialog')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('pairing_destination_confirm_button')));
+      await tester.pumpAndSettle();
+
+      expect(scannedPayload, isNotNull);
+      expect(scannedPayload?.gatewayUrl, 'https://vps.example.com:18789');
+    });
   });
 
   group('QrScannerScreen - Manual Input Fallback', () {

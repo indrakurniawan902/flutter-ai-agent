@@ -79,11 +79,17 @@ class PairingParser {
 
     // Transport policy: plaintext pairing is deliberate for local networks
     // only. HTTPS to any host stays valid here - the origin confirmation
-    // step is the control for a hostile public HTTPS origin.
+    // step is the control for a hostile public HTTPS origin. Fail closed: a
+    // URL the resolver cannot turn into a usable destination (empty host,
+    // nonsense port, ...) is rejected instead of skipping the policy.
     final destination = resolvePairingDestination(rawGateway);
-    if (destination != null &&
-        destination.isPlaintext &&
-        !isPlaintextPairingAllowed(rawGateway)) {
+    if (destination == null) {
+      return const Left(
+        ParseFailure('Invalid pairing payload: gatewayUrl does not resolve to a usable destination'),
+      );
+    }
+
+    if (destination.isPlaintext && !isPlaintextPairingAllowed(rawGateway)) {
       return const Left(
         ParseFailure('Invalid pairing payload: plaintext gatewayUrl is only allowed for local network hosts'),
       );
