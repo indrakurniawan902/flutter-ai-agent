@@ -18,7 +18,7 @@
 7. [Module 7: Presentation, UI/UX & Edge Cases](#module-7-presentation-uiux--edge-cases)
 8. [Module 8: Hermes Nous UI, Bottom Navigation & Micro-UI (Fase 5)](#module-8-hermes-nous-ui-bottom-navigation--micro-ui-fase-5)
 9. [Module 9: Mobile Skills Hub, Share Target & Intent Launcher (Fase 6)](#module-9-mobile-skills-hub-share-target--intent-launcher-fase-6)
-10. [Module 10: External USB/UVC Camera & 16 KB Page Size Compliance (Fase 7)](#module-10-external-usbuuvc-camera--16-kb-page-size-compliance-fase-7)
+10. [Module 10: Android Build & 16 KB Page Size Compliance (Fase 7)](#module-10-android-build--16-kb-page-size-compliance-fase-7)
 
 ---
 
@@ -664,7 +664,7 @@
 
 ---
 
-## Module 10: External USB/UVC Camera & 16 KB Page Size Compliance (Fase 7)
+## Module 10: Android Build & 16 KB Page Size Compliance (Fase 7)
 
 Scope note: Google Play's 16 KB page size requirement applies to 64-bit ABIs only
 (`arm64-v8a`, `x86_64`). 32-bit `armeabi-v7a` binaries may stay 4 KB aligned.
@@ -672,11 +672,12 @@ Source: https://developer.android.com/guide/practices/page-sizes
 
 ### TC-16KB-01: Every 64-bit `.so` in the built APK is 16 KB aligned (PT_LOAD)
 - **Type**: Positive
-- **Objective**: Prove 16 KB support from the `.so` files actually bundled in our APK, not from the
+- **Objective**: Prove 16 KB support from the `.so` files actually bundled in our APK, not from a
   plugin repository. Claims about a plugin's own prebuilts are not accepted as evidence.
-- **Preconditions**: `development` checked out; `flutter_ffi_uvc ^1.0.0` merged.
+- **Preconditions**: `development` checked out.
 - **Steps**:
-  1. `flutter build apk --debug -t lib/main.dart`
+  1. `sh tool/build_apk.sh` (on this aarch64 host the Android SDK's x86-64 host binaries need the
+     `LD_LIBRARY_PATH` the script sets; a bare `flutter build apk` fails in `processDebugResources`).
   2. `unzip -o -q build/app/outputs/flutter-apk/app-debug.apk -d /tmp/t235_apk`
   3. For each `.so` under `/tmp/t235_apk/lib/arm64-v8a` and `lib/x86_64`:
      `readelf -lW <file>.so | grep LOAD`
@@ -689,15 +690,12 @@ Source: https://developer.android.com/guide/practices/page-sizes
   libbarhopper_v3.so                0x4000
   libdartjni.so                     0x4000
   libflutter.so                     0x10000
-  libflutter_ffi_uvc.so             0x4000   <- the T23 plugin, built from source by our own build
   libimage_processing_util_jni.so   0x4000
-  libjpeg.so                        0x4000   <- third-party prebuilt
   libonnxruntime.so                 0x4000
   libsherpa-onnx-c-api.so           0x4000
   libsherpa-onnx-cxx-api.so         0x4000
   libsqlite3.so                     0x4000
   libsurface_util_jni.so            0x4000
-  libusb1.0.so                      0x4000   <- third-party prebuilt
   ```
   `x86_64` is identical in verdict (all `0x4000`, `libflutter.so` at `0x10000`).
 
@@ -734,56 +732,18 @@ Source: https://developer.android.com/guide/practices/page-sizes
 - **Verdict**: NOT a Play blocker (64-bit ABIs are clean and every ABI the app ships is covered).
   If 32-bit support is ever dropped, this disappears with it.
 
-### TC-EXT-CAM-01: External camera permission requests exactly one dialog
-- **Type**: Positive
-- **Objective**: Opening the external camera preview must raise exactly one permission prompt.
-- **Preconditions**: Real device with a UVC/OTG camera; `CAMERA` not yet granted.
-- **Steps**:
-  1. `flutter run -t lib/main.dart` on the device.
-  2. Pocket Node, then External Camera.
-- **Expected Outcome**: one Flames PermissionGate prompt; a second Android dialog means the plugin
-  requested permission directly and the gate was bypassed.
-- **Status**: PENDING OWNER VERIFICATION (requires physical device + OTG hardware).
-
-### TC-EXT-CAM-02: Live preview, capture and retake
-- **Type**: Positive
-- **Steps**: grant permission, observe preview, press Capture, press Retake.
-- **Expected Outcome**: live preview shows the negotiated mode as WxH @ fps; Capture produces a
-  still; Retake returns to live preview.
-- **Status**: PENDING OWNER VERIFICATION (requires physical device + OTG hardware).
-
-### TC-EXT-CAM-03: Device detach mid-preview does not crash
-- **Type**: Negative
-- **Steps**: start the preview, then unplug the camera.
-- **Expected Outcome**: a detach message is shown and the app does not crash.
-- **Status**: PENDING OWNER VERIFICATION (requires physical device + OTG hardware).
-
-### TC-EXT-CAM-04: No unused microphone permission is requested by this feature
-- **Type**: Negative
-- **Objective**: The external camera feature must not require `RECORD_AUDIO`.
-- **Steps**:
-  1. `grep -n RECORD_AUDIO android/app/src/main/AndroidManifest.xml`
-  2. `grep -rn "RECORD_AUDIO\|Permission\." lib/data/datasources/tools/chat/external_camera_service.dart`
-  3. `git show eda9715 -- android/app/src/main/AndroidManifest.xml`
-- **Expected Outcome**:
-  - `RECORD_AUDIO` is present in the manifest, but introduced by the voice feature (`9a3c5c1`), not
-    by T23.
-  - No T23 commit (`eda9715`, `1ca1eeb`, `55c3d7e`, `5466ca8`, `842f5a5`, `cb117eb`, `d0b6fb4`) adds
-    any `uses-permission` line; `eda9715` adds only `android.hardware.usb.host` as a
-    `required="false"` feature.
-  - `external_camera_service.dart` gates on `Permission.camera` only.
-- **Measured**: PASS. The plugin records video without audio, so no new permission is requested.
-
 ### TC-BUILD-01: `flutter build apk` succeeds on development
 - **Type**: Positive
 - **Objective**: An APK must be buildable, otherwise no 16 KB claim can be audited at all.
-- **Steps**: `flutter build apk --debug -t lib/main.dart`
+- **Steps**: `sh tool/build_apk.sh`
 - **Expected Outcome**: exit 0 and `build/app/outputs/flutter-apk/app-debug.apk` exists.
-- **Measured**: exit 0; APK is 290097452 bytes.
-- **Note**: three pre-existing defects had to be fixed first (see the T23.5 card comment): a wrong
-  `NotificationListenerService` import in `MainActivity.kt`, a raw string in the accessibility
-  service `android:description` attribute, and `contacts_service` 0.6.3's Gradle 4 era build script.
-
+- **Measured**: exit 0; APK is 286135598 bytes.
+- **Note**: on this aarch64 host the SDK's x86-64 host binaries (aapt2, cmake, ninja, zipalign) need
+  `LD_LIBRARY_PATH` pointing at the x86-64 system libs; `tool/build_apk.sh` sets it and restarts the
+  Gradle daemon so it inherits the environment. Three pre-existing defects also had to be fixed
+  first: a wrong `NotificationListenerService` import in `MainActivity.kt`, a raw string in the
+  accessibility service `android:description` attribute, and `contacts_service` 0.6.3's Gradle 4 era
+  build script.
 
 ---
 
@@ -800,8 +760,8 @@ Source: https://developer.android.com/guide/practices/page-sizes
 | **Module 7: Presentation & UI/UX** | 3 | 1 | 4 |
 | **Module 8: Hermes Nous UI & Micro-UI** | 6 | 1 | 7 |
 | **Module 9: Skills Hub, Share & Intents** | 7 | 2 | 9 |
-| **Module 10: External Camera & 16 KB Compliance** | 6 | 2 | 8 |
-| **Grand Total** | **34** | **24** | **58** |
+| **Module 10: Android Build & 16 KB Compliance** | 4 | 0 | 4 |
+| **Grand Total** | **32** | **22** | **54** |
 
 ---
 _Standardized for Hermes Bot Team: PM Bot (`default`), Dev Bot (`dev`), Ops Bot (`ops`)._

@@ -50,8 +50,6 @@ import 'package:flutter_ai_agent/data/datasources/tools/chat/clipboard_service.d
     as _i105;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/device_context_service.dart'
     as _i205;
-import 'package:flutter_ai_agent/data/datasources/tools/chat/external_camera_service.dart'
-    as _i533;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/file_workspace_service.dart'
     as _i70;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/health_service.dart'
@@ -140,8 +138,6 @@ import 'package:flutter_ai_agent/domain/tools/chat/contact_launcher_tools.dart'
     as _i777;
 import 'package:flutter_ai_agent/domain/tools/chat/device_context_service.dart'
     as _i3;
-import 'package:flutter_ai_agent/domain/tools/chat/external_camera_service.dart'
-    as _i151;
 import 'package:flutter_ai_agent/domain/tools/chat/file_workspace_service.dart'
     as _i745;
 import 'package:flutter_ai_agent/domain/tools/chat/health_service.dart'
@@ -314,9 +310,6 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i791.BackgroundServiceBase>(
       () => _i1033.BackgroundService.create(),
     );
-    gh.lazySingleton<_i151.ExternalCameraServiceBase>(
-      () => _i533.ExternalCameraService.create(),
-    );
     gh.lazySingleton<_i662.HealthServiceBase>(
       () => _i137.HealthService.create(),
     );
@@ -370,7 +363,6 @@ extension GetItInjectableX on _i174.GetIt {
         locationService: gh<_i292.LocationServiceBase>(),
         deviceContextService: gh<_i3.DeviceContextServiceBase>(),
         cameraVisionService: gh<_i815.CameraVisionServiceBase>(),
-        externalCameraService: gh<_i151.ExternalCameraServiceBase>(),
         calendarService: gh<_i1020.CalendarServiceBase>(),
         notificationService: gh<_i919.NotificationServiceBase>(),
         fileWorkspaceService: gh<_i745.FileWorkspaceServiceBase>(),

@@ -17,7 +17,6 @@ import 'camera_vision_service.dart';
 import 'clipboard_service.dart';
 import 'contact_launcher_tools.dart';
 import 'device_context_service.dart';
-import 'external_camera_service.dart';
 import 'file_workspace_service.dart';
 import 'health_metrics.dart';
 import 'health_service.dart';
@@ -81,7 +80,6 @@ class ToolRegistry {
     LocationServiceBase? locationService,
     DeviceContextServiceBase? deviceContextService,
     CameraVisionServiceBase? cameraVisionService,
-    ExternalCameraServiceBase? externalCameraService,
     CalendarServiceBase? calendarService,
     NotificationServiceBase? notificationService,
     FileWorkspaceServiceBase? fileWorkspaceService,
@@ -102,9 +100,6 @@ class ToolRegistry {
     if (locationService != null) registerLocationTools(locationService);
     if (deviceContextService != null) registerDeviceContextTools(deviceContextService);
     if (cameraVisionService != null) registerCameraTools(cameraVisionService);
-    if (externalCameraService != null) {
-      registerExternalCameraTools(externalCameraService);
-    }
     if (calendarService != null) registerCalendarTools(calendarService);
     if (notificationService != null) registerNotificationTools(notificationService);
     if (fileWorkspaceService != null) {
@@ -374,187 +369,6 @@ class ToolRegistry {
               ? CameraSource.gallery
               : CameraSource.camera,
         ),
-      ),
-    );
-  }
-
-  void registerExternalCameraTools(ExternalCameraServiceBase service) {
-    register(
-      RegisteredTool(
-        name: 'external_camera_list',
-        description:
-            'Lists USB/OTG UVC cameras (external webcams) attached to the device. '
-            'This is NOT the built-in phone camera - use camera_take_photo for that. '
-            'Each entry carries the USB device id, vendor/product ids and whether the '
-            'USB permission has already been granted.',
-        parameters: const {
-          'type': 'object',
-          'properties': {},
-          'required': [],
-        },
-        securityTier: SecurityTier.tier1Auto,
-        execute: (_) async {
-          final res = await service.listDevices();
-          return res.map(
-            (devices) => jsonEncode({
-              'devices': devices
-                  .map((d) => {
-                        'deviceId': d.deviceId,
-                        'name': d.name,
-                        'vendorId': d.vendorId,
-                        'productId': d.productId,
-                        'manufacturer': d.manufacturer,
-                        'serialNumber': d.serialNumber,
-                        'hasPermission': d.hasPermission,
-                        'displayName': d.displayName,
-                      })
-                  .toList(),
-              'count': devices.length,
-            }),
-          );
-        },
-      ),
-    );
-
-    register(
-      RegisteredTool(
-        name: 'external_camera_capture',
-        description:
-            'Captures a still frame from an external USB/OTG UVC camera (webcam) and '
-            'returns raw base64 JPEG data. This is NOT the built-in phone camera - use '
-            'camera_take_photo for the built-in one. USB permission must already be '
-            'granted (open the Flames external-camera preview once to grant it); this '
-            'tool only checks and never raises a prompt, so it is safe in headless '
-            'gateway RPC and voice turns.',
-        parameters: const {
-          'type': 'object',
-          'properties': {
-            'deviceId': {
-              'type': 'integer',
-              'description':
-                  'USB device id from external_camera_list. Optional: when omitted '
-                  'the first attached camera that already has USB permission is used.',
-            },
-            'quality': {
-              'type': 'integer',
-              'description': 'JPEG quality 1-100 (default 90)',
-            },
-          },
-          'required': [],
-        },
-        securityTier: SecurityTier.tier2Permission,
-        checkPermission: () => service.isCameraPermissionGranted(),
-        execute: (args) async {
-          final quality =
-              ((args['quality'] as num?)?.toInt() ?? 90).clamp(1, 100);
-          final requestedId = (args['deviceId'] as num?)?.toInt();
-
-          if (!service.status.isDeviceOpen) {
-            final devicesRes = await service.listDevices();
-            if (devicesRes.isLeft()) {
-              return devicesRes.fold(
-                (failure) => Left(failure),
-                (_) => const Left(ServerFailure('[camera_error] list failed')),
-              );
-            }
-            final devices = devicesRes.getOrElse(
-              () => const <ExternalCameraDevice>[],
-            );
-            if (devices.isEmpty) {
-              return const Left(
-                ServerFailure(
-                  '[camera_error] no external USB/OTG camera is attached',
-                ),
-              );
-            }
-
-            ExternalCameraDevice? selected;
-            if (requestedId != null) {
-              for (final device in devices) {
-                if (device.deviceId == requestedId) {
-                  selected = device;
-                  break;
-                }
-              }
-              if (selected == null || !selected.hasPermission) {
-                return Left(
-                  PermissionFailure(
-                    'USB permission for external camera $requestedId has not '
-                    'been granted. Ask the user to open the Flames '
-                    'external-camera preview once to grant it, then retry.',
-                  ),
-                );
-              }
-            } else {
-              for (final device in devices) {
-                if (device.hasPermission) {
-                  selected = device;
-                  break;
-                }
-              }
-              if (selected == null) {
-                return const Left(
-                  PermissionFailure(
-                    'USB permission for the external camera has not been '
-                    'granted. Ask the user to open the Flames external-camera '
-                    'preview once to grant it, then retry.',
-                  ),
-                );
-              }
-            }
-
-            final openRes = await service.openDevice(
-              selected.deviceId,
-              ensureCameraPermission: () => service.isCameraPermissionGranted(),
-            );
-            if (openRes.isLeft()) {
-              return openRes.fold(
-                (failure) => Left(failure),
-                (_) => const Left(
-                  ServerFailure('[camera_error] open external camera failed'),
-                ),
-              );
-            }
-          }
-
-          final captureRes = await service.capture(quality: quality);
-          return captureRes.fold(
-            (failure) => Left(failure),
-            (frame) => Right(frame.base64Jpeg),
-          );
-        },
-      ),
-    );
-
-    register(
-      RegisteredTool(
-        name: 'external_camera_status',
-        description:
-            'Reports the state of the external USB/OTG UVC camera (webcam): whether '
-            'a device is open, whether the preview is streaming, and the streaming '
-            'resolution/fps/format. This is NOT the built-in phone camera - use '
-            'camera_take_photo for that.',
-        parameters: const {
-          'type': 'object',
-          'properties': {},
-          'required': [],
-        },
-        securityTier: SecurityTier.tier1Auto,
-        execute: (_) async {
-          final status = service.status;
-          return Right(
-            jsonEncode({
-              'isDeviceOpen': status.isDeviceOpen,
-              'isPreviewing': status.isPreviewing,
-              'deviceId': status.openedDeviceId,
-              'deviceName': status.deviceName,
-              'width': status.mode?.width,
-              'height': status.mode?.height,
-              'fps': status.mode?.fps,
-              'format': status.mode?.formatName,
-            }),
-          );
-        },
       ),
     );
   }
