@@ -111,6 +111,7 @@ final GoRouter appRouter = GoRouter(
           parser: params.parser ?? const PairingParser(),
           currentTime: params.currentTime,
           onPayloadScanned: params.onPayloadScanned,
+          currentGatewayOrigin: params.currentGatewayOrigin,
           scannerWidgetBuilder: params.scannerWidgetBuilder,
         );
       },

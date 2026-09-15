@@ -1197,9 +1197,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _openQrScanner() async {
+    final currentOrigin =
+        _resolveServerProfileCubit()?.state.activeProfile?.gatewayUrl;
     final payload = await Navigator.of(context).push<PairingPayload>(
       MaterialPageRoute(
-        builder: widget.qrScannerBuilder ?? (_) => const QrScannerScreen(),
+        builder: widget.qrScannerBuilder ??
+            (_) => QrScannerScreen(currentGatewayOrigin: currentOrigin),
       ),
     );
 

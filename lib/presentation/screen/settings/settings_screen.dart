@@ -8,6 +8,7 @@ import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_routes.dart';
+import 'package:flutter_ai_agent/presentation/screen/pairing/pairing_params.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_cubit.dart';
@@ -156,7 +157,18 @@ class _SettingsViewState extends State<_SettingsView> {
   }
 
   Future<void> _onScanQr() async {
-    final result = await context.pushNamed<PairingPayload>(AppRoutes.nrPairing);
+    String? origin;
+    try {
+      origin =
+          context.read<ServerProfileCubit>().state.activeProfile?.gatewayUrl;
+    } catch (_) {
+      origin = null;
+    }
+
+    final result = await context.pushNamed<PairingPayload>(
+      AppRoutes.nrPairing,
+      extra: PairingParams(currentGatewayOrigin: origin),
+    );
 
     if (result != null && mounted) {
       _baseUrlController.text = result.gatewayUrl;

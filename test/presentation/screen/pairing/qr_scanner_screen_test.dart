@@ -132,6 +132,12 @@ void main() {
       triggerScan!(validJson);
       await tester.pumpAndSettle();
 
+      expect(find.byKey(const Key('pairing_destination_dialog')), findsOneWidget);
+      expect(scannedPayload, isNull);
+
+      await tester.tap(find.byKey(const Key('pairing_destination_confirm_button')));
+      await tester.pumpAndSettle();
+
       expect(scannedPayload, isNotNull);
       expect(scannedPayload?.gatewayUrl, 'https://vps.example.com:18789');
       expect(scannedPayload?.token, 'secret-token-abc');
@@ -215,6 +221,71 @@ void main() {
       expect(scannedPayload, isNull);
       expect(find.textContaining('expired'), findsOneWidget);
     });
+
+    testWidgets('aborting the confirmation leaves the payload unscanned',
+        (tester) async {
+      PairingPayload? scannedPayload;
+      void Function(String)? triggerScan;
+
+      await tester.pumpWidget(
+        buildTestWidget(
+          onPayloadScanned: (payload) => scannedPayload = payload,
+          scannerWidgetBuilder: (context, onDetect) {
+            triggerScan = onDetect;
+            return const SizedBox();
+          },
+        ),
+      );
+      await tester.pump();
+
+      final validJson = jsonEncode({
+        'gatewayUrl': 'https://vps.example.com:18789',
+        'token': 'secret-token-abc',
+        'profileName': 'Remote Node',
+        'timestamp': '2026-09-11T08:05:00.000Z',
+      });
+
+      triggerScan!(validJson);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('pairing_destination_cancel_button')));
+      await tester.pumpAndSettle();
+
+      expect(scannedPayload, isNull);
+      expect(find.byType(QrScannerScreen), findsOneWidget);
+      expect(find.byKey(const Key('pairing_destination_dialog')), findsNothing);
+    });
+
+    testWidgets('user-info payload fails before any confirmation dialog',
+        (tester) async {
+      PairingPayload? scannedPayload;
+      void Function(String)? triggerScan;
+
+      await tester.pumpWidget(
+        buildTestWidget(
+          onPayloadScanned: (payload) => scannedPayload = payload,
+          scannerWidgetBuilder: (context, onDetect) {
+            triggerScan = onDetect;
+            return const SizedBox();
+          },
+        ),
+      );
+      await tester.pump();
+
+      final confusingJson = jsonEncode({
+        'gatewayUrl': 'https://trusted.example@pair.evil.example:8443',
+        'token': 'secret-token-abc',
+        'profileName': 'Remote Node',
+        'timestamp': '2026-09-11T08:05:00.000Z',
+      });
+
+      triggerScan!(confusingJson);
+      await tester.pumpAndSettle();
+
+      expect(scannedPayload, isNull);
+      expect(find.byKey(const Key('pairing_destination_dialog')), findsNothing);
+      expect(find.textContaining('user-info'), findsOneWidget);
+    });
   });
 
   group('QrScannerScreen - Manual Input Fallback', () {
@@ -244,6 +315,12 @@ void main() {
 
       await tester.enterText(find.byKey(const Key('manual_input_textfield')), validJson);
       await tester.tap(find.byKey(const Key('manual_input_submit_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('pairing_destination_dialog')), findsOneWidget);
+      expect(scannedPayload, isNull);
+
+      await tester.tap(find.byKey(const Key('pairing_destination_confirm_button')));
       await tester.pumpAndSettle();
 
       expect(scannedPayload, isNotNull);

@@ -8,6 +8,9 @@ class PairingParams {
   final PairingParser? parser;
   final DateTime? currentTime;
   final void Function(PairingPayload payload)? onPayloadScanned;
+
+  /// Origin of the currently configured active gateway, when one exists.
+  final String? currentGatewayOrigin;
   final Widget Function(
     BuildContext context,
     void Function(String barcode) onDetect,
@@ -18,6 +21,7 @@ class PairingParams {
     this.parser,
     this.currentTime,
     this.onPayloadScanned,
+    this.currentGatewayOrigin,
     this.scannerWidgetBuilder,
   });
 }
