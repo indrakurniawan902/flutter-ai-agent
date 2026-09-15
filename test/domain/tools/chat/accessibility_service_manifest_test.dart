@@ -141,6 +141,30 @@ void main() {
       }
     });
 
+    test('captureTree skips password nodes before collecting them', () {
+      if (!ready) return;
+
+      expect(serviceKt, contains('isPassword'));
+      expect(serviceKt, contains('continue'));
+
+      final captureStart = serviceKt.indexOf('fun captureTree(');
+      final captureEnd = serviceKt.indexOf('override fun onServiceConnected');
+      expect(captureStart, greaterThanOrEqualTo(0));
+      expect(captureEnd, greaterThan(captureStart));
+      final captureBlock = serviceKt.substring(captureStart, captureEnd);
+
+      expect(captureBlock, contains('node.isPassword'));
+      final skipIndex = captureBlock.indexOf('node.isPassword');
+      final appendIndex = captureBlock.indexOf('nodes.add(');
+      expect(skipIndex, greaterThanOrEqualTo(0));
+      expect(appendIndex, greaterThanOrEqualTo(0));
+      expect(
+        skipIndex,
+        lessThan(appendIndex),
+        reason: 'the password skip must happen before the node is serialized',
+      );
+    });
+
     test('MainActivity bridges the accessibility inspector channel', () {
       if (!ready) return;
 
