@@ -64,16 +64,19 @@ lib/
   service; promote to a shared data service if reused beyond settings).
 - **`lib/features/navigation/presentation/widgets/floating_bottom_nav_bar.dart`** →
   `lib/presentation/widget/floating_bottom_nav_bar.dart` (shared across shells).
-- **Root entries** (`lib/app.dart`, `lib/main*.dart`) stay at repo root; `test/helpers/`,
+- **Root entry** (`lib/main.dart`) stays at repo root — there is no `lib/app.dart`
+  and no `lib/main*.dart` family any more; `test/helpers/`,
   `test/integration/`, `test/app_test.dart` stay put.
 - **`lib/features/gateway/**`** — listed in architecture/features but has no files
   tracked today; when gateway code lands, follow the same rules (implementation
   under `data/tools/gateway/` or `data/datasources/`, contract under
   `domain/repositories/gateway/`).
 
-## 4. Full file-by-file mapping (105 files = 63 lib + 42 test)
+## 4. Full file-by-file mapping (103 files = 61 lib + 42 test)
 
-<!-- TABLE GENERATED FROM git ls-files lib test (105 rows) -->
+<!-- TABLE GENERATED FROM git ls-files lib test (103 rows); the two dev/prod flavor
+     entrypoints were dropped when that flavor split was reverted, so this table is now
+     hand-maintained at 103 rows. -->
 | Old path (today) | New path (layer-first target) | Note |
 |---|---|---|
 | `lib/app.dart` | `lib/myapp.dart` | [DONE] deleted and consolidated into lib/myapp.dart + the single lib/main.dart per T13.7 (GoRouter + myapp bootstrap) |
