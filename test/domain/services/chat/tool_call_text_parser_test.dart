@@ -317,4 +317,298 @@ void main() {
       }
     });
   });
+
+  group('ToolCallTextParser hardening', () {
+    test('100k unmatched braces do not spin the scanner', () {
+      // Arrange
+      final raw = '{' * 100000;
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, isEmpty);
+      expect(result.cleanedText, equals(raw));
+    });
+
+    test('100k unmatched brackets do not spin the scanner', () {
+      // Arrange
+      final raw = '[' * 100000;
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, isEmpty);
+      expect(result.cleanedText, equals(raw));
+    });
+
+    test('a deep balanced payload then a real call still recovers it', () {
+      // Arrange
+      final open = '{' * 20000;
+      final close = '}' * 20000;
+      const call = '{"name": "get_battery", "arguments": {}}';
+      final raw = '$open$close$call';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, hasLength(1));
+      expect(result.toolCalls.single.name, 'get_battery');
+    });
+
+    test('an untagged fence recovers and strips the call', () {
+      // Arrange
+      const raw = '```\n'
+          '{"name": "get_battery", "arguments": {"verbose": true}}\n'
+          '```';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, hasLength(1));
+      expect(result.toolCalls.single.name, 'get_battery');
+      expect(result.cleanedText, isNot(contains('```')));
+    });
+
+    test('a dart fence is ignored even with a very long body', () {
+      // Arrange
+      final raw = '```dart\n'
+          '{"name": "delete_all", "arguments": {}}'
+          '${'x' * 65505}'
+          '```';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, isEmpty);
+      expect(result.cleanedText, equals(raw));
+    });
+
+    test('deeply nested arguments cannot escape parse as an Error', () {
+      // Arrange
+      final open = '[' * 20000;
+      final close = ']' * 20000;
+      final raw = '{"name": "a", "arguments": $open$close}';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, isEmpty);
+      expect(result.cleanedText, equals(raw));
+    });
+
+    test('a call in the middle of a long message is still recovered', () {
+      // Arrange
+      final head = 'z' * 100000;
+      final tail = 'z' * 100000;
+      const call = '{"name": "get_battery", "arguments": {}}';
+      final raw = '$head$call$tail';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, hasLength(1));
+      expect(result.toolCalls.single.name, 'get_battery');
+    });
+
+    test('a fenced call wrapped in an object is executed exactly once', () {
+      // Arrange
+      const raw = '{"a": ```json\n'
+          '{"name": "get_battery", "arguments": {}}\n'
+          '```}';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, hasLength(1));
+      expect(result.toolCalls.single.name, 'get_battery');
+    });
+
+    test('a call nested in a valid outer object is still recovered', () {
+      // Arrange
+      const raw = '{"a": 1, "b": {"name": "get_battery", "arguments": {}}}';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, hasLength(1));
+      expect(result.toolCalls.single.name, 'get_battery');
+    });
+
+    test('a mismatched closer before the call does not hide it', () {
+      // Arrange
+      const raw = '{"a": 1, {"name": "get_battery", "arguments": {}}]';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, hasLength(1));
+      expect(result.toolCalls.single.name, 'get_battery');
+    });
+
+    test('a json string value is never executed as a call', () {
+      // Arrange
+      final raw = '{"note": "${'y' * 66000}'
+          '{"name": "delete_all", "arguments": {}}" }';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, isEmpty);
+      expect(result.cleanedText, equals(raw));
+    });
+
+    test('a stray quote in a code block does not hide a later call', () {
+      // Arrange: the fence body holds an ODD number of double quotes, which
+      // used to leave the bracket matcher stuck "inside a string" past the
+      // closing fence, so every opener after it lost its end and the real call
+      // was dropped.
+      const raw = '```dart\n'
+          'final s = "unterminated;\n'
+          'print(s);\n'
+          '```\n'
+          '{"name": "get_battery", "arguments": {}}';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, hasLength(1));
+      expect(result.toolCalls.single.name, 'get_battery');
+    });
+
+    test('an even number of quotes in a code block behaves the same', () {
+      // Arrange
+      const raw = '```dart\n'
+          'print("hi");\n'
+          '```\n'
+          '{"name": "get_battery", "arguments": {}}';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, hasLength(1));
+      expect(result.toolCalls.single.name, 'get_battery');
+    });
+
+    test('a deep sibling does not hide a shallow call beside it', () {
+      // Arrange: the deep run exceeds maxJsonDepth. It must only prune itself,
+      // not mark the whole span too deep, or the shallow sibling is skipped.
+      final deep = '[' * (ToolCallTextParser.maxJsonDepth + 1) +
+          ']' * (ToolCallTextParser.maxJsonDepth + 1);
+      final raw = '[$deep, {"name": "get_battery", "arguments": {}}]';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, hasLength(1));
+      expect(result.toolCalls.single.name, 'get_battery');
+    });
+
+    test('a deep sibling inside a tool_calls envelope keeps the call', () {
+      // Arrange
+      final deep = '[' * (ToolCallTextParser.maxJsonDepth + 1) +
+          ']' * (ToolCallTextParser.maxJsonDepth + 1);
+      final raw = '{"tool_calls": [$deep, '
+          '{"name": "get_battery", "arguments": {}}]}';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, hasLength(1));
+      expect(result.toolCalls.single.name, 'get_battery');
+    });
+
+    test('a call nested deeper than maxJsonDepth is still recovered', () {
+      // Arrange: the CALL ITSELF sits past the documented soft limit. Capping
+      // the walk used to prune it while the previously shipped parser found it
+      // up to depth ~4000, which made a depth cap a silent coverage regression.
+      final n = ToolCallTextParser.maxJsonDepth + 1;
+      final raw = '${'[' * n}{"name": "get_battery", "arguments": {}}${']' * n}';
+
+      // Act
+      final result = parser.parse(raw, isKnownTool: (n) => n == 'get_battery');
+
+      // Assert
+      expect(result.toolCalls, hasLength(1));
+      expect(result.toolCalls.single.name, 'get_battery');
+    });
+
+    test('a call nested thousands of levels deep is recovered without an Error',
+        () {
+      // Arrange: depth ~4000 was the deepest the shipped parser managed, and
+      // ~12000 overflowed its recursive walk. The walk is iterative now, so
+      // neither the cap nor the stack is a limit.
+      final raw = '${'[' * 6000}{"name": "get_battery", "arguments": {}}'
+          '${']' * 6000}';
+
+      // Act
+      final result = parser.parse(raw, isKnownTool: (n) => n == 'get_battery');
+
+      // Assert
+      expect(result.toolCalls, hasLength(1));
+      expect(result.toolCalls.single.name, 'get_battery');
+    });
+
+    test('a deep-arguments sibling does not discard a shallow call beside it',
+        () {
+      // jsonEncode is recursive and overflows on a deeply nested arguments
+      // map. When that overflow escaped, the caller's catch treated the WHOLE
+      // span as unusable and skipped it, silently dropping a legitimate call
+      // sitting next to the pathological one. The guard is per-candidate, so
+      // only the un-serialisable candidate is skipped.
+      final deepArgs = '${'{"k":' * 3400}{} ${'}' * 3400}';
+      final raw = '{"tool_calls": [$deepArgs, '
+          '{"name": "get_battery", "arguments": {}}]}';
+
+      final result = parser.parse(raw, isKnownTool: (n) => n == 'get_battery');
+
+      expect(result.toolCalls, hasLength(1));
+      expect(result.toolCalls.single.name, 'get_battery');
+    });
+
+    test('a pathological deep-arguments call never escapes as an Error', () {
+      // jsonEncode recurses, and whether a given depth overflows depends on the
+      // runtime (JIT and AOT differ), so the recovered-call count here is NOT
+      // stable and must not be asserted. What IS invariant: parse() returns
+      // normally, and the result is self-consistent -- either the call was
+      // recovered and its text stripped, or nothing was accepted and the input
+      // is returned untouched.
+      final deepArgs = '${'{"k":' * 6000}{} ${'}' * 6000}';
+      final raw = '{"name": "get_battery", "arguments": $deepArgs}';
+
+      final result = parser.parse(raw, isKnownTool: (n) => n == 'get_battery');
+
+      if (result.toolCalls.isEmpty) {
+        expect(result.cleanedText, equals(raw));
+      } else {
+        expect(result.toolCalls, hasLength(1));
+        expect(result.cleanedText, isNot(contains('get_battery')));
+      }
+    });
+
+    test('a deep nest with no call stays bounded and byte-identical', () {
+      // The walk must not throw and must leave the text alone when there is
+      // nothing to recover, however deep the payload is.
+      final raw = '[' * 2000 + ']' * 2000;
+
+      final result = parser.parse(raw);
+
+      expect(result.toolCalls, isEmpty);
+      expect(result.cleanedText, equals(raw));
+    });
+  });
 }
