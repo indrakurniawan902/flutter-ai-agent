@@ -18,6 +18,7 @@ import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.d
 import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/action_center/action_center_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/permission_rationale_modal.dart';
+import 'package:flutter_ai_agent/presentation/screen/external_camera/external_camera_preview_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/node/geofence_management_screen.dart';
 import 'package:flutter_ai_agent/utils/hermes_theme.dart';
 import 'package:flutter_ai_agent/utils/permission_gate.dart';
@@ -385,6 +386,14 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
     );
   }
 
+  void _handleOpenExternalCamera() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const ExternalCameraPreviewScreen(),
+      ),
+    );
+  }
+
   void _handleBroadcastPing() {
     final latency = 12 + (DateTime.now().millisecond % 5);
     setState(() {
@@ -574,6 +583,16 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
             icon: Icons.cleaning_services_outlined,
             onTap: () =>
                 _showFeedback('Ambient event buffer cleared (0 pending).'),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: _buildActionButton(
+              key: const Key('action_open_external_camera'),
+              label: 'External Camera',
+              icon: Icons.videocam_outlined,
+              onTap: _handleOpenExternalCamera,
+            ),
           ),
         ],
       ),

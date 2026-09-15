@@ -2,7 +2,6 @@ package ai.hermes.flames
 
 import android.Manifest
 import android.app.AlarmManager
-import android.app.NotificationListenerService
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -14,6 +13,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
+import android.service.notification.NotificationListenerService
 import androidx.annotation.NonNull
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat

@@ -18,6 +18,10 @@ analyzer:
     - windows/**
     - macos/**
     - linux/**
+    # Vendored third-party source. It is patched only where the published package
+    # cannot build (see third_party/contacts_service), so its style lints are not
+    # ours to satisfy and would otherwise drown out findings in lib/.
+    - third_party/**
 
 linter:
   # The lint rules applied to this project can be customized in the

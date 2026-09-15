@@ -13,6 +13,7 @@ abstract class AppRoutes {
   static const String nrAddProfile = 'add-profile';
   static const String nrActionCenter = 'action-center';
   static const String nrGeofenceManagement = 'geofence-management';
+  static const String nrExternalCamera = 'external-camera';
 
   static const String splash = '/splash';
   static const String home = '/home';
@@ -26,6 +27,7 @@ abstract class AppRoutes {
   static const String addProfile = '/settings/add-profile';
   static const String actionCenter = '/action-center';
   static const String geofenceManagement = '/node/geofence-management';
+  static const String externalCamera = '/node/external-camera';
 
   static const String splashPath = splash;
   static const String homePath = home;
@@ -39,4 +41,5 @@ abstract class AppRoutes {
   static const String addProfilePath = addProfile;
   static const String actionCenterPath = actionCenter;
   static const String geofenceManagementPath = geofenceManagement;
+  static const String externalCameraPath = externalCamera;
 }
