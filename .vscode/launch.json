@@ -2,67 +2,19 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "[DEV] Flames",
+      "name": "Flames (Debug)",
       "request": "launch",
       "type": "dart",
-      "program": "lib/main_development.dart",
-      "args": [
-        "--flavor",
-        "development",
-        "--target",
-        "lib/main_development.dart"
-      ]
+      "program": "lib/main.dart"
     },
     {
-      "name": "[DEV Release] Flames",
+      "name": "Flames (Release)",
       "request": "launch",
       "type": "dart",
-      "program": "lib/main_development.dart",
+      "program": "lib/main.dart",
       "noDebug": false,
       "args": [
-        "--flavor",
-        "development",
-        "--release",
-        "--target",
-        "lib/main_development.dart"
-      ]
-    },
-    {
-      "name": "[PROD Release] Flames",
-      "request": "launch",
-      "type": "dart",
-      "program": "lib/main_production.dart",
-      "noDebug": false,
-      "args": [
-        "--release",
-        "--flavor",
-        "production",
-        "--target",
-        "lib/main_production.dart"
-      ]
-    },
-    {
-      "name": "[PROD Debug] Flames",
-      "request": "launch",
-      "type": "dart",
-      "program": "lib/main_production.dart",
-      "noDebug": false,
-      "args": [
-        "--flavor",
-        "production",
-        "--target",
-        "lib/main_production.dart"
-      ]
-    },
-    {
-      "name": "Flutter Dev (No Debug / Profile)",
-      "request": "launch",
-      "type": "dart",
-      "flutterMode": "profile",
-      "program": "lib/main_development.dart",
-      "args": [
-        "--flavor",
-        "development"
+        "--release"
       ]
     }
   ]

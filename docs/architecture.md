@@ -56,10 +56,7 @@ the network?".
 
 ```text
 lib/
-  main.dart                    # fallback default entry (today)
-  main_development.dart        # dev flavor entry → bootstrap(FlavorConfig.development)
-  main_production.dart         # prod flavor entry → bootstrap(FlavorConfig.production)
-  app.dart                     # bootstrap() + App (root MaterialApp); rename/tidy per §13
+  main.dart                    # single entrypoint → bootstrap()
 
   common/                      # cross-cutting infrastructure (see §5)
     injection/
@@ -119,16 +116,15 @@ payload), **server_profiles** (multi-server profile CRUD & active switcher),
 **settings** (LLM endpoint, API keys, temperature), **navigation**, **skills**
 (skills hub), **splash**, **memory_vault**, and **pocket_node**.
 
-### `bootstrap()` init order (target, `lib/app.dart` / `myapp.dart`)
+### `bootstrap()` init order (target, `lib/myapp.dart`)
 
 ```dart
-Future<void> bootstrap(FlavorConfig flavor) async {
-  FlavorConfig.current = flavor;
+Future<void> bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
   // await Firebase.initializeApp(...);              // if Firebase is added
   configureInjection();                             // get_it/injectable (see §5)
   await _initHiveAdapters();                        // AWAIT this — don't fire-and-forget
-  runApp(MyApp(flavor: flavor));
+  runApp(const MyApp());
 }
 
 Future<void> _initHiveAdapters() async {
@@ -138,21 +134,22 @@ Future<void> _initHiveAdapters() async {
 }
 ```
 
-Order: set `FlavorConfig.current` → bind Flutter → init backend SDKs →
-`configureInjection()` → register Hive adapters (awaited) → `runApp`.
+Order: bind Flutter → init backend SDKs → `configureInjection()` → register
+Hive adapters (awaited) → `runApp`.
 
 ---
 
-## 3. Flavors
+## 3. Entrypoint (single, no flavors)
 
-- Flames ships three entries: `lib/main.dart` (fallback), `lib/main_development.dart`
-  (`ai.hermes.flames.dev`), `lib/main_production.dart` (`ai.hermes.flames`).
-- Android product flavors mirror the Dart flavors, each with its own app name
-  and `applicationIdSuffix`.
-- CI builds with `flutter build apk --flavor <name> -t lib/main_<name>.dart`
-  and gates on `flutter analyze` / `flutter test`, all serialized with
+- Flames has exactly ONE entrypoint: `lib/main.dart` calling `bootstrap()`.
+- There are no Dart flavors, no Android product flavors and no
+  `applicationIdSuffix`. The Android applicationId is `ai.hermes.flames`.
+- The app name comes from `android/app/src/main/res/values/strings.xml`.
+- CI builds with `flutter build apk -t lib/main.dart` and gates on
+  `flutter analyze` / `flutter test`, all serialized with
   `flock /tmp/flutter.lock` on this 2-vCPU VPS.
-- Only add flavors the project actually needs.
+- Flavors are off by default — add one only when a project genuinely needs
+  distinct environments.
 
 ---
 
@@ -697,16 +694,15 @@ domain,presentation,utils}/`, Cubit-only, `get_it` + `injectable`, `dartz`
 the 7 ways below. Nothing here is accidental drift — each exception exists
 for a Flames-specific requirement.
 
-### 1. Entrypoints & Flavors (dev + prod only, lib/main.dart fallback, no staging)
+### 1. Single entrypoint (no flavors)
 
-- Entries: `lib/main_development.dart` → `bootstrap(FlavorConfig.development)`,
-  `lib/main_production.dart` → `bootstrap(FlavorConfig.production)`, plus
-  `lib/main.dart` as fallback default entry.
-- No `staging` flavor. Android product flavors mirror dev/prod only, each
-  with its own app name and `applicationIdSuffix`.
-- CI builds with `flutter build apk --flavor <name> -t lib/main_<name>.dart`.
-- Rationale: Flames needs exactly two deploy targets today; a third flavor
-  adds signing/CI cost with no consumer.
+- One `lib/main.dart` → `bootstrap()`; no Dart flavors and no Android product
+  flavors or `applicationIdSuffix`. The app name comes from
+  `android/app/src/main/res/values/strings.xml`.
+- Rationale: the dev and production flavors were byte-identical (same base URL,
+  model and temperature), so a second bundle id plus a flavor flag on every
+  command was pure cost with no consumer. The runtime endpoint and API key are
+  typed by the user into Settings, so nothing is baked at build time.
 
 ### 2. Local Storage & Module DI (flutter_secure_storage + hive_ce_flutter, StorageModule)
 
