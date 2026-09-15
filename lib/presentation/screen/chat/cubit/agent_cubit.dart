@@ -54,6 +54,19 @@ class AgentCubit extends Cubit<AgentState> {
   static const int _maxTitleLength = 40;
   static const ToolCallTextParser _textToolCallParser = ToolCallTextParser();
 
+  /// Upper bound on the assistant text handed to the synchronous bare-tool-call
+  /// scan. That scan is quadratic in the input length, so an adversarial
+  /// 80-120 KB model response can freeze the UI isolate for tens of seconds.
+  ///
+  /// The gate deliberately lives at the CALL SITE, not inside the parser's own
+  /// scan: a length window inside the scan would leave an unscanned gap and be
+  /// blind to a fence opened before it, so it could silently drop a real call.
+  /// A uniform call-site gate cannot half-scan: below the cap coverage is 100%
+  /// and unchanged, above it the whole fallback is skipped. Realistic assistant
+  /// prose is 2-32 KB, so 64 KB is 2-32x above anything real. Do not move this
+  /// gate back into the scanner.
+  static const int _maxTextToolCallScanLength = 64 * 1024;
+
   int? activeSessionId;
   final List<Session> _sessions = [];
   Future<void>? _ensureSessionFuture;
@@ -1003,17 +1016,20 @@ class AgentCubit extends Cubit<AgentState> {
         if (_isCancelled || runGeneration != _runGeneration) return;
         // If no tool calls were generated, this is the final text answer.
         if (callIds.isEmpty && callNames.isEmpty && callArgs.isEmpty) {
-          final fallback = _textToolCallParser.parse(
-            contentBuffer.toString(),
-            isKnownTool: (name) => _toolRegistry.getTool(name) != null,
-          );
-          if (fallback.hasToolCalls) {
-            await _completeTurnWithToolCalls(
-              fallback.toolCalls,
-              fallback.cleanedText,
-              runGeneration,
+          final rawContent = contentBuffer.toString();
+          if (rawContent.length <= _maxTextToolCallScanLength) {
+            final fallback = _textToolCallParser.parse(
+              rawContent,
+              isKnownTool: (name) => _toolRegistry.getTool(name) != null,
             );
-            return;
+            if (fallback.hasToolCalls) {
+              await _completeTurnWithToolCalls(
+                fallback.toolCalls,
+                fallback.cleanedText,
+                runGeneration,
+              );
+              return;
+            }
           }
           final extraction =
               ThoughtExtractor.extract(contentBuffer.toString());
