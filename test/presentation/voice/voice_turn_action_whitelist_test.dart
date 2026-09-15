@@ -7,8 +7,11 @@
 // test/domain/tools/chat/main_activity_action_whitelist_contract_test.dart.
 //
 // This file pins the second, Dart-side layer: VoiceTurnActionListener's
-// switch (action.toLowerCase().trim()) drops everything that is not one of
-// the three actions AFTER normalization. Two layers, not a moved layer.
+// switch (action.toLowerCase().trim()) normalizes case and whitespace and then
+// matches one of the three actions, dropping everything else. So if a variant
+// ever escapes the Kotlin layer, Dart still recognizes it as whitelisted. Both
+// behaviours are pinned: Kotlin drops the variants, Dart normalizes and matches
+// them. Two layers, not a moved layer.
 
 import 'dart:async';
 import 'dart:io';
@@ -149,7 +152,7 @@ void main() {
     verifyNever(() => mockBackgroundService.setTileState(any()));
   });
 
-  testWidgets('values that only miss the whitelist after normalization are dropped',
+  testWidgets('values that are not one of the three actions are dropped',
       (tester) async {
     // Arrange
     const rejected = [
@@ -184,6 +187,44 @@ void main() {
 
       await tester.pumpWidget(const SizedBox());
     }
+  });
+
+  testWidgets('the Dart layer normalizes case and whitespace before matching',
+      (tester) async {
+    // The Kotlin choke point compares exactly and drops these variants; the
+    // Dart switch normalizes, so if a variant ever reaches Dart it is still
+    // matched as one of the three whitelisted actions.
+    // Arrange
+    final recorder = _RecordingDispatcher();
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pump();
+    registry.register(recorder);
+
+    // Act
+    actionController.add('QUICK_STATUS ');
+    await tester.pump();
+    await tester.pump();
+
+    // Assert
+    expect(recorder.dispatched, hasLength(1));
+    expect(recorder.dispatched.single, contains('Quick status check'));
+    verifyNever(() => mockVoiceTurnService.runTurn());
+
+    // Act
+    actionController.add(' Voice_Input');
+    await tester.pump();
+    await tester.pump();
+
+    // Assert
+    verify(() => mockVoiceTurnService.runTurn()).called(1);
+
+    // Act
+    actionController.add('Cancel_Voice');
+    await tester.pump();
+    await tester.pump();
+
+    // Assert
+    verify(() => mockVoiceTurnService.cancelTurn()).called(1);
   });
 
   testWidgets(

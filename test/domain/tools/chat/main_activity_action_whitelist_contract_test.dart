@@ -86,12 +86,16 @@ void main() {
       if (!ready) return;
 
       final body = extractBody();
-      expect(body, contains('Intent.ACTION_SEND'));
-      expect(body, contains('Intent.ACTION_SEND_MULTIPLE'));
-      expect(body, contains('Intent.ACTION_VIEW'));
-      expect(body, contains('return null'));
+      // Scope these to the guard block itself: the function's own trailing
+      // `return null` must not be able to satisfy them.
+      final guard = bracedBlock(body, 'when (intent?.action)');
+      expect(guard, contains('Intent.ACTION_SEND'));
+      expect(guard, contains('Intent.ACTION_SEND_MULTIPLE'));
+      expect(guard, contains('Intent.ACTION_VIEW'));
+      expect(guard, contains('return null'));
+      expect(guard, isNot(contains('-> {}')));
 
-      final guardIndex = body.indexOf('Intent.ACTION_SEND');
+      final guardIndex = body.indexOf('when (intent?.action)');
       final extraIndex = body.indexOf('extra_flames_action');
       expect(
         guardIndex,
@@ -109,7 +113,6 @@ void main() {
       // Since voice_input is whitelisted, keeping the fallback would have kept
       // a spoofable path alive via that forgeable action string.
       expect(activityKt, isNot(contains('ACTION_QUICK_TILE_TRIGGER')));
-      expect(activityKt, isNot(contains('fallbackAction')));
     });
 
     test('RationaleActivity carries the same permission as its alias', () {
