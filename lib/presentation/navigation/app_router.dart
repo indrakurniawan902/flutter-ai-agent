@@ -9,6 +9,7 @@ import 'package:flutter_ai_agent/presentation/screen/settings/add_profile_screen
 import 'package:flutter_ai_agent/presentation/screen/chat/chat_params.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/chat_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
+import 'package:flutter_ai_agent/presentation/screen/external_camera/external_camera_preview_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/memory_vault/memory_vault_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/navigation/main_navigation_shell.dart';
 import 'package:flutter_ai_agent/presentation/screen/navigation/navigation_params.dart';
@@ -92,6 +93,11 @@ final GoRouter appRouter = GoRouter(
       path: AppRoutes.geofenceManagement,
       name: AppRoutes.nrGeofenceManagement,
       builder: (context, state) => const GeofenceManagementScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.externalCamera,
+      name: AppRoutes.nrExternalCamera,
+      builder: (context, state) => const ExternalCameraPreviewScreen(),
     ),
     GoRoute(
       path: '/vault',

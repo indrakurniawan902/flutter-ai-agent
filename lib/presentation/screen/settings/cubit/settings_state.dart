@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/nfc_tag_prompt_binding.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
 
 /// Base state for SettingsCubit.
 sealed class SettingsState extends Equatable {
@@ -51,6 +52,18 @@ class SettingsLoaded extends SettingsState {
   /// Whether the NFC scanning service is available in this session.
   final bool nfcAvailable;
 
+  /// Preferred TTS engine mode.
+  final TtsEngineMode ttsEngineMode;
+
+  /// Catalog voice id used when [ttsEngineMode] is piper.
+  final String piperVoiceId;
+
+  /// voiceId -> model downloaded & verified.
+  final Map<String, bool> piperVoiceReady;
+
+  /// Last download/delete failure message.
+  final String? piperError;
+
   const SettingsLoaded({
     required super.baseUrl,
     required super.apiKey,
@@ -59,7 +72,13 @@ class SettingsLoaded extends SettingsState {
     super.progressiveToolPruning,
     this.nfcPromptBindings = const [],
     this.nfcAvailable = false,
+    this.ttsEngineMode = TtsEngineMode.system,
+    this.piperVoiceId = 'id_ID-news_tts-medium',
+    this.piperVoiceReady = const {},
+    this.piperError,
   });
+
+  static const _piperErrorUnset = Object();
 
   SettingsLoaded copyWith({
     String? baseUrl,
@@ -69,16 +88,28 @@ class SettingsLoaded extends SettingsState {
     bool? progressiveToolPruning,
     List<NfcTagPromptBinding>? nfcPromptBindings,
     bool? nfcAvailable,
-  }) =>
-      SettingsLoaded(
-        baseUrl: baseUrl ?? this.baseUrl,
-        apiKey: apiKey ?? this.apiKey,
-        model: model ?? this.model,
-        temperature: temperature ?? this.temperature,
-        progressiveToolPruning: progressiveToolPruning ?? this.progressiveToolPruning,
-        nfcPromptBindings: nfcPromptBindings ?? this.nfcPromptBindings,
-        nfcAvailable: nfcAvailable ?? this.nfcAvailable,
-      );
+    TtsEngineMode? ttsEngineMode,
+    String? piperVoiceId,
+    Map<String, bool>? piperVoiceReady,
+    Object? piperError = _piperErrorUnset,
+  }) {
+    final String? resolvedPiperError = identical(piperError, _piperErrorUnset)
+        ? this.piperError
+        : piperError as String?;
+    return SettingsLoaded(
+      baseUrl: baseUrl ?? this.baseUrl,
+      apiKey: apiKey ?? this.apiKey,
+      model: model ?? this.model,
+      temperature: temperature ?? this.temperature,
+      progressiveToolPruning: progressiveToolPruning ?? this.progressiveToolPruning,
+      nfcPromptBindings: nfcPromptBindings ?? this.nfcPromptBindings,
+      nfcAvailable: nfcAvailable ?? this.nfcAvailable,
+      ttsEngineMode: ttsEngineMode ?? this.ttsEngineMode,
+      piperVoiceId: piperVoiceId ?? this.piperVoiceId,
+      piperVoiceReady: piperVoiceReady ?? this.piperVoiceReady,
+      piperError: resolvedPiperError,
+    );
+  }
 
   @override
   List<Object?> get props => [
@@ -89,6 +120,10 @@ class SettingsLoaded extends SettingsState {
         progressiveToolPruning,
         nfcPromptBindings,
         nfcAvailable,
+        ttsEngineMode,
+        piperVoiceId,
+        piperVoiceReady,
+        piperError,
       ];
 }
 
@@ -134,6 +169,10 @@ class SettingsNfcScanResult extends SettingsLoaded {
     super.progressiveToolPruning = true,
     super.nfcPromptBindings = const [],
     super.nfcAvailable = false,
+    super.ttsEngineMode = TtsEngineMode.system,
+    super.piperVoiceId = 'id_ID-news_tts-medium',
+    super.piperVoiceReady = const {},
+    super.piperError,
   });
 
   @override
@@ -146,6 +185,39 @@ class SettingsNfcScanResult extends SettingsLoaded {
         progressiveToolPruning,
         nfcPromptBindings,
         nfcAvailable,
+        ttsEngineMode,
+        piperVoiceId,
+        piperVoiceReady,
+        piperError,
+      ];
+}
+
+/// A Piper voice model download is in progress.
+class SettingsVoiceDownloadInProgress extends SettingsLoaded {
+  final String downloadingVoiceId;
+  final double progress;
+
+  const SettingsVoiceDownloadInProgress({
+    required this.downloadingVoiceId,
+    this.progress = 0,
+    super.baseUrl = '',
+    super.apiKey = '',
+    super.model = '',
+    super.temperature = 0.7,
+    super.progressiveToolPruning = true,
+    super.nfcPromptBindings = const [],
+    super.nfcAvailable = false,
+    super.ttsEngineMode = TtsEngineMode.system,
+    super.piperVoiceId = 'id_ID-news_tts-medium',
+    super.piperVoiceReady = const {},
+    super.piperError,
+  });
+
+  @override
+  List<Object?> get props => [
+        ...super.props,
+        downloadingVoiceId,
+        progress,
       ];
 }
 

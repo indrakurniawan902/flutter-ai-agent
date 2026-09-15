@@ -9,6 +9,8 @@ import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_chunk.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
 import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart';
+import 'package:flutter_ai_agent/domain/services/voice/voice_prompt_dispatcher.dart';
+import 'package:flutter_ai_agent/domain/services/voice/voice_turn_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/calendar_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart';
@@ -20,6 +22,7 @@ import 'package:flutter_ai_agent/domain/tools/chat/voice_input_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
+import 'package:flutter_ai_agent/data/services/voice/voice_turn_service.dart';
 import 'package:flutter_ai_agent/domain/tools/pairing/pairing_parser.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_cubit.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
@@ -104,6 +107,10 @@ void main() {
     when(() => mockVoiceInputService.lastRecognizedWords).thenReturn('');
     when(() => mockVoiceInputService.isListening).thenReturn(false);
     when(() => mockVoiceInputService.isAvailable).thenReturn(true);
+    when(() => mockVoiceInputService.checkPermission())
+        .thenAnswer((_) async => const Right(true));
+    when(() => mockVoiceInputService.initialize())
+        .thenAnswer((_) async => const Right(true));
     when(() => mockVoiceInputService.dispose()).thenReturn(null);
     when(() => mockVoiceInputService.cancelListening()).thenAnswer((_) async {});
     when(() => mockVoiceInputService.startListening(
@@ -203,6 +210,16 @@ void main() {
     );
     sl.registerLazySingleton<BackgroundServiceBase>(
       () => mockBackgroundService,
+    );
+    sl.registerLazySingleton<VoicePromptDispatcherRegistry>(
+      () => VoicePromptDispatcherRegistry(),
+    );
+    sl.registerLazySingleton<VoiceTurnServiceBase>(
+      () => VoiceTurnService(
+        voiceInput: sl<VoiceInputServiceBase>(),
+        voiceOutput: sl<VoiceOutputServiceBase>(),
+        registry: sl<VoicePromptDispatcherRegistry>(),
+      ),
     );
 
     final toolRegistry = ToolRegistry();
@@ -399,6 +416,8 @@ void main() {
     testWidgets(
       'Background Automation: Quick Settings Tile & Notification Action dispatch triggers voice input & quick status',
       (tester) async {
+        when(() => mockVoiceInputService.stopListening())
+            .thenAnswer((_) async => const Right('Berapa status baterai?'));
         when(() => mockLlmRepository.streamCompletion(
               baseUrl: any(named: 'baseUrl'),
               model: any(named: 'model'),
@@ -419,40 +438,58 @@ void main() {
         await tester.pumpWidget(const App());
         await tester.pumpAndSettle();
 
-        // 1. Simulate Quick Settings Tile tap emitting "voice_input"
+        // Act: the Quick Settings Tile / notification action fires.
         backgroundActionController.add('voice_input');
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 50));
-        await tester.pump();
+        // Let the async turn walk its awaits (permission, interrupt,
+        // initialize, startListening) before the status stream is touched.
+        for (var i = 0; i < 20; i++) {
+          await tester.pump();
+        }
 
-        verify(() => mockVoiceInputService.startListening()).called(1);
-        expect(find.byKey(const Key('voice_waveform_container')), findsOneWidget);
+        // Assert: the headless turn ran with no ChatScreen driving it.
+        verify(() => mockVoiceInputService.checkPermission()).called(1);
+        verify(() => mockVoiceOutputService.interrupt()).called(1);
+        verify(() => mockVoiceInputService.initialize()).called(1);
+        verify(() => mockVoiceInputService.startListening(
+              listenFor: any(named: 'listenFor'),
+              pauseFor: any(named: 'pauseFor'),
+              localeId: any(named: 'localeId'),
+            )).called(1);
+        expect(find.byKey(const Key('voice_waveform_container')), findsNothing);
 
-        // Cancel voice input to reset state
-        final cancelButton =
-            find.byKey(const Key('voice_waveform_cancel_button'));
-        await tester.tap(cancelButton);
-        await tester.pump();
-
-        // 2. Simulate Persistent Notification Action emitting "quick_status"
-        backgroundActionController.add('quick_status');
+        // Finish STT: only now is the broadcast status event safe to emit.
+        voiceInputStatusController.add(VoiceInputStatus.done);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
         await tester.pumpAndSettle();
 
-        // Verify status check prompt sent to agent
-        expect(
-          find.textContaining('Quick status check: summarize battery'),
-          findsOneWidget,
-        );
+        // The transcript reaches the visible conversation through the mounted
+        // 'chat' transport, and the reply is spoken.
+        expect(find.textContaining('Berapa status baterai?'), findsOneWidget);
         expect(
           find.textContaining(
             'Semua sistem siap. Baterai 85% dan gateway terhubung.',
           ),
           findsOneWidget,
         );
+        verify(() => mockVoiceOutputService.speakText(
+              'Semua sistem siap. Baterai 85% dan gateway terhubung.',
+            )).called(1);
+        expect(sl<VoicePromptDispatcherRegistry>().active?.transportId, 'chat');
 
-        // Verify TTS speaks the quick status response
+        // Act: the persistent notification action fires "quick_status".
+        backgroundActionController.add('quick_status');
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.textContaining('Quick status check: summarize battery'),
+          findsOneWidget,
+        );
+        // The mounted ChatScreen owns the audio on the direct path, so the
+        // quick-status reply is spoken exactly once as well. mocktail counts
+        // only the calls not already consumed by the verification above.
         verify(() => mockVoiceOutputService.speakText(
               'Semua sistem siap. Baterai 85% dan gateway terhubung.',
             )).called(1);

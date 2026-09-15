@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/nfc_tag_prompt_binding.dart';
+import 'package:flutter_ai_agent/domain/entities/chat/piper_voice.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
 import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +13,7 @@ import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/serve
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/settings_params.dart';
+import 'package:flutter_ai_agent/presentation/screen/settings/widgets/overlay_bubble_settings_tile.dart';
 import 'package:flutter_ai_agent/presentation/widget/app_toast.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -56,10 +59,7 @@ class SettingsScreen extends StatelessWidget {
     }
 
     if (cubit != null) {
-      view = BlocProvider<SettingsCubit>.value(
-        value: cubit!,
-        child: view,
-      );
+      view = BlocProvider<SettingsCubit>.value(value: cubit!, child: view);
     } else {
       try {
         BlocProvider.of<SettingsCubit>(context, listen: false);
@@ -132,12 +132,12 @@ class _SettingsViewState extends State<_SettingsView> {
       final model = _modelController.text.trim();
 
       context.read<SettingsCubit>().saveSettings(
-            baseUrl: baseUrl,
-            apiKey: apiKey,
-            model: model,
-            temperature: temp,
-            progressiveToolPruning: _progressiveToolPruning,
-          );
+        baseUrl: baseUrl,
+        apiKey: apiKey,
+        model: model,
+        temperature: temp,
+        progressiveToolPruning: _progressiveToolPruning,
+      );
 
       try {
         final serverProfileCubit = context.read<ServerProfileCubit>();
@@ -164,9 +164,10 @@ class _SettingsViewState extends State<_SettingsView> {
 
       // Also register as a ServerProfile
       try {
-        await context
-            .read<ServerProfileCubit>()
-            .addFromPairingPayload(result, makeActive: true);
+        await context.read<ServerProfileCubit>().addFromPairingPayload(
+          result,
+          makeActive: true,
+        );
       } catch (_) {}
 
       if (mounted) {
@@ -237,7 +238,8 @@ class _SettingsViewState extends State<_SettingsView> {
                 if (_modelController.text != state.model) {
                   _modelController.text = state.model;
                 }
-                if (_temperatureController.text != state.temperature.toString()) {
+                if (_temperatureController.text !=
+                    state.temperature.toString()) {
                   _temperatureController.text = state.temperature.toString();
                 }
                 if (_progressiveToolPruning != state.progressiveToolPruning) {
@@ -271,13 +273,14 @@ class _SettingsViewState extends State<_SettingsView> {
                   _baseUrlController.text = state.activeProfile!.gatewayUrl;
                   _apiKeyController.text = state.activeProfile!.token;
                   _modelController.text = state.activeProfile!.model;
-                  _temperatureController.text =
-                      state.activeProfile!.temperature.toString();
-                  context
-                      .read<SettingsCubit>()
-                      .updateFromProfile(state.activeProfile!);
+                  _temperatureController.text = state.activeProfile!.temperature
+                      .toString();
+                  context.read<SettingsCubit>().updateFromProfile(
+                    state.activeProfile!,
+                  );
                 }
-              } else if (state is ServerProfileLoaded && state.activeProfile != null) {
+              } else if (state is ServerProfileLoaded &&
+                  state.activeProfile != null) {
                 if (_baseUrlController.text.isEmpty) {
                   _baseUrlController.text = state.activeProfile!.gatewayUrl;
                 }
@@ -288,8 +291,8 @@ class _SettingsViewState extends State<_SettingsView> {
                   _modelController.text = state.activeProfile!.model;
                 }
                 if (_temperatureController.text.isEmpty) {
-                  _temperatureController.text =
-                      state.activeProfile!.temperature.toString();
+                  _temperatureController.text = state.activeProfile!.temperature
+                      .toString();
                 }
               } else if (state is ServerProfileError) {
                 AppToast.error(context, state.message);
@@ -373,10 +376,7 @@ class _SettingsViewState extends State<_SettingsView> {
                     ),
                     const Text(
                       'Configure OpenAI-compatible endpoint credentials and model parameters.',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                      ),
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
                     ),
                     const SizedBox(height: 16),
                     OutlinedButton.icon(
@@ -405,7 +405,7 @@ class _SettingsViewState extends State<_SettingsView> {
                       keyboardType: TextInputType.url,
                       decoration: const InputDecoration(
                         labelText: 'Base URL',
-                        hintText: 'https://indra-9router.my.id/v1',
+                        hintText: 'https://api.openai.com/v1',
                         prefixIcon: Icon(Icons.dns),
                         border: OutlineInputBorder(),
                       ),
@@ -461,7 +461,7 @@ class _SettingsViewState extends State<_SettingsView> {
                       controller: _modelController,
                       decoration: const InputDecoration(
                         labelText: 'Model Name',
-                        hintText: 'ag-glm',
+                        hintText: 'gpt-4o',
                         prefixIcon: Icon(Icons.psychology),
                         border: OutlineInputBorder(),
                       ),
@@ -477,8 +477,9 @@ class _SettingsViewState extends State<_SettingsView> {
                     TextFormField(
                       key: const Key('settings_temperature_field'),
                       controller: _temperatureController,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       decoration: const InputDecoration(
                         labelText: 'Temperature',
                         hintText: '0.7',
@@ -509,9 +510,11 @@ class _SettingsViewState extends State<_SettingsView> {
                         color: Colors.transparent,
                         child: SwitchListTile(
                           key: const Key(
-                              'settings_progressive_tool_pruning_toggle'),
-                          contentPadding:
-                              const EdgeInsets.symmetric(horizontal: 12),
+                            'settings_progressive_tool_pruning_toggle',
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                          ),
                           activeThumbColor: tealAccent,
                           title: const Text(
                             'Progressive Tool Pruning',
@@ -523,8 +526,10 @@ class _SettingsViewState extends State<_SettingsView> {
                           ),
                           subtitle: const Text(
                             'Send only relevant tool schemas per prompt to save tokens',
-                            style:
-                                TextStyle(color: Colors.white70, fontSize: 12),
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
                           ),
                           value: _progressiveToolPruning,
                           onChanged: (value) {
@@ -573,6 +578,10 @@ class _SettingsViewState extends State<_SettingsView> {
                         state.nfcPromptBindings,
                         state.nfcAvailable,
                       ),
+                      const SizedBox(height: 24),
+                      _buildVoiceSection(context, state),
+                      const SizedBox(height: 24),
+                      _buildOverlayBubbleSection(context, state),
                     ],
                   ],
                 ),
@@ -648,7 +657,10 @@ class _SettingsViewState extends State<_SettingsView> {
                         key: const Key('settings_server_profile_dropdown'),
                         initialValue: activeProfile?.id ?? profiles.first.id,
                         dropdownColor: const Color(0xFF1E293B),
-                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                        ),
                         decoration: const InputDecoration(
                           contentPadding: EdgeInsets.symmetric(
                             horizontal: 12,
@@ -657,7 +669,9 @@ class _SettingsViewState extends State<_SettingsView> {
                           border: OutlineInputBorder(),
                         ),
                         items: profiles.map((ServerProfile p) {
-                          final label = p.isActive ? '${p.name} (Active)' : p.name;
+                          final label = p.isActive
+                              ? '${p.name} (Active)'
+                              : p.name;
                           return DropdownMenuItem<String>(
                             value: p.id,
                             child: Text(
@@ -668,7 +682,8 @@ class _SettingsViewState extends State<_SettingsView> {
                           );
                         }).toList(),
                         onChanged: (selectedId) {
-                          if (selectedId != null && selectedId != activeProfile?.id) {
+                          if (selectedId != null &&
+                              selectedId != activeProfile?.id) {
                             context
                                 .read<ServerProfileCubit>()
                                 .switchActiveProfile(selectedId);
@@ -687,9 +702,9 @@ class _SettingsViewState extends State<_SettingsView> {
                           size: 20,
                         ),
                         onPressed: () {
-                          context
-                              .read<ServerProfileCubit>()
-                              .deleteProfile(activeProfile.id);
+                          context.read<ServerProfileCubit>().deleteProfile(
+                            activeProfile.id,
+                          );
                         },
                       ),
                     ],
@@ -699,6 +714,246 @@ class _SettingsViewState extends State<_SettingsView> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildVoiceSection(BuildContext context, SettingsLoaded state) {
+    const tealAccent = Color(0xFF008080);
+    final catalogEmpty = kPiperVoiceCatalog.isEmpty;
+
+    Widget body = RadioGroup<String>(
+      groupValue: state.piperVoiceId,
+      onChanged: catalogEmpty
+          ? (_) {}
+          : (selected) {
+              if (selected != null) {
+                context.read<SettingsCubit>().setPiperVoiceId(selected);
+              }
+            },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SegmentedButton<TtsEngineMode>(
+            key: const Key('settings_tts_engine_picker'),
+            segments: const [
+              ButtonSegment<TtsEngineMode>(
+                value: TtsEngineMode.system,
+                label: Text('System'),
+              ),
+              ButtonSegment<TtsEngineMode>(
+                value: TtsEngineMode.piper,
+                label: Text('Piper (offline)'),
+              ),
+            ],
+            selected: {state.ttsEngineMode},
+            onSelectionChanged: catalogEmpty
+                ? null
+                : (selection) {
+                    if (selection.isNotEmpty) {
+                      context.read<SettingsCubit>().setTtsEngineMode(
+                        selection.first,
+                      );
+                    }
+                  },
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Piper is an offline neural voice. When the model is not downloaded it falls back to the system voice.',
+            style: TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          ...kPiperVoiceCatalog.map((voice) {
+            final id = voice.id;
+            final isReady = state.piperVoiceReady[id] == true;
+            final isDownloading =
+                state is SettingsVoiceDownloadInProgress &&
+                state.downloadingVoiceId == id;
+            final progress =
+                state is SettingsVoiceDownloadInProgress &&
+                    state.downloadingVoiceId == id
+                ? state.progress
+                : 0.0;
+            return Container(
+              key: Key('settings_piper_voice_row_$id'),
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF334155)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Radio<String>(
+                        key: Key('settings_piper_voice_radio_$id'),
+                        value: id,
+                        activeColor: tealAccent,
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              voice.label,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              isReady ? 'Downloaded' : 'Not downloaded',
+                              key: Key('settings_piper_voice_status_$id'),
+                              style: TextStyle(
+                                color: isReady ? tealAccent : Colors.white60,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (isReady)
+                        IconButton(
+                          key: Key('settings_piper_voice_delete_$id'),
+                          tooltip: 'Delete voice model',
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            color: Colors.redAccent,
+                            size: 20,
+                          ),
+                          onPressed: catalogEmpty
+                              ? null
+                              : () => context
+                                    .read<SettingsCubit>()
+                                    .deletePiperVoice(id),
+                        )
+                      else
+                        TextButton.icon(
+                          key: Key('settings_piper_voice_download_$id'),
+                          icon: const Icon(Icons.download, size: 16),
+                          label: const Text('Download'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: tealAccent,
+                          ),
+                          onPressed: (catalogEmpty || isDownloading)
+                              ? null
+                              : () => context
+                                    .read<SettingsCubit>()
+                                    .downloadPiperVoice(id),
+                        ),
+                    ],
+                  ),
+                  if (isDownloading) ...[
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(
+                      key: Key('settings_piper_voice_progress_$id'),
+                      value: progress,
+                      color: tealAccent,
+                      backgroundColor: const Color(0xFF334155),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${(progress * 100).toStringAsFixed(0)}%',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }),
+          if (state.piperError != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              state.piperError!,
+              key: const Key('settings_piper_error_text'),
+              style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+            ),
+          ],
+        ],
+      ),
+    );
+
+    if (catalogEmpty) {
+      body = IgnorePointer(
+        ignoring: true,
+        child: Opacity(opacity: 0.5, child: body),
+      );
+    }
+
+    return Container(
+      key: const Key('settings_voice_section'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF334155)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.record_voice_over, color: tealAccent, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Voice (TTS)',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          body,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverlayBubbleSection(
+    BuildContext context,
+    SettingsLoaded state,
+  ) {
+    const tealAccent = Color(0xFF008080);
+
+    return Container(
+      key: const Key('settings_overlay_bubble_section'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF334155)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.bubble_chart, color: tealAccent, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Floating Bubble',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const OverlayBubbleSettingsTile(),
+        ],
+      ),
     );
   }
 

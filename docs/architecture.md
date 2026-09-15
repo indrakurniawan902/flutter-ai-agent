@@ -32,7 +32,7 @@
 | Networking | `dio` — injected directly into datasources, no wrapper client class; custom `SseParser` for streaming SSE completions |
 | Realtime gateway | `web_socket_channel` for bidirectional RPC transport |
 | Local storage | `flutter_secure_storage` (credentials, tokens, profiles) + `hive_ce_flutter` (cache) |
-| Device tools | `battery_plus`, `connectivity_plus`, `device_info_plus`, `geolocator`, `image_picker`, `device_calendar`, `flutter_local_notifications` |
+| Device tools | `battery_plus`, `connectivity_plus`, `device_info_plus`, `geolocator`, `image_picker`, `device_calendar`, `flutter_local_notifications`, `flutter_ffi_uvc` (USB/UVC external camera) |
 | Functional error handling | `dartz` (`Either<Failure, T>`) |
 | Equality | `equatable` |
 | Design & theme | Dark surface `#0F172A`, surface container `#1E293B`, border `#334155`, accent teal `#008080`; **0 emoji icons** in chrome (`Icons.*` only) |
@@ -56,10 +56,7 @@ the network?".
 
 ```text
 lib/
-  main.dart                    # fallback default entry (today)
-  main_development.dart        # dev flavor entry → bootstrap(FlavorConfig.development)
-  main_production.dart         # prod flavor entry → bootstrap(FlavorConfig.production)
-  app.dart                     # bootstrap() + App (root MaterialApp); rename/tidy per §13
+  main.dart                    # single entrypoint → bootstrap()
 
   common/                      # cross-cutting infrastructure (see §5)
     injection/
@@ -119,16 +116,15 @@ payload), **server_profiles** (multi-server profile CRUD & active switcher),
 **settings** (LLM endpoint, API keys, temperature), **navigation**, **skills**
 (skills hub), **splash**, **memory_vault**, and **pocket_node**.
 
-### `bootstrap()` init order (target, `lib/app.dart` / `myapp.dart`)
+### `bootstrap()` init order (target, `lib/myapp.dart`)
 
 ```dart
-Future<void> bootstrap(FlavorConfig flavor) async {
-  FlavorConfig.current = flavor;
+Future<void> bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
   // await Firebase.initializeApp(...);              // if Firebase is added
   configureInjection();                             // get_it/injectable (see §5)
   await _initHiveAdapters();                        // AWAIT this — don't fire-and-forget
-  runApp(MyApp(flavor: flavor));
+  runApp(const MyApp());
 }
 
 Future<void> _initHiveAdapters() async {
@@ -138,21 +134,22 @@ Future<void> _initHiveAdapters() async {
 }
 ```
 
-Order: set `FlavorConfig.current` → bind Flutter → init backend SDKs →
-`configureInjection()` → register Hive adapters (awaited) → `runApp`.
+Order: bind Flutter → init backend SDKs → `configureInjection()` → register
+Hive adapters (awaited) → `runApp`.
 
 ---
 
-## 3. Flavors
+## 3. Entrypoint (single, no flavors)
 
-- Flames ships three entries: `lib/main.dart` (fallback), `lib/main_development.dart`
-  (`ai.hermes.flames.dev`), `lib/main_production.dart` (`ai.hermes.flames`).
-- Android product flavors mirror the Dart flavors, each with its own app name
-  and `applicationIdSuffix`.
-- CI builds with `flutter build apk --flavor <name> -t lib/main_<name>.dart`
-  and gates on `flutter analyze` / `flutter test`, all serialized with
+- Flames has exactly ONE entrypoint: `lib/main.dart` calling `bootstrap()`.
+- There are no Dart flavors, no Android product flavors and no
+  `applicationIdSuffix`. The Android applicationId is `ai.hermes.flames`.
+- The app name comes from `android/app/src/main/res/values/strings.xml`.
+- CI builds with `flutter build apk -t lib/main.dart` and gates on
+  `flutter analyze` / `flutter test`, all serialized with
   `flock /tmp/flutter.lock` on this 2-vCPU VPS.
-- Only add flavors the project actually needs.
+- Flavors are off by default — add one only when a project genuinely needs
+  distinct environments.
 
 ---
 
@@ -697,16 +694,15 @@ domain,presentation,utils}/`, Cubit-only, `get_it` + `injectable`, `dartz`
 the 7 ways below. Nothing here is accidental drift — each exception exists
 for a Flames-specific requirement.
 
-### 1. Entrypoints & Flavors (dev + prod only, lib/main.dart fallback, no staging)
+### 1. Single entrypoint (no flavors)
 
-- Entries: `lib/main_development.dart` → `bootstrap(FlavorConfig.development)`,
-  `lib/main_production.dart` → `bootstrap(FlavorConfig.production)`, plus
-  `lib/main.dart` as fallback default entry.
-- No `staging` flavor. Android product flavors mirror dev/prod only, each
-  with its own app name and `applicationIdSuffix`.
-- CI builds with `flutter build apk --flavor <name> -t lib/main_<name>.dart`.
-- Rationale: Flames needs exactly two deploy targets today; a third flavor
-  adds signing/CI cost with no consumer.
+- One `lib/main.dart` → `bootstrap()`; no Dart flavors and no Android product
+  flavors or `applicationIdSuffix`. The app name comes from
+  `android/app/src/main/res/values/strings.xml`.
+- Rationale: the dev and production flavors were byte-identical (same base URL,
+  model and temperature), so a second bundle id plus a flavor flag on every
+  command was pure cost with no consumer. The runtime endpoint and API key are
+  typed by the user into Settings, so nothing is baked at build time.
 
 ### 2. Local Storage & Module DI (flutter_secure_storage + hive_ce_flutter, StorageModule)
 
@@ -730,7 +726,16 @@ for a Flames-specific requirement.
   `SecurityPolicy` (Tier 1 auto / Tier 2 permission / Tier 3 HITL).
 - Backed by plugins: `battery_plus`, `connectivity_plus`, `device_info_plus`,
   `geolocator`, `image_picker`, `device_calendar`,
-  `flutter_local_notifications`.
+  `flutter_local_notifications`, `flutter_ffi_uvc` (USB/UVC external camera,
+  FFI plugin over libuvc).
+- **External USB camera (flutter_ffi_uvc).** It is an FFI plugin (no
+  platform-channel Dart API) wrapping libuvc, and it is the only USB/UVC engine
+  — do not add a second one. License chain: BSD-3-Clause (flutter_ffi_uvc) +
+  libuvc (BSD) + libusb (LGPL-2.1) + libjpeg-turbo (IJG/BSD-style); the package
+  ships its own NOTICES/THIRD_PARTY_NOTICES.md so Flutter's license collector
+  (`showLicensePage`) picks them up automatically, no manual attribution file
+  needed. The Android manifest declares `android.hardware.usb.host` as
+  `required="false"`.
 - Rationale: template has no device-tool concept; the ReAct agent loop needs
   a dedicated execution surface with a security gate.
 
@@ -781,3 +786,80 @@ for a Flames-specific requirement.
   `flutter analyze` (0 issues) and `flutter test` (100% green).
 - Rationale: template relies on review discipline; Flames codifies the
   layout traps (§8) as a script so regressions fail fast on VPS/CI.
+
+---
+
+## 16. Build reproducibility
+
+### Vendored `contacts_service` (`third_party/contacts_service/`)
+
+`contacts_service` 0.6.3 is the last release (2021) and is **not** marked
+discontinued on pub.dev, so there is no maintained drop-in to upgrade to. Its
+Android build script targets Gradle 4 / AGP 4 and the dead `jcenter()`
+repository, and its Java plugin still carries the Flutter **v1-embedding**
+`PluginRegistry.Registrar` path. This repo runs AGP 9.1.0 + Gradle 9.3.1, so the
+published package cannot build here at all:
+
+1. `Could not find method jcenter()` — `android/build.gradle` lines 7 and 18.
+2. `Namespace not specified` — AGP 8+ requires an explicit `namespace`.
+3. `cannot find symbol: class Registrar` — 5 references in
+   `ContactsServicePlugin.java`; the v1-embedding API was removed from modern
+   Flutter engines.
+
+The fix is a vendored copy pinned via `dependency_overrides` in `pubspec.yaml`:
+
+```yaml
+dependency_overrides:
+  contacts_service:
+    path: third_party/contacts_service
+```
+
+`third_party/contacts_service/lib/**`, its `pubspec.yaml`, and its `ios/**` are
+byte-identical to the published 0.6.3 tarball. Only two Android files differ:
+`android/build.gradle` (mavenCentral, AGP 9.1.0 classpath, explicit `namespace`,
+compileSdk/targetSdk 36, modern `lint` block) and `ContactsServicePlugin.java`
+(the dead `Registrar` import, `registerWith`, `initDelegateWithRegister`, and the
+`ContactServiceDelegateOld` inner class are deleted — 29 lines, nothing else).
+
+No Dart code used the removed v1 path: `contact_launcher_tools.dart` calls
+`ContactsService.getContacts(query:)`, which runs through `onAttachedToEngine`.
+
+Rationale for vendoring over the alternatives: swapping to `flutter_contacts`
+would mean porting the tool layer and its tests for no functional gain, and
+dropping contacts entirely would remove a shipped Tier-2 tool. Vendoring keeps
+the change to two Android files and is verifiable by rebuilding from a clean
+pub-cache.
+
+### APK build on this aarch64 host (`tool/build_apk.sh`)
+
+The Android SDK ships **x86-64-only** host binaries (`aapt2`, `cmake`, `ninja`,
+`zipalign`, and the NDK's clang). On an aarch64 box they cannot exec until the
+x86-64 system libraries are on `LD_LIBRARY_PATH`. `tool/build_apk.sh` exports
+that path, stops any Gradle daemon that was started without it (a daemon keeps
+its environment for its whole lifetime, so a stale one must not be reused), then
+runs `flutter build apk`.
+
+```bash
+sh tool/build_apk.sh                    # lib/main.dart (the single entrypoint)
+sh tool/build_apk.sh lib/other_main.dart
+```
+
+The script names no flavor. It defaults to `lib/main.dart` — an explicit path can be
+passed as the first argument — and runs a plain `flutter build apk --debug -t
+<entrypoint>` with no flavor, matching the single un-flavored entrypoint.
+
+The x86-64 libs live at `/home/ubuntu/android-build-libs/x86_64-linux-gnu`
+(a copy of Ubuntu's `zlib1g:amd64`, the one library the SDK host tools need
+beyond the `libc6-dev-amd64-cross` sysroot already present at
+`/usr/x86_64-linux-gnu/lib`). Both paths survive a reboot; nothing depends on
+`/tmp`.
+
+Two host details worth knowing:
+
+- `android/gradlew` is git-ignored and generated by the Flutter tool, so it is
+  absent on a fresh clone. The script reports that and skips the daemon stop
+  rather than failing; the very first build on such a clone may therefore reuse
+  a daemon started outside the script.
+- The script adds the host-lib directory of **every** installed NDK, not just
+  the pinned one, because the effective `ndkVersion` comes from the Flutter SDK
+  and can change independently of this repo.

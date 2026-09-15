@@ -9,21 +9,21 @@ void main() {
       final payload1 = PairingPayload(
         gatewayUrl: 'https://gateway.example.com',
         token: 'secret_token_123',
-        profileName: 'VPS Oracle',
+        profileName: 'Remote Node',
         timestamp: testTimestamp,
       );
 
       final payload2 = PairingPayload(
         gatewayUrl: 'https://gateway.example.com',
         token: 'secret_token_123',
-        profileName: 'VPS Oracle',
+        profileName: 'Remote Node',
         timestamp: testTimestamp,
       );
 
       expect(payload1, equals(payload2));
       expect(payload1.gatewayUrl, 'https://gateway.example.com');
       expect(payload1.token, 'secret_token_123');
-      expect(payload1.profileName, 'VPS Oracle');
+      expect(payload1.profileName, 'Remote Node');
       expect(payload1.timestamp, testTimestamp);
     });
 
@@ -76,7 +76,7 @@ void main() {
       final payload = PairingPayload(
         gatewayUrl: 'https://gateway.example.com',
         token: 'secret_token_123',
-        profileName: 'VPS Oracle',
+        profileName: 'Remote Node',
         timestamp: testTimestamp,
       );
 
@@ -85,7 +85,7 @@ void main() {
       expect(json, {
         'gatewayUrl': 'https://gateway.example.com',
         'token': 'secret_token_123',
-        'profileName': 'VPS Oracle',
+        'profileName': 'Remote Node',
         'timestamp': testTimestamp.toIso8601String(),
         'expiresAt': null,
       });
@@ -95,7 +95,7 @@ void main() {
       final payload = PairingPayload(
         gatewayUrl: 'https://gateway.example.com',
         token: 'secret_token_123',
-        profileName: 'VPS Oracle',
+        profileName: 'Remote Node',
         timestamp: testTimestamp,
       );
 
@@ -107,7 +107,7 @@ void main() {
       final payload = PairingPayload(
         gatewayUrl: 'https://gateway.example.com',
         token: 'secret_token_123',
-        profileName: 'VPS Oracle',
+        profileName: 'Remote Node',
         timestamp: testTimestamp,
       );
 
@@ -120,7 +120,7 @@ void main() {
       final payload = PairingPayload(
         gatewayUrl: 'https://gateway.example.com',
         token: 'secret_token_123',
-        profileName: 'VPS Oracle',
+        profileName: 'Remote Node',
         timestamp: testTimestamp,
         expiresAt: expiresAt,
       );

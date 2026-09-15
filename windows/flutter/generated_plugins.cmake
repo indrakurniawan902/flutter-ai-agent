@@ -7,6 +7,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   battery_plus
   connectivity_plus
   file_selector_windows
+  flutter_ffi_uvc
   flutter_secure_storage_windows
   flutter_tts
   geolocator_windows
@@ -17,6 +18,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
   jni
+  sherpa_onnx_windows
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

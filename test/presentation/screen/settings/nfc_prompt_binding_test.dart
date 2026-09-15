@@ -26,7 +26,7 @@ void main() {
   late MockServerProfileCubit mockServerProfileCubit;
 
   const loadedBase = SettingsLoaded(
-    baseUrl: 'https://indra-9router.my.id/v1',
+    baseUrl: 'https://example.com/v1',
     apiKey: 'sk-key',
     model: 'ag-glm',
     temperature: 0.7,
@@ -88,7 +88,7 @@ void main() {
         mockSettingsCubit,
         Stream<SettingsState>.empty(),
         initialState: const SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: 'sk-key',
           model: 'ag-glm',
           temperature: 0.7,
@@ -149,7 +149,7 @@ void main() {
           )).called(1);
 
       controller.add(SettingsLoaded(
-        baseUrl: 'https://indra-9router.my.id/v1',
+        baseUrl: 'https://example.com/v1',
         apiKey: 'sk-key',
         model: 'ag-glm',
         temperature: 0.7,
@@ -199,7 +199,7 @@ void main() {
         mockSettingsCubit,
         Stream<SettingsState>.empty(),
         initialState: SettingsLoaded(
-          baseUrl: 'https://indra-9router.my.id/v1',
+          baseUrl: 'https://example.com/v1',
           apiKey: 'sk-key',
           model: 'ag-glm',
           temperature: 0.7,

@@ -34,10 +34,14 @@ class SystemSettingsAllowList {
   ///   [appDetails] instead (it lands on the per-app notification/permission row).
   /// - [accessibility]: the accessibility-services list page, required because
   ///   accessibility cannot be requested through a runtime permission dialog.
+  /// - [overlay]: the `ACTION_MANAGE_OVERLAY_PERMISSION` page, required because
+  ///   Android has no runtime dialog for `SYSTEM_ALERT_WINDOW`; the user must
+  ///   grant "display over other apps" from this settings screen.
   static const String notificationListener = 'notification_listener';
   static const String nfc = 'nfc';
   static const String appDetails = 'app_details';
   static const String accessibility = 'accessibility';
+  static const String overlay = 'overlay';
 
   /// Every value accepted by `launch_system_setting`, in a stable order.
   static const List<String> values = <String>[
@@ -53,6 +57,7 @@ class SystemSettingsAllowList {
     nfc,
     appDetails,
     accessibility,
+    overlay,
   ];
 
   /// Fast membership check (used by the tool service).

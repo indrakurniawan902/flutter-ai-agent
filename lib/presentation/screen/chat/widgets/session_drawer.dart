@@ -126,7 +126,7 @@ class _SessionDrawerState extends State<SessionDrawer> {
                   if (sessions.isEmpty) {
                     return const Center(
                       child: Text(
-                        'No chats yet',
+                        'Start a new conversation.',
                         key: Key('session_empty_label'),
                         style: TextStyle(color: HermesColors.inkMuted),
                       ),

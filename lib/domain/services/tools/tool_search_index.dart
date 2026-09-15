@@ -56,8 +56,25 @@ class ToolSearchIndex {
       ],
     ),
     ToolCategorySpec(
-      <String>['photo', 'scan', 'image', 'qr', 'ocr', 'camera', 'picture'],
-      <String>['camera_take_photo'],
+      <String>[
+        'photo',
+        'scan',
+        'image',
+        'qr',
+        'ocr',
+        'camera',
+        'picture',
+        'usb',
+        'otg',
+        'external',
+        'uvc',
+      ],
+      <String>[
+        'camera_take_photo',
+        'external_camera_list',
+        'external_camera_capture',
+        'external_camera_status',
+      ],
     ),
     ToolCategorySpec(
       <String>[
