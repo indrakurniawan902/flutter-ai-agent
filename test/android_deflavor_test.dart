@@ -2,21 +2,21 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/repo_root.dart';
+
 void main() {
-  final androidDir = Directory('android');
-  final skipReason = androidDir.existsSync()
-      ? null
-      : 'android/ not found; run from repo root';
+  final repoRoot = resolveRepoRoot();
+  String repoPath(String relative) => '${repoRoot.path}/$relative';
 
   group('Android build has no product flavors', () {
     test('build.gradle.kts drops every flavor declaration', () {
-      if (skipReason != null) {
-        markTestSkipped(skipReason);
-        return;
-      }
-
       // Arrange
-      final gradleFile = File('android/app/build.gradle.kts');
+      final gradleFile = File(repoPath('android/app/build.gradle.kts'));
+      expect(
+        gradleFile.existsSync(),
+        isTrue,
+        reason: '${gradleFile.path} must exist',
+      );
 
       // Act
       final source = gradleFile.readAsStringSync();
@@ -29,13 +29,13 @@ void main() {
     });
 
     test('build.gradle.kts keeps the single production applicationId', () {
-      if (skipReason != null) {
-        markTestSkipped(skipReason);
-        return;
-      }
-
       // Arrange
-      final gradleFile = File('android/app/build.gradle.kts');
+      final gradleFile = File(repoPath('android/app/build.gradle.kts'));
+      expect(
+        gradleFile.existsSync(),
+        isTrue,
+        reason: '${gradleFile.path} must exist',
+      );
 
       // Act
       final source = gradleFile.readAsStringSync();
@@ -48,34 +48,31 @@ void main() {
 
   group('App name resolves from the main resource', () {
     test('main strings.xml declares app_name and no app_flavor', () {
-      if (skipReason != null) {
-        markTestSkipped(skipReason);
-        return;
-      }
-
       // Arrange
-      final stringsFile = File('android/app/src/main/res/values/strings.xml');
+      final stringsFile =
+          File(repoPath('android/app/src/main/res/values/strings.xml'));
+      expect(
+        stringsFile.existsSync(),
+        isTrue,
+        reason: '${stringsFile.path} must exist',
+      );
 
       // Act
       final source = stringsFile.readAsStringSync();
 
       // Assert
-      expect(stringsFile.existsSync(), isTrue);
       expect(source, contains('<string name="app_name">Flames</string>'));
       expect(source, isNot(contains('app_flavor')));
     });
 
     test('flavor-specific strings.xml resources are gone', () {
-      if (skipReason != null) {
-        markTestSkipped(skipReason);
-        return;
-      }
-
       // Arrange
-      final developmentStrings =
-          File('android/app/src/development/res/values/strings.xml');
-      final productionStrings =
-          File('android/app/src/production/res/values/strings.xml');
+      final developmentStrings = File(
+        repoPath('android/app/src/development/res/values/strings.xml'),
+      );
+      final productionStrings = File(
+        repoPath('android/app/src/production/res/values/strings.xml'),
+      );
 
       // Act & Assert
       expect(developmentStrings.existsSync(), isFalse);
@@ -83,13 +80,14 @@ void main() {
     });
 
     test('AndroidManifest still labels the app with @string/app_name', () {
-      if (skipReason != null) {
-        markTestSkipped(skipReason);
-        return;
-      }
-
       // Arrange
-      final manifestFile = File('android/app/src/main/AndroidManifest.xml');
+      final manifestFile =
+          File(repoPath('android/app/src/main/AndroidManifest.xml'));
+      expect(
+        manifestFile.existsSync(),
+        isTrue,
+        reason: '${manifestFile.path} must exist',
+      );
 
       // Act
       final source = manifestFile.readAsStringSync();

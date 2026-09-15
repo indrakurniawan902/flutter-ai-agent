@@ -4,24 +4,30 @@ import 'dart:io';
 import 'package:flutter_ai_agent/myapp.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/repo_root.dart';
+
 void main() {
+  final repoRoot = resolveRepoRoot();
+  String repoPath(String relative) => '${repoRoot.path}/$relative';
+
   group('Single entrypoint', () {
     test('bootstrap is a zero-argument Future<void> function', () {
       // Arrange & Act
       final Future<void> Function() entrypoint = bootstrap;
 
       // Assert
-      expect(entrypoint, isNotNull);
+      expect(identical(entrypoint, bootstrap), isTrue);
     });
 
     test('lib/main.dart declares a zero-argument void main calling bootstrap',
         () {
       // Arrange
-      final mainFile = File('lib/main.dart');
-      if (!mainFile.existsSync()) {
-        markTestSkipped('lib/main.dart not found; run from repo root');
-        return;
-      }
+      final mainFile = File(repoPath('lib/main.dart'));
+      expect(
+        mainFile.existsSync(),
+        isTrue,
+        reason: '${mainFile.path} must exist',
+      );
 
       // Act
       final source = mainFile.readAsStringSync();
@@ -35,11 +41,12 @@ void main() {
   group('No flavor config', () {
     test('flavor leftovers are absent from every lib/ dart file', () {
       // Arrange
-      final libDir = Directory('lib');
-      if (!libDir.existsSync()) {
-        markTestSkipped('lib/ not found; run from repo root');
-        return;
-      }
+      final libDir = Directory(repoPath('lib'));
+      expect(
+        libDir.existsSync(),
+        isTrue,
+        reason: '${libDir.path} must exist',
+      );
       final leftovers = <String>[
         'FlavorConfig',
         'FlavorConfig.current',
@@ -70,7 +77,7 @@ void main() {
 
     test('lib/common/flavor_config.dart does not exist', () {
       // Arrange & Act
-      final flavorConfig = File('lib/common/flavor_config.dart');
+      final flavorConfig = File(repoPath('lib/common/flavor_config.dart'));
 
       // Assert
       expect(flavorConfig.existsSync(), isFalse);
@@ -92,11 +99,12 @@ void main() {
     test('every .vscode config mentions no flavor and no deleted entrypoint',
         () {
       // Arrange
-      final vscodeDir = Directory('.vscode');
-      if (!vscodeDir.existsSync()) {
-        markTestSkipped('.vscode/ not found; run from repo root');
-        return;
-      }
+      final vscodeDir = Directory(repoPath('.vscode'));
+      expect(
+        vscodeDir.existsSync(),
+        isTrue,
+        reason: '${vscodeDir.path} must exist',
+      );
       final banned = <String>[
         'flavor',
         'main_development',
@@ -125,11 +133,12 @@ void main() {
 
     test('docs keep no banned flavor identifiers or --flavor flags', () {
       // Arrange
-      final docsDir = Directory('docs');
-      if (!docsDir.existsSync()) {
-        markTestSkipped('docs/ not found; run from repo root');
-        return;
-      }
+      final docsDir = Directory(repoPath('docs'));
+      expect(
+        docsDir.existsSync(),
+        isTrue,
+        reason: '${docsDir.path} must exist',
+      );
       final banned = <String>[
         'FlavorConfig',
         'main_development',
@@ -161,11 +170,12 @@ void main() {
     test('launch.json is valid JSON with two lib/main.dart configurations',
         () {
       // Arrange
-      final launchFile = File('.vscode/launch.json');
-      if (!launchFile.existsSync()) {
-        markTestSkipped('.vscode/launch.json not found; run from repo root');
-        return;
-      }
+      final launchFile = File(repoPath('.vscode/launch.json'));
+      expect(
+        launchFile.existsSync(),
+        isTrue,
+        reason: '${launchFile.path} must exist',
+      );
 
       // Act
       final decoded = jsonDecode(launchFile.readAsStringSync());
@@ -184,11 +194,12 @@ void main() {
 
     test('tasks.json is valid JSON and no task passes --flavor', () {
       // Arrange
-      final tasksFile = File('.vscode/tasks.json');
-      if (!tasksFile.existsSync()) {
-        markTestSkipped('.vscode/tasks.json not found; run from repo root');
-        return;
-      }
+      final tasksFile = File(repoPath('.vscode/tasks.json'));
+      expect(
+        tasksFile.existsSync(),
+        isTrue,
+        reason: '${tasksFile.path} must exist',
+      );
 
       // Act
       final decoded = jsonDecode(tasksFile.readAsStringSync());
@@ -205,17 +216,18 @@ void main() {
 
     test('single entrypoint exists while the flavor entrypoints are gone', () {
       // Arrange
-      final mainFile = File('lib/main.dart');
-      if (!mainFile.existsSync()) {
-        markTestSkipped('lib/main.dart not found; run from repo root');
-        return;
-      }
+      final mainFile = File(repoPath('lib/main.dart'));
+      expect(
+        mainFile.existsSync(),
+        isTrue,
+        reason: '${mainFile.path} must exist',
+      );
 
       // Act
       final removedFiles = <File>[
-        File('lib/main_development.dart'),
-        File('lib/main_production.dart'),
-        File('lib/common/flavor_config.dart'),
+        File(repoPath('lib/main_development.dart')),
+        File(repoPath('lib/main_production.dart')),
+        File(repoPath('lib/common/flavor_config.dart')),
       ];
 
       // Assert
@@ -226,17 +238,29 @@ void main() {
 
     test('architecture.md documents the flavors-off-by-default policy', () {
       // Arrange
-      final architectureFile = File('docs/architecture.md');
-      if (!architectureFile.existsSync()) {
-        markTestSkipped('docs/architecture.md not found; run from repo root');
-        return;
-      }
+      final architectureFile = File(repoPath('docs/architecture.md'));
+      expect(
+        architectureFile.existsSync(),
+        isTrue,
+        reason: '${architectureFile.path} must exist',
+      );
 
       // Act
       final source = architectureFile.readAsStringSync();
 
       // Assert
-      expect(source, contains('off by default'));
+      expect(
+        source,
+        matches(
+          RegExp(
+            r'## 3\. Entrypoint \(single, no flavors\)'
+            r'[\s\S]*?lib/main\.dart'
+            r'[\s\S]*?off by default',
+          ),
+        ),
+        reason: 'the single-entrypoint section must name lib/main.dart and '
+            'state that flavors are off by default',
+      );
     });
   });
 }
