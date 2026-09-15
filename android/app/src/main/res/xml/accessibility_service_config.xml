@@ -4,5 +4,5 @@
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews"
     android:canRetrieveWindowContent="true"
-    android:description="Reads the current screen as structured text so the agent can pick elements by meaning instead of by coordinates. Read-only: it never taps, swipes or types."
+    android:description="@string/accessibility_service_description"
     android:notificationTimeout="100" />
