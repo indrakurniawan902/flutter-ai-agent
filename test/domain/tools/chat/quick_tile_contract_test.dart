@@ -273,12 +273,12 @@ void main() {
       expect(block, contains('android:exported="false"'));
     });
 
-    test('MainActivity keeps the tile trigger plumbing', () {
+    test('MainActivity keeps the pending-action plumbing and drops the dead tile trigger', () {
       if (!ready) return;
 
       expect(
         activityKt,
-        contains('FlamesQuickTile.ACTION_QUICK_TILE_TRIGGER'),
+        isNot(contains('FlamesQuickTile.ACTION_QUICK_TILE_TRIGGER')),
       );
       expect(activityKt, contains('"getPendingAction"'));
       expect(activityKt, contains('"clearPendingAction"'));

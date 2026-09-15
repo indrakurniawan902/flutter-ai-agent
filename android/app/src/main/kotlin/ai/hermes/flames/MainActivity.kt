@@ -71,15 +71,15 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun extractActionFromIntent(intent: Intent?): String? {
+        when (intent?.action) {
+            Intent.ACTION_SEND,
+            Intent.ACTION_SEND_MULTIPLE,
+            Intent.ACTION_VIEW -> return null
+        }
         val actionExtra = intent?.getStringExtra("extra_flames_action")
-        if (!actionExtra.isNullOrBlank()) {
+        if (actionExtra != null && actionExtra in ALLOWED_ACTIONS) {
             pendingAction = actionExtra
             return actionExtra
-        }
-        if (intent?.action == FlamesQuickTile.ACTION_QUICK_TILE_TRIGGER) {
-            val fallbackAction = "voice_input"
-            pendingAction = fallbackAction
-            return fallbackAction
         }
         return null
     }
@@ -614,5 +614,9 @@ class MainActivity : FlutterActivity() {
         } catch (_: Exception) {
             false
         }
+    }
+
+    private companion object {
+        val ALLOWED_ACTIONS = setOf("voice_input", "cancel_voice", "quick_status")
     }
 }
