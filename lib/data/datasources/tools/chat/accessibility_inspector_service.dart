@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:injectable/injectable.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
+import 'package:flutter_ai_agent/domain/services/skills/skill_security_scanner.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/accessibility_inspector_service.dart';
 
 class DefaultAccessibilityInspectorPlatformWrapper
@@ -58,12 +59,15 @@ class DefaultAccessibilityInspectorPlatformWrapper
 @LazySingleton(as: AccessibilityInspectorServiceBase)
 class AccessibilityInspectorService implements AccessibilityInspectorServiceBase {
   final AccessibilityInspectorPlatformWrapper _platform;
+  final SkillSecurityScanner _scanner;
   bool _settingsRequested = false;
 
   AccessibilityInspectorService({
     AccessibilityInspectorPlatformWrapper? platformWrapper,
-  }) : _platform =
-            platformWrapper ?? DefaultAccessibilityInspectorPlatformWrapper();
+    SkillSecurityScanner? scanner,
+  })  : _platform =
+            platformWrapper ?? DefaultAccessibilityInspectorPlatformWrapper(),
+        _scanner = scanner ?? SkillSecurityScanner();
 
   @factoryMethod
   factory AccessibilityInspectorService.create() => AccessibilityInspectorService();
@@ -132,12 +136,20 @@ class AccessibilityInspectorService implements AccessibilityInspectorServiceBase
         packageFilter: packageFilter,
         clickableOnly: clickableOnly,
       );
+      final serialized = AccessibilityTreeSerializer.serialize(
+        elements,
+        packageName: '${tree['packageName'] ?? ''}',
+        maxNodes: clampedNodes,
+        maxDepth: clampedDepth,
+      );
+      final patternIds = _scanner
+          .scanText(serialized)
+          .map((finding) => finding.patternId)
+          .toList();
       return Right(
-        AccessibilityTreeSerializer.serialize(
-          elements,
-          packageName: '${tree['packageName'] ?? ''}',
-          maxNodes: clampedNodes,
-          maxDepth: clampedDepth,
+        AccessibilityTreeSerializer.frameUntrusted(
+          serialized,
+          patternIds: patternIds,
         ),
       );
     } catch (e) {
