@@ -131,7 +131,7 @@ void main() {
       expect(violations, isEmpty);
     });
 
-    test('docs keep no banned flavor identifiers or --flavor flags', () {
+    test('docs and repo-root markdown keep no banned flavor identifiers', () {
       // Arrange
       final docsDir = Directory(repoPath('docs'));
       expect(
@@ -147,11 +147,20 @@ void main() {
       ];
 
       // Act
-      final docFiles = docsDir
-          .listSync(recursive: true)
-          .whereType<File>()
-          .where((file) => file.path.endsWith('.md'))
-          .toList();
+      final docFiles = <File>[
+        // Repo-root markdown is in scope too: the de-flavor card's grep list
+        // and this guard both omitted it, so AGENTS.md kept documenting the
+        // deleted --flavor commands after every other reference was fixed.
+        ...Directory(repoRoot.path)
+            .listSync()
+            .whereType<File>()
+            .where((file) => file.path.endsWith('.md'))
+            .where((file) => !file.path.split('/').last.startsWith('.')),
+        ...docsDir
+            .listSync(recursive: true)
+            .whereType<File>()
+            .where((file) => file.path.endsWith('.md')),
+      ];
       final violations = <String>[];
       for (final file in docFiles) {
         final source = file.readAsStringSync();
