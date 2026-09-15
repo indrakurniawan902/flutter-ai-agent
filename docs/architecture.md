@@ -591,9 +591,10 @@ final GoRouter appRouter = GoRouter(
   input rather than internal navigation only.
 - New route paths derive from the name constant and use kebab-case.
 
-> Current state: the app uses `MaterialApp(home:)` in `lib/app.dart`:
-> `SplashScreen → MainNavigationShell`. Introducing `go_router` is part of the
-> layer-first migration; until then keep the home chain working.
+> Current state: the app's root widget lives in `lib/myapp.dart`, which wires
+> the router above through `MaterialApp.router`; the `MaterialApp(home:)`
+> `SplashScreen → MainNavigationShell` chain is the old shape that `go_router`
+> replaced during the layer-first migration.
 
 ---
 
