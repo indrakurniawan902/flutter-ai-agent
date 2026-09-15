@@ -93,9 +93,8 @@ flock /tmp/flutter.lock dart run build_runner build --delete-conflicting-outputs
 # Layout integrity check
 sh tool/check_layout.sh
 
-# Run flavors
-flutter run --flavor development -t lib/main_development.dart
-flutter run --flavor production -t lib/main_production.dart
+# Run the app (single entrypoint)
+flutter run -t lib/main.dart
 ```
 
 ---
