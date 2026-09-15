@@ -18,12 +18,12 @@ void main() {
       expect(appRouter.routerDelegate.navigatorKey, equals(AppGlobals.navigatorKey));
     });
 
-    test('has exactly 13 registered GoRoute entries', () {
+    test('has exactly 12 registered GoRoute entries', () {
       final routes = appRouter.configuration.routes
           .whereType<GoRoute>()
           .toList();
 
-      expect(routes.length, equals(13));
+      expect(routes.length, equals(12));
     });
 
     test('registers all expected route names', () {
@@ -45,7 +45,6 @@ void main() {
         AppRoutes.nrAddProfile,
         AppRoutes.nrActionCenter,
         AppRoutes.nrGeofenceManagement,
-        AppRoutes.nrExternalCamera,
       };
 
       expect(routeNames, equals(expectedNames));
@@ -70,7 +69,6 @@ void main() {
         AppRoutes.nrAddProfile,
         AppRoutes.nrActionCenter,
         AppRoutes.nrGeofenceManagement,
-        AppRoutes.nrExternalCamera,
       ];
 
       for (final name in allRouteNames) {
@@ -122,10 +120,6 @@ void main() {
       expect(routeByName[AppRoutes.nrGeofenceManagement]?.path,
           equals('/node/geofence-management'));
       expect(routeByName[AppRoutes.nrGeofenceManagement]?.builder, isNotNull);
-
-      expect(routeByName[AppRoutes.nrExternalCamera]?.path,
-          equals('/node/external-camera'));
-      expect(routeByName[AppRoutes.nrExternalCamera]?.builder, isNotNull);
     });
   });
 }

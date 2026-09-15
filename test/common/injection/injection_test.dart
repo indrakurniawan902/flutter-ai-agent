@@ -158,9 +158,6 @@ void main() {
     expect(registry.hasTool('device_status'), isTrue);
     expect(registry.hasTool('system_info'), isTrue);
     expect(registry.hasTool('camera_take_photo'), isTrue);
-    expect(registry.hasTool('external_camera_list'), isTrue);
-    expect(registry.hasTool('external_camera_capture'), isTrue);
-    expect(registry.hasTool('external_camera_status'), isTrue);
     expect(registry.hasTool('calendar_list_events'), isTrue);
     expect(registry.hasTool('calendar_create_event'), isTrue);
     expect(registry.hasTool('send_local_notification'), isTrue);

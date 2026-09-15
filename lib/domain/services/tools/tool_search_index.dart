@@ -64,16 +64,9 @@ class ToolSearchIndex {
         'ocr',
         'camera',
         'picture',
-        'usb',
-        'otg',
-        'external',
-        'uvc',
       ],
       <String>[
         'camera_take_photo',
-        'external_camera_list',
-        'external_camera_capture',
-        'external_camera_status',
       ],
     ),
     ToolCategorySpec(
