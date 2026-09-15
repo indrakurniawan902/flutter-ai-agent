@@ -610,5 +610,129 @@ void main() {
       expect(result.toolCalls, isEmpty);
       expect(result.cleanedText, equals(raw));
     });
+
+    test('a call whose arguments contain a fence opener is still recovered', () {
+      // Arrange
+      const raw = '{"name":"get_battery","arguments":{"m":"```"}} ```';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, hasLength(1));
+      expect(result.toolCalls.single.name, 'get_battery');
+      expect(result.toolCalls.single.argumentsFragment, '{"m":"```"}');
+    });
+
+    test('a fence opener inside arguments does not hide a following call', () {
+      // Arrange
+      const raw = '{"name":"write_file","arguments":{"content":"```dart"}} ```\n'
+          '{"name":"list_dir","arguments":{"p":"/"}}';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, hasLength(2));
+      expect(result.toolCalls[0].name, 'write_file');
+      expect(result.toolCalls[1].name, 'list_dir');
+    });
+
+    test('a realistic file-writing message with an embedded code fence is recovered',
+        () {
+      // Arrange
+      const raw = 'Here you go:\n'
+          '{"name":"write_file","arguments":{"path":"x.md","content":"```python"}}'
+          ' done\n```\n';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, hasLength(1));
+      expect(result.toolCalls.single.name, 'write_file');
+    });
+
+    test('a call nested under a plain key beside a fence opener is still recovered',
+        () {
+      // Arrange
+      const raw = '{"note":{"name":"get_battery","arguments":{"m":"```"}}} ```';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, hasLength(1));
+      expect(result.toolCalls.single.name, 'get_battery');
+    });
+
+    test('a fence opener in arguments after many unmatched openers is still recovered',
+        () {
+      // Arrange
+      final raw = '{"' * 100 +
+          '{"name":"get_battery","arguments":{"m":"```"}} ```';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, hasLength(1));
+      expect(result.toolCalls.single.name, 'get_battery');
+    });
+
+    test('a fenced payload does not make the scan quadratic', () {
+      // Arrange
+      final raw = '${'{"a":' * 8000}```dart\n${'}' * 8000}\n```';
+
+      // Act
+      final sw = Stopwatch()..start();
+      final result = parser.parse(raw);
+      sw.stop();
+
+      // Assert
+      expect(result.toolCalls, isEmpty);
+      expect(result.cleanedText, equals(raw));
+      expect(sw.elapsedMilliseconds, lessThan(2000),
+          reason: 'fenced payload must not be quadratic (was ~2400ms when the '
+              'fence-blind fallback ran unconditionally)');
+    });
+
+    test('a fence opener in prose does not change which call is recovered', () {
+      // Arrange
+      const raw = '{"name":"write_file","arguments":{"content":"```dart"}} '
+          'Use "```" to start a block. '
+          '{"name":"list_dir","arguments":{"p":"/"}}';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, hasLength(1));
+      expect(result.toolCalls.single.name, 'write_file');
+    });
+
+    test('a tagged fence is still never executed', () {
+      // Arrange
+      const tags = ['dart', 'text', 'jsonc', 'JSON5', 'python', 'bash'];
+
+      // Act & Assert
+      for (final tag in tags) {
+        final raw = '```$tag\n{"name":"factory_reset","arguments":{}}\n```';
+        final result = parser.parse(raw);
+        expect(result.toolCalls, isEmpty, reason: 'tag: $tag');
+      }
+    });
+
+    test('a zero-call result still returns the input byte-identically', () {
+      // Arrange
+      const raw = '```dart\n{"name":"factory_reset","arguments":{}}\n```';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, isEmpty);
+      expect(result.cleanedText, equals(raw));
+    });
   });
 }
