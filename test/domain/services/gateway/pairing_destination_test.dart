@@ -1,3 +1,4 @@
+import 'package:flutter_ai_agent/data/datasources/remote/gateway/gateway_client.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_url.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/pairing_destination.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -68,6 +69,11 @@ void main() {
       expect(resolvePairingDestination('https://example.com:-1'), isNull);
     });
 
+    test('returns null for an empty port text', () {
+      expect(resolvePairingDestination('https://example.com:'), isNull);
+      expect(resolvePairingDestination('http://192.168.1.50:'), isNull);
+    });
+
     test('appends $defaultGatewayPath when the path is empty', () {
       final destination = resolvePairingDestination('https://example.com');
 
@@ -94,6 +100,43 @@ void main() {
       expect(destination!.host, '::1');
       expect(destination.displayOrigin, 'wss://[::1]:443');
     });
+  });
+
+  group('resolvePairingDestination - port agrees with the transport', () {
+    // A backslash terminates the authority for `Uri` but not for a hand-rolled
+    // string scan; reading host and port from different substrings let the
+    // dialog show one origin while the socket dialled another. The resolved
+    // origin must always equal what `normalizeGatewayUri` actually dials.
+    const inputs = <String>[
+      r'http://localhost:37409\@evil.invalid',
+      r'https://evil.example:31337\@x',
+      r'http://192.168.1.50:31337\@evil.example',
+      r'https://gw.example.com:8443\@evil.example',
+      r'https://evil.example\:31337',
+      r'https://evil.com\:8443',
+      'http://192.168.1.50:18789',
+      'https://example.com:8443',
+      'https://example.com',
+      'http://10.0.0.7:18789',
+    ];
+
+    for (final input in inputs) {
+      test('resolved origin matches the dialled origin for $input', () {
+        final destination = resolvePairingDestination(input);
+        expect(destination, isNotNull, reason: input);
+
+        final dialled = GatewayClient.normalizeGatewayUri(input);
+        final expected = dialled.hasPort
+            ? '${dialled.scheme}://${dialled.host}:${dialled.port}'
+            : '${dialled.scheme}://${dialled.host}:'
+                '${dialled.scheme == 'wss' ? 443 : 80}';
+
+        expect(
+          '${destination!.scheme}://${destination.host}:${destination.port}',
+          expected,
+        );
+      });
+    }
   });
 
   group('isPrivateRangeHost - private', () {

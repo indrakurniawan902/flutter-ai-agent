@@ -76,9 +76,11 @@ class PairingDestination {
 ///    Any other scheme - including a scheme-less string - returns null.
 /// 3. Parse the rewritten string; return null when parsing fails or the host
 ///    is empty.
-/// 4. Port: explicit when present and inside 1..65535, otherwise 80 for `ws` /
-///    443 for `wss`. A present-but-nonsense port (0, negative, oversized)
-///    makes the whole destination unresolvable.
+/// 4. Port: read from the same `Uri` that supplies the host, so the resolved
+///    origin cannot drift from the origin the transport dials. An explicit
+///    port inside 1..65535 is kept; a nonsense port (0, negative, oversized,
+///    empty) makes the whole destination unresolvable; a genuinely absent
+///    port defaults to 80 for `ws` / 443 for `wss`.
 /// 5. An empty or `/` path falls back to [defaultGatewayPath].
 ///
 /// Total function: no input string makes it throw; anything the resolver
@@ -106,7 +108,7 @@ PairingDestination? resolvePairingDestination(String rawUrl) {
 
     final scheme = uri.scheme.toLowerCase();
     final isPlaintext = scheme == 'ws';
-    final port = _resolvePort(rewritten, isPlaintext: isPlaintext);
+    final port = _resolvePort(rewritten, uri, isPlaintext: isPlaintext);
     if (port == null) return null;
 
     final socketUri = (uri.path.isEmpty || uri.path == '/')
@@ -130,25 +132,45 @@ PairingDestination? resolvePairingDestination(String rawUrl) {
 
 /// Reads the effective port, or null when the URL carries a nonsense port.
 ///
-/// The port text is read from the raw URL because `Uri` normalizes `:0` away
-/// (both `hasPort` and `authority` drop it), which would make an explicit zero
-/// indistinguishable from an absent port. A present-but-invalid port (0,
-/// negative, above 65535, empty, or too large for `int`) makes the destination
-/// unresolvable rather than being clamped to a default. A missing port keeps
-/// the transport default.
-int? _resolvePort(String rewritten, {required bool isPlaintext}) {
+/// The port is taken from the same [uri] that supplies the host, so the
+/// resolved origin cannot drift from the origin the transport dials. `Uri`
+/// silently drops an explicit `:0` and an empty `:` from the authority, so
+/// when [Uri.hasPort] is false the authority text is inspected on the same
+/// cut `Uri` uses (a backslash terminates the authority too); an explicit
+/// zero or empty port text is rejected rather than defaulted. A present but
+/// invalid port (0, negative, above 65535, empty, or too large for `int`)
+/// makes the destination unresolvable; a genuinely absent port keeps the
+/// transport default (80 for `ws`, 443 for `wss`).
+int? _resolvePort(String rewritten, Uri uri, {required bool isPlaintext}) {
   final int defaultPort = isPlaintext ? 80 : 443;
+
+  if (uri.hasPort) {
+    final int port;
+    try {
+      port = uri.port;
+    } catch (_) {
+      return null;
+    }
+    if (port < 1 || port > 65535) return null;
+    return port;
+  }
+
   try {
     final authorityStart = rewritten.indexOf('//') + 2;
+    if (authorityStart < 2) return defaultPort;
+
     var authority = rewritten.substring(authorityStart);
-    for (final separator in const ['/', '?', '#']) {
+    var cut = authority.length;
+    for (final separator in const ['/', '?', '#', '\\']) {
       final index = authority.indexOf(separator);
-      if (index >= 0) authority = authority.substring(0, index);
+      if (index >= 0 && index < cut) cut = index;
     }
+    authority = authority.substring(0, cut);
+
     final atIndex = authority.lastIndexOf('@');
     if (atIndex >= 0) authority = authority.substring(atIndex + 1);
 
-    final String? portText;
+    final String portText;
     if (authority.startsWith('[')) {
       final close = authority.indexOf(']');
       if (close < 0) return null;
