@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dartz/dartz.dart';
 import 'package:dio/dio.dart';
@@ -41,10 +42,12 @@ class SkillRemoteLoader implements SkillRemoteLoaderBase {
   /// redirect that resolves to a disallowed host, returns a failure
   /// without issuing the next request.
   ///
-  /// Size cap: dio 5.11.1 cannot cap an unknown-length stream, so the
-  /// post-download `utf8.encode(body).length` check remains authoritative;
-  /// a declared `Content-Length` above [maxDocumentBytes] is refused
-  /// before the body is buffered.
+  /// Size cap: the declared `Content-Length` is inspected before the body
+  /// stream is touched, so an oversized declaration is refused without
+  /// buffering a byte. A missing or lying header is still caught while
+  /// reading: the stream is accumulated up to [maxDocumentBytes] and
+  /// abandoned as soon as the running total exceeds it, and that post-read
+  /// byte count remains authoritative.
   @override
   Future<Either<Failure, String>> fetchSkillMarkdown(String url) async {
     final invalid = SkillRemoteLoaderBase.validateSourceUrl(url);
@@ -54,10 +57,10 @@ class SkillRemoteLoader implements SkillRemoteLoaderBase {
     var current = url;
     try {
       for (var redirects = 0; ; redirects++) {
-        final response = await _dio.get<String>(
+        final response = await _dio.get<ResponseBody>(
           current,
           options: Options(
-            responseType: ResponseType.plain,
+            responseType: ResponseType.stream,
             followRedirects: false,
             validateStatus: (code) => code != null && code >= 200 && code < 400,
             headers: const {'User-Agent': _userAgent, 'Accept': _accept},
@@ -100,15 +103,28 @@ class SkillRemoteLoader implements SkillRemoteLoaderBase {
           }
         }
         final body = response.data;
-        if (body == null || body.isEmpty) {
+        if (body == null) {
           return Left(ParseFailure('Empty skill document at $url'));
         }
-        if (utf8.encode(body).length > maxDocumentBytes) {
+        final builder = BytesBuilder(copy: false);
+        var exceeded = false;
+        await for (final chunk in body.stream) {
+          if (builder.length + chunk.length > maxDocumentBytes) {
+            exceeded = true;
+            break;
+          }
+          builder.add(chunk);
+        }
+        if (exceeded) {
           return const Left(
             ParseFailure('Skill document too large (max 256 KB)'),
           );
         }
-        return Right(body);
+        final bytes = builder.takeBytes();
+        if (bytes.isEmpty) {
+          return Left(ParseFailure('Empty skill document at $url'));
+        }
+        return Right(utf8.decode(bytes, allowMalformed: true));
       }
     } on DioException catch (e) {
       return Left(
