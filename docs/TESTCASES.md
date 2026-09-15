@@ -676,8 +676,8 @@ Source: https://developer.android.com/guide/practices/page-sizes
   plugin repository. Claims about a plugin's own prebuilts are not accepted as evidence.
 - **Preconditions**: `development` checked out; `flutter_ffi_uvc ^1.0.0` merged.
 - **Steps**:
-  1. `flutter build apk --debug --flavor development -t lib/main_development.dart`
-  2. `unzip -o -q build/app/outputs/flutter-apk/app-development-debug.apk -d /tmp/t235_apk`
+  1. `flutter build apk --debug -t lib/main.dart`
+  2. `unzip -o -q build/app/outputs/flutter-apk/app-debug.apk -d /tmp/t235_apk`
   3. For each `.so` under `/tmp/t235_apk/lib/arm64-v8a` and `lib/x86_64`:
      `readelf -lW <file>.so | grep LOAD`
 - **Expected Outcome**:
@@ -704,7 +704,7 @@ Source: https://developer.android.com/guide/practices/page-sizes
 ### TC-16KB-02: APK zip alignment is 16 KB (`zipalign`)
 - **Type**: Positive
 - **Objective**: Uncompressed shared libraries must sit on 16 KB zip boundaries.
-- **Steps**: `zipalign -c -P 16 -v 4 build/app/outputs/flutter-apk/app-development-debug.apk`
+- **Steps**: `zipalign -c -P 16 -v 4 build/app/outputs/flutter-apk/app-debug.apk`
 - **Expected Outcome**: last line `Verification successful`, exit code 0.
 - **Measured**: `Verification successful`, exit 0.
 
@@ -739,7 +739,7 @@ Source: https://developer.android.com/guide/practices/page-sizes
 - **Objective**: Opening the external camera preview must raise exactly one permission prompt.
 - **Preconditions**: Real device with a UVC/OTG camera; `CAMERA` not yet granted.
 - **Steps**:
-  1. `flutter run --flavor development` on the device.
+  1. `flutter run -t lib/main.dart` on the device.
   2. Pocket Node, then External Camera.
 - **Expected Outcome**: one Flames PermissionGate prompt; a second Android dialog means the plugin
   requested permission directly and the gate was bypassed.
@@ -777,8 +777,8 @@ Source: https://developer.android.com/guide/practices/page-sizes
 ### TC-BUILD-01: `flutter build apk` succeeds on development
 - **Type**: Positive
 - **Objective**: An APK must be buildable, otherwise no 16 KB claim can be audited at all.
-- **Steps**: `flutter build apk --debug --flavor development -t lib/main_development.dart`
-- **Expected Outcome**: exit 0 and `build/app/outputs/flutter-apk/app-development-debug.apk` exists.
+- **Steps**: `flutter build apk --debug -t lib/main.dart`
+- **Expected Outcome**: exit 0 and `build/app/outputs/flutter-apk/app-debug.apk` exists.
 - **Measured**: exit 0; APK is 290097452 bytes.
 - **Note**: three pre-existing defects had to be fixed first (see the T23.5 card comment): a wrong
   `NotificationListenerService` import in `MainActivity.kt`, a raw string in the accessibility

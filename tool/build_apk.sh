@@ -12,42 +12,13 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(dirname -- "$script_dir")
 cd "$repo_root"
 
-# Entrypoint: lib/main.dart once the flavors are gone, with lib/main_development.dart
-# as the fallback for branches that still predate the de-flavor change. No flavor is
-# named on the command line — Flames has a single base URL, so the dev/prod flavors
-# were byte-identical and are being removed.
-target="${1:-}"
-if [ -z "$target" ]; then
-  for candidate in lib/main.dart lib/main_development.dart; do
-    if [ -f "$candidate" ]; then
-      target="$candidate"
-      break
-    fi
-  done
-fi
-if [ -z "$target" ] || [ ! -f "$target" ]; then
-  echo "build_apk.sh: no entrypoint found (looked for lib/main.dart, lib/main_development.dart)" >&2
+# Entrypoint: the single un-flavored entrypoint lib/main.dart, or an explicit path
+# passed as the first argument. The build is a plain `flutter build apk` — Flames has
+# no flavors, so no flavor is ever named on the command line.
+target="${1:-lib/main.dart}"
+if [ ! -f "$target" ]; then
+  echo "build_apk.sh: entrypoint not found: $target" >&2
   exit 1
-fi
-
-# While android/app/build.gradle.kts still declares productFlavors there is no
-# un-flavored variant: Gradle emits app-<flavor>-debug.apk only, and a flavorless
-# `flutter build apk` fails with "Gradle build failed to produce an .apk file".
-# So pass --flavor only while those declarations exist, deriving the name from the
-# entrypoint (or, failing that, from the first flavor the productFlavors block
-# declares) rather than hardcoding one. Once the flavors are removed this block goes
-# quiet on its own and the plain build path below is used.
-gradle_script="android/app/build.gradle.kts"
-flavor=""
-if [ -f "$gradle_script" ] && grep -q "productFlavors" "$gradle_script"; then
-  case "$target" in
-    *main_development*) flavor="development" ;;
-    *main_production*) flavor="production" ;;
-  esac
-  if [ -z "$flavor" ]; then
-    flavor=$(grep -A20 "productFlavors" "$gradle_script" \
-      | sed -n 's/.*create("\([a-zA-Z0-9_]*\)").*/\1/p' | head -1)
-  fi
 fi
 
 android_sdk="${ANDROID_SDK_ROOT:-/home/ubuntu/android-sdk}"
@@ -65,11 +36,7 @@ done
 LD_LIBRARY_PATH="/usr/x86_64-linux-gnu/lib:/home/ubuntu/android-build-libs/x86_64-linux-gnu$ndk_lib_dirs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export LD_LIBRARY_PATH
 
-if [ -n "$flavor" ]; then
-  echo "building $target (flavor: $flavor — the app still declares productFlavors)"
-else
-  echo "building $target"
-fi
+echo "building $target"
 
 # A Gradle daemon started without LD_LIBRARY_PATH keeps the broken environment for its
 # whole lifetime, so stop any existing daemon to force a fresh one with the paths above.
@@ -82,8 +49,4 @@ else
   echo "note: android/gradlew absent (fresh clone) — no daemon to stop" >&2
 fi
 
-if [ -n "$flavor" ]; then
-  flutter build apk --debug --flavor "$flavor" -t "$target"
-else
-  flutter build apk --debug -t "$target"
-fi
+flutter build apk --debug -t "$target"

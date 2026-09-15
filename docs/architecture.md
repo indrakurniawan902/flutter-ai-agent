@@ -840,18 +840,13 @@ its environment for its whole lifetime, so a stale one must not be reused), then
 runs `flutter build apk`.
 
 ```bash
-sh tool/build_apk.sh                    # lib/main.dart, or lib/main_development.dart pre-de-flavor
+sh tool/build_apk.sh                    # lib/main.dart (the single entrypoint)
 sh tool/build_apk.sh lib/other_main.dart
 ```
 
-The script names no flavor. While `android/app/build.gradle.kts` still declares
-`productFlavors` there is no un-flavored variant — Gradle emits
-`app-<flavor>-debug.apk` only, so a flavorless `flutter build apk` fails with
-`Gradle build failed to produce an .apk file`. The script therefore derives
-`--flavor` from the entrypoint (falling back to the first flavor inside the
-`productFlavors` block) **only while those declarations exist**, and switches to
-a plain build by itself once the flavors are removed. That keeps it working on
-both sides of the de-flavor change.
+The script names no flavor. It defaults to `lib/main.dart` — an explicit path can be
+passed as the first argument — and runs a plain `flutter build apk --debug -t
+<entrypoint>` with no flavor, matching the single un-flavored entrypoint.
 
 The x86-64 libs live at `/home/ubuntu/android-build-libs/x86_64-linux-gnu`
 (a copy of Ubuntu's `zlib1g:amd64`, the one library the SDK host tools need
