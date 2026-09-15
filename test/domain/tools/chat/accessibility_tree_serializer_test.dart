@@ -361,6 +361,61 @@ void main() {
     });
   });
 
+  group('AccessibilityTreeSerializer.frameUntrusted', () {
+    const tree =
+        'accessibility tree: package=com.x total=1 shown=1\n- [Button] "OK"';
+
+    test('wraps a non-empty tree inside the frame', () {
+      final framed = AccessibilityTreeSerializer.frameUntrusted(tree);
+
+      expect(framed, startsWith(AccessibilityMessages.untrustedContentPrefix));
+      expect(framed, endsWith(AccessibilityMessages.untrustedContentSuffix));
+      expect(framed, contains(tree));
+    });
+
+    test('returns empty input unchanged', () {
+      expect(AccessibilityTreeSerializer.frameUntrusted(''), '');
+    });
+
+    test('returns the canonical empty tree message unchanged', () {
+      expect(
+        AccessibilityTreeSerializer.frameUntrusted(
+          AccessibilityMessages.emptyTree,
+        ),
+        AccessibilityMessages.emptyTree,
+      );
+    });
+
+    test('names pattern ids before the tree text inside the frame', () {
+      final framed = AccessibilityTreeSerializer.frameUntrusted(
+        tree,
+        patternIds: const ['exfiltrate'],
+      );
+
+      expect(framed, contains(AccessibilityMessages.suspectedPatternMarker));
+      expect(framed, contains('exfiltrate'));
+      expect(
+        framed.indexOf(AccessibilityMessages.suspectedPatternMarker),
+        lessThan(framed.indexOf(tree)),
+      );
+      expect(
+        framed.indexOf('exfiltrate'),
+        lessThan(framed.indexOf(tree)),
+      );
+      expect(framed, startsWith(AccessibilityMessages.untrustedContentPrefix));
+      expect(framed, endsWith(AccessibilityMessages.untrustedContentSuffix));
+    });
+
+    test('omits the marker line without pattern ids', () {
+      final framed = AccessibilityTreeSerializer.frameUntrusted(tree);
+
+      expect(
+        framed,
+        isNot(contains(AccessibilityMessages.suspectedPatternMarker)),
+      );
+    });
+  });
+
   group('AccessibilityMessages.forStatus', () {
     test('active needs no message', () {
       expect(AccessibilityMessages.forStatus(AccessibilityStatus.active), '');

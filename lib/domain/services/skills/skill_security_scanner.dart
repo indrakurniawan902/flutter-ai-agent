@@ -159,10 +159,25 @@ class SkillSecurityScanner {
       skill.version,
       skill.author,
     ];
-    final text = _normalise(surface.join('\n'));
+    final findings = scanText(surface.join('\n'));
+    final unknownTools = <String>[];
+    for (final name in skill.tools) {
+      if (!registeredToolNames.contains(name) && !unknownTools.contains(name)) {
+        unknownTools.add(name);
+      }
+    }
+    return SkillScanResult(findings: findings, unknownTools: unknownTools);
+  }
+
+  /// Scans raw [text] (any untrusted surface: screen content, notifications,
+  /// fetched pages) with the same pattern list used for skill imports.
+  /// Findings are ADVISORY: callers must never block on them.
+  List<SkillScanFinding> scanText(String text) {
+    if (text.trim().isEmpty) return const [];
+    final normalised = _normalise(text);
     final findings = <SkillScanFinding>[];
     for (final pattern in _patterns) {
-      final match = pattern.firstNonNegatedMatch(text);
+      final match = pattern.firstNonNegatedMatch(normalised);
       if (match != null) {
         final raw = match.group(0) ?? '';
         findings.add(
@@ -175,13 +190,7 @@ class SkillSecurityScanner {
         );
       }
     }
-    final unknownTools = <String>[];
-    for (final name in skill.tools) {
-      if (!registeredToolNames.contains(name) && !unknownTools.contains(name)) {
-        unknownTools.add(name);
-      }
-    }
-    return SkillScanResult(findings: findings, unknownTools: unknownTools);
+    return findings;
   }
 
   /// Community skills are never enabled on import: the user opts in explicitly.
