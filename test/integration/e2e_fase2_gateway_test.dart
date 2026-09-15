@@ -276,6 +276,15 @@ void main() {
         await tester.tap(find.byKey(const Key('manual_input_submit_button')));
         await tester.pumpAndSettle();
 
+        expect(
+          find.byKey(const Key('pairing_destination_dialog')),
+          findsOneWidget,
+        );
+        await tester.tap(
+          find.byKey(const Key('pairing_destination_confirm_button')),
+        );
+        await tester.pumpAndSettle();
+
         expect(find.byType(QrScannerScreen), findsNothing);
         expect(find.text('Paired with Hermes Central Node'), findsOneWidget);
 
@@ -352,6 +361,15 @@ void main() {
           pairingJson,
         );
         await tester.tap(find.byKey(const Key('manual_input_submit_button')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('pairing_destination_dialog')),
+          findsOneWidget,
+        );
+        await tester.tap(
+          find.byKey(const Key('pairing_destination_confirm_button')),
+        );
         await tester.pumpAndSettle();
 
         expect(find.text('Connected'), findsOneWidget);
@@ -431,6 +449,15 @@ void main() {
         await tester.tap(find.byKey(const Key('manual_input_submit_button')));
         await tester.pumpAndSettle();
 
+        expect(
+          find.byKey(const Key('pairing_destination_dialog')),
+          findsOneWidget,
+        );
+        await tester.tap(
+          find.byKey(const Key('pairing_destination_confirm_button')),
+        );
+        await tester.pumpAndSettle();
+
         expect(find.text('Connected'), findsOneWidget);
 
         socketStreamController.add(jsonEncode({
@@ -499,6 +526,15 @@ void main() {
           pairingJson,
         );
         await tester.tap(find.byKey(const Key('manual_input_submit_button')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('pairing_destination_dialog')),
+          findsOneWidget,
+        );
+        await tester.tap(
+          find.byKey(const Key('pairing_destination_confirm_button')),
+        );
         await tester.pumpAndSettle();
 
         expect(find.text('Connected'), findsOneWidget);
@@ -578,7 +614,7 @@ void main() {
     );
 
     testWidgets(
-      'Gateway Camera QR Code Scan Simulation: Camera scanner detects QR -> Auto-connects and completes handshake',
+      'Gateway Camera QR Code Scan Simulation: Camera scanner detects QR -> Confirms destination and completes handshake',
       (tester) async {
         when(() => mockDeviceContextService.deviceStatusFormattedJson())
             .thenAnswer(
@@ -615,6 +651,15 @@ void main() {
         triggerScan!(pairingJson);
         await tester.pumpAndSettle();
 
+        expect(
+          find.byKey(const Key('pairing_destination_dialog')),
+          findsOneWidget,
+        );
+        await tester.tap(
+          find.byKey(const Key('pairing_destination_confirm_button')),
+        );
+        await tester.pumpAndSettle();
+
         expect(find.text('Paired with Camera Node'), findsOneWidget);
         expect(find.text('Connected'), findsOneWidget);
 
@@ -644,6 +689,145 @@ void main() {
 
         await sl<GatewayClient>().disconnect();
         await tester.pump();
+      },
+    );
+
+    testWidgets(
+      'Cancelling the destination confirmation aborts pairing: no profile, no settings overwrite, no socket',
+      (tester) async {
+        await tester.pumpWidget(buildTestApp());
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('chat_qr_scan_button')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('qr_manual_input_button')));
+        await tester.pumpAndSettle();
+
+        final pairingJson = jsonEncode({
+          'gatewayUrl': 'http://192.168.1.50:18789',
+          'token': 'tok_cancel_must_not_persist',
+          'profileName': 'Aborted Node',
+          'timestamp': DateTime.now().toUtc().toIso8601String(),
+        });
+
+        await tester.enterText(
+          find.byKey(const Key('manual_input_textfield')),
+          pairingJson,
+        );
+        await tester.tap(find.byKey(const Key('manual_input_submit_button')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('pairing_destination_dialog')),
+          findsOneWidget,
+        );
+
+        await tester.tap(
+          find.byKey(const Key('pairing_destination_cancel_button')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(QrScannerScreen), findsOneWidget);
+        expect(find.textContaining('Paired with'), findsNothing);
+
+        final authFrames =
+            sentFrames.where((f) => f.contains('"type":"auth"'));
+        expect(authFrames, isEmpty);
+
+        expect(inMemoryStorage.containsKey('server_profiles_list'), isFalse);
+        expect(inMemoryStorage.containsKey('llm_base_url'), isFalse);
+        expect(inMemoryStorage.containsKey('llm_api_key'), isFalse);
+        for (final value in inMemoryStorage.values) {
+          expect(value.contains('tok_cancel_must_not_persist'), isFalse);
+        }
+      },
+    );
+
+    testWidgets(
+      'A payload whose gatewayUrl carries user-info never reaches a confirmation dialog and never pairs',
+      (tester) async {
+        await tester.pumpWidget(buildTestApp());
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('chat_qr_scan_button')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('qr_manual_input_button')));
+        await tester.pumpAndSettle();
+
+        final pairingJson = jsonEncode({
+          'gatewayUrl': 'https://trusted.example@pair.evil.example:8443',
+          'token': 'tok_userinfo_must_not_persist',
+          'profileName': 'Confused Node',
+          'timestamp': DateTime.now().toUtc().toIso8601String(),
+        });
+
+        await tester.enterText(
+          find.byKey(const Key('manual_input_textfield')),
+          pairingJson,
+        );
+        await tester.tap(find.byKey(const Key('manual_input_submit_button')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('pairing_destination_dialog')),
+          findsNothing,
+        );
+        expect(find.textContaining('user-info'), findsOneWidget);
+
+        final authFrames =
+            sentFrames.where((f) => f.contains('"type":"auth"'));
+        expect(authFrames, isEmpty);
+
+        expect(inMemoryStorage.containsKey('server_profiles_list'), isFalse);
+        for (final value in inMemoryStorage.values) {
+          expect(value.contains('tok_userinfo_must_not_persist'), isFalse);
+        }
+      },
+    );
+
+    testWidgets(
+      'The confirmation dialog shows the resolved origin, not the payload string',
+      (tester) async {
+        await tester.pumpWidget(buildTestApp());
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('chat_qr_scan_button')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('qr_manual_input_button')));
+        await tester.pumpAndSettle();
+
+        final pairingJson = jsonEncode({
+          'gatewayUrl': 'https://pair.example:8443',
+          'token': 'tok_origin_display',
+          'profileName': 'Origin Node',
+          'timestamp': DateTime.now().toUtc().toIso8601String(),
+        });
+
+        await tester.enterText(
+          find.byKey(const Key('manual_input_textfield')),
+          pairingJson,
+        );
+        await tester.tap(find.byKey(const Key('manual_input_submit_button')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('pairing_destination_dialog')),
+          findsOneWidget,
+        );
+
+        final origin = tester.widget<Text>(
+          find.byKey(const Key('pairing_destination_origin')),
+        );
+        expect(origin.data, 'wss://pair.example:8443');
+        expect(find.textContaining('https://pair.example:8443'), findsNothing);
+
+        await tester.tap(
+          find.byKey(const Key('pairing_destination_cancel_button')),
+        );
+        await tester.pumpAndSettle();
       },
     );
   });
