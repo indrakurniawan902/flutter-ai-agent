@@ -55,6 +55,15 @@ tier: Tier 3 HITL
 Schedule meetings safely.
 ''';
 
+const String _unknownToolMarkdown = '''---
+name: shell_skill
+description: Runs shell commands
+tools: [shell_exec]
+---
+
+Run commands.
+''';
+
 SkillImportService _service({
   required SkillRemoteLoaderBase loader,
   required SkillsRegistryService registry,
@@ -83,7 +92,7 @@ void main() {
     expect(registry.getAllSkills().length, before);
   });
 
-  test('malicious body previews rejected and confirm fails', () async {
+  test('malicious body still imports but disabled and flagged', () async {
     final registry = SkillsRegistryService(loadDefaults: false);
     final service = _service(
       loader: _FakeLoader(const Right(_maliciousMarkdown)),
@@ -92,13 +101,29 @@ void main() {
     final result = await service.buildPreview('https://example.com/evil.md');
     expect(result.isRight(), isTrue);
     final preview = result.getOrElse(() => throw StateError('no preview'));
+    expect(preview.canImport, isTrue);
+    expect(preview.scan.findings, isNotEmpty);
+    final confirmed = await service.confirmImport(preview);
+    expect(confirmed.isRight(), isTrue);
+    final skill = confirmed.getOrElse(() => throw StateError('no skill'));
+    expect(skill.isEnabled, isFalse);
+  });
+
+  test('unknown tool is refused and named', () async {
+    final registry = SkillsRegistryService(loadDefaults: false);
+    final service = _service(
+      loader: _FakeLoader(const Right(_unknownToolMarkdown)),
+      registry: registry,
+    );
+    final result = await service.buildPreview('https://example.com/shell.md');
+    expect(result.isRight(), isTrue);
+    final preview = result.getOrElse(() => throw StateError('no preview'));
     expect(preview.canImport, isFalse);
-    expect(preview.scan.rejectionReason, isNotNull);
     final confirmed = await service.confirmImport(preview);
     expect(confirmed.isLeft(), isTrue);
     final failure = confirmed.fold((l) => l, (_) => throw StateError('x'));
     expect(failure, isA<ValidationFailure>());
-    expect(failure.message, preview.scan.rejectionReason);
+    expect(failure.message, contains('shell_exec'));
   });
 
   test('invalid urls fail without calling loader', () async {

@@ -5,10 +5,8 @@ enum SkillScanSeverity {
   critical,
   high,
 
-  /// Informational tier. No current pattern emits `medium`; the
-  /// non-blocking branch in [SkillScanResult.hasBlockingFindings] and
-  /// [SkillScanResult.rejectionReason] is retained deliberately so future
-  /// informational findings can be surfaced without refusing an import.
+  /// Informational tier. No current pattern emits `medium`; findings are
+  /// advisory, so the tier is display-only for now.
   medium,
 }
 
@@ -40,37 +38,22 @@ class SkillScanResult extends Equatable {
     this.unknownTools = const [],
   });
 
-  /// Any finding with a severity other than medium.
-  bool get hasBlockingFindings =>
-      findings.any((f) => f.severity != SkillScanSeverity.medium);
-
-  /// Whether the skill requests tools missing from the build.
+  /// Whether the skill requests tools missing from the build. This is the ONLY
+  /// rejection path: a tool that does not exist in this build cannot be called,
+  /// however the payload is encoded.
   bool get hasUnknownTools => unknownTools.isNotEmpty;
 
   /// Whether the import must be refused.
-  bool get isRejected => hasBlockingFindings || hasUnknownTools;
+  bool get isRejected => hasUnknownTools;
 
-  /// Whether the skill passed the scan.
+  /// Whether the skill passed the structural gate.
   bool get isClean => !isRejected;
 
-  /// One human-readable sentence naming blocking ids and unknown tools.
+  /// One human-readable sentence naming the unknown tools, or null when none.
   String? get rejectionReason {
-    if (isClean) return null;
-    final parts = <String>[];
-    if (hasBlockingFindings) {
-      final ids = findings
-          .where((f) => f.severity != SkillScanSeverity.medium)
-          .map((f) => f.patternId)
-          .toList();
-      parts.add('Blocked by prompt-injection scan: ${ids.join(', ')}');
-    }
-    if (hasUnknownTools) {
-      parts.add(
-        'Requests tools that are not registered in this build: '
-        '${unknownTools.join(', ')}',
-      );
-    }
-    return parts.join('. ');
+    if (!hasUnknownTools) return null;
+    return 'Requests tools that are not registered in this build: '
+        '${unknownTools.join(', ')}';
   }
 
   @override

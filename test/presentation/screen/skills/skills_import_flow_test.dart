@@ -41,7 +41,8 @@ void main() {
   );
 
   const cleanScan = SkillScanResult();
-  const rejectedScan = SkillScanResult(
+  const rejectedScan = SkillScanResult(unknownTools: ['shell_exec']);
+  const advisoryScan = SkillScanResult(
     findings: [
       SkillScanFinding(
         patternId: 'ignore_previous_instructions',
@@ -66,6 +67,15 @@ void main() {
       skill: importedSkill,
       rawMarkdown: '---\nname: x\n---\n',
       scan: rejectedScan,
+    );
+  }
+
+  SkillImportPreview advisoryPreview() {
+    return const SkillImportPreview(
+      sourceUrl: 'https://example.com/SKILL.md',
+      skill: importedSkill,
+      rawMarkdown: '---\nname: x\n---\n',
+      scan: advisoryScan,
     );
   }
 
@@ -139,7 +149,8 @@ void main() {
     expect(nameWidget.data, importedSkill.name);
     expect(find.textContaining('Requested tools:'), findsOneWidget);
     expect(find.textContaining('Estimated prompt size: ~'), findsOneWidget);
-    expect(find.text('SECURITY SCAN: PASSED'), findsOneWidget);
+    expect(find.text('No obvious injection patterns detected'), findsOneWidget);
+    expect(find.textContaining('PASSED'), findsNothing);
     expect(
       tester
           .widget<TextButton>(
@@ -176,7 +187,7 @@ void main() {
     expect(find.text('COMMUNITY'), findsWidgets);
   });
 
-  testWidgets('rejected preview disables import and shows reason', (
+  testWidgets('rejected preview disables import and shows unknown tools', (
     tester,
   ) async {
     when(
@@ -186,15 +197,14 @@ void main() {
     await openDialog(tester);
     await fetchUrl(tester, 'https://example.com/SKILL.md');
 
+    final verdict = tester.widget<Text>(
+      find.byKey(const Key('skill_import_scan_verdict')),
+    );
     expect(
-      find.byKey(const Key('skill_import_rejection_reason')),
-      findsOneWidget,
+      verdict.data,
+      contains('SECURITY: requests tools not in this build: shell_exec'),
     );
-    expect(find.textContaining('SECURITY SCAN: REJECTED'), findsOneWidget);
-    final reasonWidget = tester.widget<Text>(
-      find.byKey(const Key('skill_import_rejection_reason')),
-    );
-    expect(reasonWidget.data, contains('ignore_previous_instructions'));
+    expect(find.textContaining('PASSED'), findsNothing);
     expect(
       tester
           .widget<TextButton>(
@@ -202,6 +212,33 @@ void main() {
           )
           .onPressed,
       isNull,
+    );
+  });
+
+  testWidgets('advisory findings keep import enabled', (tester) async {
+    when(
+      () => mockImport.buildPreview(any()),
+    ).thenAnswer((_) async => Right(advisoryPreview()));
+
+    await openDialog(tester);
+    await fetchUrl(tester, 'https://example.com/SKILL.md');
+
+    final verdict = tester.widget<Text>(
+      find.byKey(const Key('skill_import_scan_verdict')),
+    );
+    expect(
+      verdict.data,
+      contains(
+        'Possible injection patterns (advisory): ignore_previous_instructions',
+      ),
+    );
+    expect(
+      tester
+          .widget<TextButton>(
+            find.byKey(const Key('skill_import_confirm_button')),
+          )
+          .onPressed,
+      isNotNull,
     );
   });
 

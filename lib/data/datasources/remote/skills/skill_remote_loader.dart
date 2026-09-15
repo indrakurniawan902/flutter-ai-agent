@@ -39,7 +39,7 @@ class SkillRemoteLoader implements SkillRemoteLoaderBase {
   /// adapter-dependent `redirects` list and silently falls back to the
   /// ORIGINAL url when that list is empty, making a host check a no-op.
   /// Manual following is fail-closed: a 3xx without a location, or a
-  /// redirect that resolves to a disallowed host, returns a failure
+  /// redirect that leaves the original host, returns a failure
   /// without issuing the next request.
   ///
   /// Size cap: the declared `Content-Length` is inspected before the body
@@ -77,18 +77,16 @@ class SkillRemoteLoader implements SkillRemoteLoaderBase {
               NetworkFailure('Redirected without a location header'),
             );
           }
-          final resolved = Uri.parse(
-            current,
-          ).resolve(location.trim()).toString();
-          final redirectInvalid = SkillRemoteLoaderBase.validateSourceUrl(
-            resolved,
+          final currentHost = Uri.parse(current).host;
+          final resolvedUri = Uri.tryParse(
+            Uri.parse(current).resolve(location.trim()).toString(),
           );
-          if (redirectInvalid != null) {
+          if (resolvedUri == null || resolvedUri.host != currentHost) {
             return const Left(
-              NetworkFailure('Redirected to a disallowed host'),
+              NetworkFailure('Redirected to a different host'),
             );
           }
-          current = resolved;
+          current = resolvedUri.toString();
           continue;
         }
         final declaredLength = response.headers.value(

@@ -17,8 +17,8 @@ class SkillImportPreview extends Equatable {
     required this.scan,
   });
 
-  /// Whether the preview passed the security scan.
-  bool get canImport => scan.isClean;
+  /// Whether the preview passed the structural gate (no unknown tools).
+  bool get canImport => !scan.hasUnknownTools;
 
   /// Estimate of injected prompt chars for this skill.
   int get estimatedPromptChars {

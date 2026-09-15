@@ -185,30 +185,25 @@ class _SkillImportDialogBodyState extends State<_SkillImportDialogBody> {
                       style: HermesTypography.monospace(fontSize: 12),
                     ),
                     const SizedBox(height: 4),
-                    if (preview.canImport)
-                      const Text(
-                        'SECURITY SCAN: PASSED',
-                        key: Key('skill_import_scan_verdict'),
-                        style: TextStyle(
-                          color: HermesColors.emerald,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      )
-                    else
-                      Container(
-                        key: const Key('skill_import_scan_verdict_icon'),
-                        child: Text(
-                          'SECURITY SCAN: REJECTED - '
-                          '${preview.scan.rejectionReason ?? 'Skill rejected by security scan'}',
-                          key: const Key('skill_import_rejection_reason'),
-                          style: const TextStyle(
-                            color: HermesColors.rose,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                    Text(
+                      preview.scan.hasUnknownTools
+                          ? 'SECURITY: requests tools not in this build: '
+                                '${preview.scan.unknownTools.join(', ')}'
+                          : preview.scan.findings.isEmpty
+                          ? 'No obvious injection patterns detected'
+                          : 'Possible injection patterns (advisory): '
+                                '${preview.scan.findings.map((f) => f.patternId).join(', ')}',
+                      key: const Key('skill_import_scan_verdict'),
+                      style: TextStyle(
+                        color: preview.scan.hasUnknownTools
+                            ? HermesColors.rose
+                            : preview.scan.findings.isEmpty
+                            ? HermesColors.emerald
+                            : HermesColors.amber,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
                       ),
+                    ),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,

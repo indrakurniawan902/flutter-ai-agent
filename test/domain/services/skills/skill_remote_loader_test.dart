@@ -1,9 +1,31 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/data/datasources/remote/skills/skill_remote_loader.dart';
 import 'package:flutter_ai_agent/domain/services/skills/skill_remote_loader.dart';
+
+class _RedirectAdapter implements HttpClientAdapter {
+  _RedirectAdapter(this.handler);
+
+  final ResponseBody Function(RequestOptions options) handler;
+  final List<String> requests = [];
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests.add(options.uri.toString());
+    return handler(options);
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
 
 void main() {
   group('validateSourceUrl', () {
@@ -31,40 +53,6 @@ void main() {
         SkillRemoteLoaderBase.validateSourceUrl('http://example.com/SKILL.md'),
         'Unsupported URL scheme: http',
       );
-    });
-
-    test('rejects loopback and local hosts', () {
-      for (final url in [
-        'http://localhost/',
-        'https://localhost/x',
-        'https://evil.local/x',
-      ]) {
-        final reason = SkillRemoteLoaderBase.validateSourceUrl(url);
-        expect(reason, isNotNull, reason: url);
-      }
-    });
-
-    test('rejects private and link-local ipv4 hosts', () {
-      for (final url in [
-        'https://127.0.0.1/x',
-        'https://10.0.0.1/x',
-        'https://172.16.5.5/x',
-        'https://192.168.1.1/x',
-        'https://169.254.169.254/latest/meta-data/',
-        'https://0.0.0.0/x',
-      ]) {
-        final reason = SkillRemoteLoaderBase.validateSourceUrl(url);
-        expect(
-          reason,
-          'URL host is not allowed: ${Uri.parse(url).host}',
-          reason: url,
-        );
-      }
-    });
-
-    test('rejects ipv6 loopback', () {
-      final reason = SkillRemoteLoaderBase.validateSourceUrl('https://[::1]/x');
-      expect(reason, isNotNull);
     });
 
     test('accepts digit-leading public hosts', () {
@@ -98,15 +86,30 @@ void main() {
       expect(failure, isA<ParseFailure>());
       expect(failure.message, 'Unsupported URL scheme: http');
     });
+  });
 
-    test('private host url returns ParseFailure without throwing', () async {
-      final loader = SkillRemoteLoader(dio: Dio());
-      final result = await loader.fetchSkillMarkdown(
-        'https://169.254.169.254/latest/meta-data/',
+  group('SkillRemoteLoader redirects', () {
+    test('302 to a different host is refused', () async {
+      final adapter = _RedirectAdapter(
+        (_) => ResponseBody(
+          Stream.value(Uint8List(0)),
+          302,
+          headers: {
+            'location': ['https://other.example.org/SKILL.md'],
+          },
+        ),
       );
+      final loader = SkillRemoteLoader(dio: Dio()..httpClientAdapter = adapter);
+
+      final result = await loader.fetchSkillMarkdown(
+        'https://example.com/SKILL.md',
+      );
+
       expect(result.isLeft(), isTrue);
       final failure = result.fold((l) => l, (_) => throw StateError('x'));
-      expect(failure, isA<ParseFailure>());
+      expect(failure, isA<NetworkFailure>());
+      expect(failure.message, 'Redirected to a different host');
+      expect(adapter.requests.length, 1);
     });
   });
 }

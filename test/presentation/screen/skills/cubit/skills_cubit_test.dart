@@ -122,15 +122,7 @@ Instructions.
       tier: 'Tier 1 Auto',
     );
     const cleanScan = SkillScanResult();
-    const rejectedScan = SkillScanResult(
-      findings: [
-        SkillScanFinding(
-          patternId: 'ignore_previous_instructions',
-          description: 'x',
-          severity: SkillScanSeverity.critical,
-        ),
-      ],
-    );
+    const rejectedScan = SkillScanResult(unknownTools: ['shell_exec']);
 
     SkillImportPreview cleanPreview() {
       return const SkillImportPreview(
