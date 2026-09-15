@@ -30,12 +30,20 @@ class SkillSecurityScanner {
   static final RegExp _whitespaceRuns = RegExp(r'\s+');
 
   /// Requires the override phrase to read as an instruction: it must end the
-  /// sentence/line, be followed by a punctuation stop, or continue with
-  /// `and`/`then`. A bare conditional continuation (`when ...`, `if ...`,
+  /// sentence/line, be followed by a punctuation stop, or continue with a
+  /// directive. A bare conditional continuation (`when ...`, `if ...`,
   /// `only when ...`) never matches, which keeps prose about ignoring things
   /// out of the advisory list.
+  ///
+  /// The leading class absorbs the separator because `_normalise` collapses
+  /// newlines, so a line-terminated imperative reaches this lookahead as
+  /// `... instructions do the task.`
   static const String _directiveTail =
-      r'(?=\s*(?:[.!?;:]|$|\s+(?:and|then)\b))';
+      r'(?=[\s\-–—,;:]*(?:[.!?]|$|(?:and|then)\b|'
+      r'with\s+(?:the\s+text\s+below|the\s+following|this\s+text)|'
+      r'using\s+(?:the\s+text\s+below|the\s+following|this\s+text)|'
+      r'as\s+follows|'
+      r'(?:obey|follow|do|execute|apply|act\s+on)\b))';
 
   static final List<_ScanPattern> _patterns = [
     _ScanPattern(
