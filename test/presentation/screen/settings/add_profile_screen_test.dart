@@ -67,7 +67,7 @@ void main() {
           matching: find.byType(TextField),
         ),
       );
-      expect(urlField.decoration?.hintText, 'https://hermes.example.com/v1');
+      expect(urlField.decoration?.hintText, 'https://hermes.example.com');
 
       final tokenField = tester.widget<TextField>(
         find.descendant(
@@ -75,10 +75,51 @@ void main() {
           matching: find.byType(TextField),
         ),
       );
-      expect(tokenField.decoration?.hintText, 'sk-...');
+      expect(tokenField.decoration?.hintText, 'device bridge token');
 
+      expect(find.byKey(const Key('add_profile_url_helper')), findsOneWidget);
       expect(find.byKey(const Key('add_profile_model_field')), findsNothing);
       expect(find.byKey(const Key('add_profile_temperature_slider')), findsNothing);
+
+      await tester.tap(find.text('OpenAI LLM'));
+      await tester.pumpAndSettle();
+
+      final openAiUrlField = tester.widget<TextField>(
+        find.descendant(
+          of: find.byKey(const Key('add_profile_url_field')),
+          matching: find.byType(TextField),
+        ),
+      );
+      expect(openAiUrlField.decoration?.hintText, 'https://api.openai.com/v1');
+
+      final openAiTokenField = tester.widget<TextField>(
+        find.descendant(
+          of: find.byKey(const Key('add_profile_token_field')),
+          matching: find.byType(TextField),
+        ),
+      );
+      expect(openAiTokenField.decoration?.hintText, 'sk-...');
+      expect(find.byKey(const Key('add_profile_url_helper')), findsNothing);
+    });
+
+    testWidgets('token field label depends on the selected mode',
+        (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      TextField tokenTextField() => tester.widget<TextField>(
+            find.descendant(
+              of: find.byKey(const Key('add_profile_token_field')),
+              matching: find.byType(TextField),
+            ),
+          );
+
+      expect(tokenTextField().decoration?.labelText, 'Device Token');
+
+      await tester.tap(find.text('OpenAI LLM'));
+      await tester.pumpAndSettle();
+
+      expect(tokenTextField().decoration?.labelText, 'Auth Token / API Key');
     });
 
     testWidgets('shows model and temperature controls only in OpenAI mode',
@@ -114,30 +155,19 @@ void main() {
       expect(nameField.controller?.text, 'Dev');
     });
 
-    testWidgets('Test Connection success renders the green probe badge and calls probeHermesNode',
+    testWidgets(
+        'Test Connection in Hermes mode shows the neutral notice without probing',
         (tester) async {
       await tester.pumpWidget(buildTestWidget());
       await tester.pump();
 
       await tester.enterText(
         find.byKey(const Key('add_profile_url_field')),
-        'https://hermes.example.com/v1',
+        'https://hermes.example.com',
       );
       await tester.enterText(
         find.byKey(const Key('add_profile_token_field')),
         'secret-token',
-      );
-
-      when(() => probe.probeHermesNode(
-            url: 'https://hermes.example.com/v1',
-            token: 'secret-token',
-          )).thenAnswer(
-        (_) async => const ProbeResult(
-          isSuccess: true,
-          message: 'Connected (42ms) • 2 models',
-          latencyMs: 42,
-          models: ['a', 'b'],
-        ),
       );
 
       await tester.ensureVisible(
@@ -149,30 +179,49 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
-      expect(find.byKey(const Key('add_profile_probe_success')), findsOneWidget);
-      expect(find.textContaining('Connected (42ms)'), findsOneWidget);
-      verify(() => probe.probeHermesNode(
-            url: 'https://hermes.example.com/v1',
-            token: 'secret-token',
-          )).called(1);
+      expect(find.byKey(const Key('add_profile_probe_notice')), findsOneWidget);
+      expect(find.byKey(const Key('add_profile_probe_success')), findsNothing);
+      expect(find.byKey(const Key('add_profile_probe_error')), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('add_profile_probe_notice')),
+          matching: find.text(
+            'REST probe does not apply to Hermes Node profiles — the Gateway '
+            'socket (/device/ws) is dialed when the profile is activated.',
+          ),
+        ),
+        findsOneWidget,
+      );
+      verifyNever(() => probe.probeHermesNode(
+            url: any(named: 'url'),
+            token: any(named: 'token'),
+          ));
+      verifyNever(() => probe.probeOpenAi(
+            url: any(named: 'url'),
+            apiKey: any(named: 'apiKey'),
+            model: any(named: 'model'),
+          ));
     });
 
-    testWidgets('Test Connection failure renders the red probe badge',
+    testWidgets('Test Connection failure in OpenAI mode renders the red probe badge',
         (tester) async {
       await tester.pumpWidget(buildTestWidget());
       await tester.pump();
 
+      await tester.tap(find.text('OpenAI LLM'));
+      await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const Key('add_profile_url_field')),
-        'https://hermes.example.com/v1',
+        'https://api.openai.com/v1',
       );
       await tester.enterText(
         find.byKey(const Key('add_profile_token_field')),
-        'secret-token',
+        'sk-test',
       );
-      when(() => probe.probeHermesNode(
+      when(() => probe.probeOpenAi(
             url: any(named: 'url'),
-            token: any(named: 'token'),
+            apiKey: any(named: 'apiKey'),
+            model: any(named: 'model'),
           )).thenAnswer(
         (_) async => const ProbeResult(
           isSuccess: false,
@@ -283,7 +332,7 @@ void main() {
 
       await tester.enterText(
         find.byKey(const Key('add_profile_url_field')),
-        'https://hermes.example.com/v1',
+        'https://hermes.example.com',
       );
       await tester.enterText(
         find.byKey(const Key('add_profile_token_field')),
@@ -301,7 +350,89 @@ void main() {
 
       verify(() => cubit.addProfile(
             name: 'Ops',
-            gatewayUrl: 'https://hermes.example.com/v1',
+            gatewayUrl: 'https://hermes.example.com',
+            token: 'secret-token',
+            makeActive: false,
+            model: any(named: 'model'),
+            temperature: any(named: 'temperature'),
+          )).called(1);
+    });
+
+    testWidgets('Save Profile in Hermes mode rejects a URL with a path',
+        (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      await tester.enterText(
+        find.byKey(const Key('add_profile_url_field')),
+        'https://host/v1',
+      );
+      await tester.enterText(
+        find.byKey(const Key('add_profile_token_field')),
+        'secret-token',
+      );
+      await tester.enterText(
+        find.byKey(const Key('add_profile_name_field')),
+        'Ops',
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('add_profile_submit_button')),
+      );
+      await tester.tap(find.byKey(const Key('add_profile_submit_button')));
+      await tester.pump();
+
+      expect(
+        find.text(
+          'Leave the path empty — the app dials it verbatim instead of '
+          '/device/ws (found "/v1")',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('found "/v1"'), findsOneWidget);
+      verifyNever(() => cubit.addProfile(
+            name: any(named: 'name'),
+            gatewayUrl: any(named: 'gatewayUrl'),
+            token: any(named: 'token'),
+            makeActive: any(named: 'makeActive'),
+            model: any(named: 'model'),
+            temperature: any(named: 'temperature'),
+          ));
+    });
+
+    testWidgets('Save Profile in Hermes mode accepts a pathless URL',
+        (tester) async {
+      when(() => cubit.addProfile(
+            name: any(named: 'name'),
+            gatewayUrl: any(named: 'gatewayUrl'),
+            token: any(named: 'token'),
+            makeActive: any(named: 'makeActive'),
+            model: any(named: 'model'),
+            temperature: any(named: 'temperature'),
+          )).thenAnswer((_) async {});
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      await tester.enterText(
+        find.byKey(const Key('add_profile_url_field')),
+        'https://host',
+      );
+      await tester.enterText(
+        find.byKey(const Key('add_profile_token_field')),
+        'secret-token',
+      );
+      await tester.enterText(
+        find.byKey(const Key('add_profile_name_field')),
+        'Ops',
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('add_profile_submit_button')),
+      );
+      await tester.tap(find.byKey(const Key('add_profile_submit_button')));
+      await tester.pump();
+
+      verify(() => cubit.addProfile(
+            name: 'Ops',
+            gatewayUrl: 'https://host',
             token: 'secret-token',
             makeActive: false,
             model: any(named: 'model'),
