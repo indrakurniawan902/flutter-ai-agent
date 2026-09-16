@@ -860,6 +860,43 @@ void main() {
         verify(() => mockTriageService.checkPermission()).called(1);
         verify(() => mockBatteryService.isBatteryOptimizationDisabled()).called(1);
       });
+
+      testWidgets(
+          'notification warning banner renders both action buttons at 320dp with no overflow',
+          (tester) async {
+        when(() => mockTriageService.checkPermission())
+            .thenAnswer((_) async => true);
+        when(() => mockTriageService.isListenerConnected())
+            .thenAnswer((_) async => false);
+        when(() => mockBatteryService.isBatteryOptimizationDisabled())
+            .thenAnswer((_) async => const Right(false));
+
+        tester.view.physicalSize = const Size(320, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('notification_listener_warning_banner')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('notification_listener_banner_rebind_button')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('notification_listener_banner_battery_button')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('notification_listener_banner_dismiss_button')),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      });
     });
   });
 }
