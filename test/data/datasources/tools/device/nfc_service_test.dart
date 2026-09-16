@@ -23,6 +23,7 @@ class FakeNfcPlatformWrapper implements NfcPlatformWrapper {
     this.availabilityValue = 'enabled',
     this.scanError,
     this.techList = const <String>['android.nfc.tech.IsoDep'],
+    this.pendingScan = false,
   });
 
   final List<int> uid;
@@ -31,13 +32,26 @@ class FakeNfcPlatformWrapper implements NfcPlatformWrapper {
   final String availabilityValue;
   final Object? scanError;
   final List<String> techList;
+  final bool pendingScan;
 
   final List<List<int>> sentApdus = <List<int>>[];
   final List<Set<String>> scanPollingOptions = <Set<String>>[];
   int scanCount = 0;
+  int cancelCount = 0;
+
+  Completer<NfcScanResult>? _pendingScanCompleter;
 
   @override
   Future<String> availability() async => availabilityValue;
+
+  @override
+  Future<void> cancel() async {
+    cancelCount++;
+    final completer = _pendingScanCompleter;
+    if (completer != null && !completer.isCompleted) {
+      completer.completeError(const NfcScanCancelledFailure());
+    }
+  }
 
   @override
   Future<T> runWithCard<T>({
@@ -60,6 +74,11 @@ class FakeNfcPlatformWrapper implements NfcPlatformWrapper {
     scanCount++;
     scanPollingOptions.add(pollingOptions);
     if (scanError != null) throw scanError!;
+    if (pendingScan) {
+      final completer = Completer<NfcScanResult>();
+      _pendingScanCompleter = completer;
+      return completer.future;
+    }
     return NfcScanResult(
       card: RawNfcCard(
         uid: Uint8List.fromList(uid),
@@ -193,6 +212,169 @@ void main() {
         (failure) => expect(failure.message, contains('timed out')),
         (_) => fail('Expected Left'),
       );
+    });
+  });
+
+  group('NfcService.cancelCardRead', () {
+    test('mid-scan cancel -> Left(NfcScanCancelledFailure), not ServerFailure',
+        () async {
+      final platform = FakeNfcPlatformWrapper(
+        uid: const <int>[0x04, 0xAB],
+        responder: (self, apdu) async => <int>[0x90, 0x00],
+        pendingScan: true,
+      );
+      final service = NfcService(platformWrapper: platform);
+
+      final pending = service.readCardUid();
+      await service.cancelCardRead();
+      final result = await pending;
+
+      expect(platform.cancelCount, 1);
+      expect(result.isLeft(), isTrue);
+      result.fold(
+        (failure) {
+          expect(failure, isA<NfcScanCancelledFailure>());
+          expect(failure, isNot(isA<ServerFailure>()));
+          expect(failure.message, 'NFC scan cancelled');
+        },
+        (_) => fail('Expected Left'),
+      );
+    });
+
+    test('mid-scan cancel of readEmoneyBalance -> NfcScanCancelledFailure',
+        () async {
+      final platform = FakeNfcPlatformWrapper(
+        uid: const <int>[0x04, 0xAB],
+        responder: (self, apdu) async => <int>[0x90, 0x00],
+        pendingScan: true,
+      );
+      final service = NfcService(platformWrapper: platform);
+
+      final pending = service.readEmoneyBalance();
+      await service.cancelCardRead();
+      final result = await pending;
+
+      expect(result.isLeft(), isTrue);
+      result.fold(
+        (failure) {
+          expect(failure, isA<NfcScanCancelledFailure>());
+          expect(failure, isNot(isA<ServerFailure>()));
+        },
+        (_) => fail('Expected Left'),
+      );
+    });
+  });
+
+  group('DefaultNfcPlatformWrapper session teardown', () {
+    test('runWithCard closes the NFC session on the timeout path', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      var disableReaderModeCalls = 0;
+
+      ByteData? encode(Object? value) =>
+          HostApiPigeon.pigeonChannelCodec.encodeMessage(<Object?>[value]);
+      ByteData? encodeEmpty() =>
+          HostApiPigeon.pigeonChannelCodec.encodeMessage(<Object?>[]);
+
+      messenger.setMockMessageHandler(
+        '${_host}nfcAdapterIsEnabled',
+        (message) async => encode(true),
+      );
+      messenger.setMockMessageHandler(
+        '${_host}nfcAdapterEnableReaderMode',
+        (message) async => encodeEmpty(),
+      );
+      messenger.setMockMessageHandler(
+        '${_host}nfcAdapterDisableReaderMode',
+        (message) async {
+          disableReaderModeCalls++;
+          return encodeEmpty();
+        },
+      );
+
+      final wrapper = DefaultNfcPlatformWrapper();
+
+      await expectLater(
+        wrapper.runWithCard<void>(
+          pollingOptions: const <String>{'iso14443'},
+          timeout: const Duration(milliseconds: 50),
+          action: (card) async {},
+        ),
+        throwsA(isA<TimeoutException>()),
+      );
+
+      expect(disableReaderModeCalls, greaterThanOrEqualTo(1));
+    });
+
+    test('cancel during session startup delivers the cancellation without an unhandled zone error', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+
+      ByteData? encode(Object? value) =>
+          HostApiPigeon.pigeonChannelCodec.encodeMessage(<Object?>[value]);
+      ByteData? encodeEmpty() =>
+          HostApiPigeon.pigeonChannelCodec.encodeMessage(<Object?>[]);
+
+      // Deterministic startup window: the mocked enableReaderMode reply is
+      // held open until the test explicitly releases it, so the cancel is
+      // guaranteed to land while startSession is still in flight.
+      final startupEntered = Completer<void>();
+      final startupGate = Completer<void>();
+      var insideStartupWindow = false;
+
+      messenger.setMockMessageHandler(
+        '${_host}nfcAdapterIsEnabled',
+        (message) async => encode(true),
+      );
+      messenger.setMockMessageHandler(
+        '${_host}nfcAdapterEnableReaderMode',
+        (message) async {
+          insideStartupWindow = true;
+          startupEntered.complete();
+          await startupGate.future;
+          insideStartupWindow = false;
+          return encodeEmpty();
+        },
+      );
+      messenger.setMockMessageHandler(
+        '${_host}nfcAdapterDisableReaderMode',
+        (message) async => encodeEmpty(),
+      );
+
+      final unhandledErrors = <Object>[];
+      final wrapper = DefaultNfcPlatformWrapper();
+      var windowExercised = false;
+
+      await runZonedGuarded(() async {
+        final pending = wrapper.runWithCard<void>(
+          pollingOptions: const <String>{'iso14443'},
+          timeout: const Duration(seconds: 5),
+          action: (card) async {},
+        );
+
+        await startupEntered.future;
+        windowExercised = insideStartupWindow;
+        await wrapper.cancel();
+        // Release the blocked startup reply before asserting, so a failure
+        // here cannot leave the mocked session open and hang the test.
+        startupGate.complete();
+
+        await expectLater(
+          pending,
+          throwsA(isA<NfcScanCancelledFailure>()),
+        );
+      }, (error, stack) {
+        unhandledErrors.add(error);
+      });
+
+      expect(
+        windowExercised,
+        isTrue,
+        reason: 'cancel must land while startSession is still in flight',
+      );
+      expect(unhandledErrors, isEmpty);
     });
   });
 

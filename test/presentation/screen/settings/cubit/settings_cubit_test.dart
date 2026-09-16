@@ -485,6 +485,41 @@ void main() {
         verify(() => mockStorageService.saveApiKey('')).called(1);
       },
     );
+
+    test('resetToDefaults preserves TTS and piper fields', () async {
+      when(() => mockStorageService.saveBaseUrl(any())).thenAnswer((_) async {});
+      when(() => mockStorageService.saveModel(any())).thenAnswer((_) async {});
+      when(() => mockStorageService.saveTemperature(any()))
+          .thenAnswer((_) async {});
+      when(() => mockStorageService.saveProgressiveToolPruning(any()))
+          .thenAnswer((_) async {});
+
+      final cubit = SettingsCubit(
+        secureStorageService: mockStorageService,
+        autoLoad: false,
+      );
+      cubit.emit(const SettingsLoaded(
+        baseUrl: 'https://custom-router.com/v1',
+        apiKey: 'sk-user-key',
+        model: 'custom-model',
+        temperature: 1.5,
+        ttsEngineMode: TtsEngineMode.piper,
+        piperVoiceId: 'id_ID-custom_voice-medium',
+        piperVoiceReady: {'id_ID-custom_voice-medium': true},
+        piperError: 'previous download warning',
+      ));
+
+      await cubit.resetToDefaults();
+
+      final reset = cubit.state as SettingsLoaded;
+      expect(reset.ttsEngineMode, TtsEngineMode.piper);
+      expect(reset.piperVoiceId, 'id_ID-custom_voice-medium');
+      expect(reset.piperVoiceReady, const {'id_ID-custom_voice-medium': true});
+      expect(reset.piperError, 'previous download warning');
+      expect(reset.baseUrl, AppConstants.defaultBaseUrl);
+      expect(reset.model, AppConstants.defaultModel);
+      expect(reset.temperature, AppConstants.defaultTemperature);
+    });
   });
 
   group('SettingsCubit - updateFromProfile', () {
@@ -513,6 +548,42 @@ void main() {
         ),
       ],
     );
+
+    test('updateFromProfile preserves TTS and piper fields', () async {
+      final cubit = SettingsCubit(
+        secureStorageService: mockStorageService,
+        autoLoad: false,
+      );
+      cubit.emit(const SettingsLoaded(
+        baseUrl: 'https://old-router.com/v1',
+        apiKey: 'sk-old-key',
+        model: 'old-model',
+        temperature: 0.4,
+        ttsEngineMode: TtsEngineMode.piper,
+        piperVoiceId: 'id_ID-custom_voice-medium',
+        piperVoiceReady: {'id_ID-custom_voice-medium': true},
+        piperError: 'previous download warning',
+      ));
+
+      cubit.updateFromProfile(const ServerProfile(
+        id: 'p1',
+        name: 'Remote Node',
+        gatewayUrl: 'https://profile-url.com/v1',
+        token: 'sk-profile-token',
+        model: 'profile-model',
+        temperature: 1.2,
+      ));
+
+      final updated = cubit.state as SettingsLoaded;
+      expect(updated.ttsEngineMode, TtsEngineMode.piper);
+      expect(updated.piperVoiceId, 'id_ID-custom_voice-medium');
+      expect(updated.piperVoiceReady, const {'id_ID-custom_voice-medium': true});
+      expect(updated.piperError, 'previous download warning');
+      expect(updated.baseUrl, 'https://profile-url.com/v1');
+      expect(updated.apiKey, 'sk-profile-token');
+      expect(updated.model, 'profile-model');
+      expect(updated.temperature, 1.2);
+    });
   });
 
   group('SettingsCubit - voice settings', () {

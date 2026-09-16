@@ -46,6 +46,10 @@ abstract class NfcPlatformWrapper {
     Duration timeout,
     required Future<T> Function(RawNfcCard card) action,
   });
+
+  /// Cancels an in-flight [runWithCard] or [scan] and closes the session.
+  /// Never throws.
+  Future<void> cancel();
 }
 
 class NfcPlatformWrapperRegistry {
@@ -53,6 +57,8 @@ class NfcPlatformWrapperRegistry {
 }
 
 class DefaultNfcPlatformWrapper implements NfcPlatformWrapper {
+  void Function()? _canceller;
+
   @override
   Future<String> availability() async {
     final availability = await NfcManager.instance.checkAvailability();
@@ -69,11 +75,22 @@ class DefaultNfcPlatformWrapper implements NfcPlatformWrapper {
   @override
   Future<T> runWithCard<T>({
     required Set<String> pollingOptions,
-    Duration timeout = const Duration(seconds: 20),
+    Duration timeout = kNfcScanTimeout,
     required Future<T> Function(RawNfcCard card) action,
   }) async {
     final completer = Completer<T>();
+    // A cancel can land while startSession is still in flight, before the
+    // awaiting caller has attached its listener. Swallow the orphaned-error
+    // report here; the error still reaches the caller through the future below.
+    unawaited(completer.future.then<void>((_) {}, onError: (Object _) {}));
     final polling = pollingOptions.map(_mapPollingOption).toSet();
+    // Install the canceller before awaiting session startup so a cancel that
+    // arrives while startSession is still in flight is not a silent no-op.
+    _canceller = () {
+      if (!completer.isCompleted) {
+        completer.completeError(const NfcScanCancelledFailure());
+      }
+    };
     try {
       await NfcManager.instance.startSession(
         pollingOptions: polling,
@@ -103,6 +120,7 @@ class DefaultNfcPlatformWrapper implements NfcPlatformWrapper {
         onTimeout: () => throw TimeoutException('NFC scan timed out', timeout),
       );
     } finally {
+      _canceller = null;
       try {
         await NfcManager.instance.stopSession();
       } catch (_) {
@@ -112,9 +130,23 @@ class DefaultNfcPlatformWrapper implements NfcPlatformWrapper {
   }
 
   @override
+  Future<void> cancel() async {
+    try {
+      _canceller?.call();
+    } catch (_) {
+      // Cancellation is best-effort; a throwing canceller must not leak.
+    }
+    try {
+      await NfcManager.instance.stopSession();
+    } catch (_) {
+      // Session may already be closed.
+    }
+  }
+
+  @override
   Future<NfcScanResult> scan({
     required Set<String> pollingOptions,
-    Duration timeout = const Duration(seconds: 20),
+    Duration timeout = kNfcScanTimeout,
   }) async {
     return runWithCard<NfcScanResult>(
       pollingOptions: pollingOptions,
@@ -264,6 +296,8 @@ class NfcService implements NfcServiceBase {
         pollingOptions: const <String>{'iso14443', 'iso15693'},
       );
       return Right(bytesToHex(result.card.uid));
+    } on NfcScanCancelledFailure {
+      return const Left(NfcScanCancelledFailure());
     } on TimeoutException {
       return const Left(
         ServerFailure('NFC scan timed out. Please tap the card again.'),
@@ -274,6 +308,15 @@ class NfcService implements NfcServiceBase {
           FailureMessage.humanize(e, context: 'Failed to read NFC card UID'),
         ),
       );
+    }
+  }
+
+  @override
+  Future<void> cancelCardRead() async {
+    try {
+      await _platform.cancel();
+    } catch (_) {
+      // Cancellation is best-effort; never surface to the caller.
     }
   }
 
@@ -308,6 +351,8 @@ class NfcService implements NfcServiceBase {
           );
         },
       );
+    } on NfcScanCancelledFailure {
+      return const Left(NfcScanCancelledFailure());
     } on TimeoutException {
       return const Left(NfcScanTimeoutFailure());
     } on UnsupportedError catch (e) {

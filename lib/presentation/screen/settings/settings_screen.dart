@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/nfc_tag_prompt_binding.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/piper_voice.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
+import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
 import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
 import 'package:go_router/go_router.dart';
@@ -1132,21 +1135,95 @@ class _NfcScanSheetState extends State<_NfcScanSheet> {
   final _promptController = TextEditingController();
   final _labelController = TextEditingController();
 
+  late final SettingsCubit _cubit;
+  Timer? _ticker;
+  DateTime? _scanStartedAt;
+  int _scanElapsedSeconds = 0;
+  String? _capturedUid;
+  String? _scanErrorMessage;
+
   @override
   void initState() {
     super.initState();
+    _cubit = context.read<SettingsCubit>();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        context.read<SettingsCubit>().scanAndBindNfcTag();
+        _cubit.scanAndBindNfcTag();
       }
     });
   }
 
   @override
   void dispose() {
+    _ticker?.cancel();
+    try {
+      unawaited(_cubit.cancelNfcScan().catchError((_) {}));
+    } catch (_) {
+      // Best effort: dismissing the sheet must not throw.
+    }
     _promptController.dispose();
     _labelController.dispose();
     super.dispose();
+  }
+
+  /// Keeps the ticker and the captured UID in sync with the cubit state.
+  /// Mutations are deferred to a post-frame callback so build stays pure.
+  void _syncScanLifecycle(SettingsState state) {
+    if (state is SettingsNfcScanning) {
+      _startTicker(state.startedAt);
+    } else {
+      _stopTicker();
+    }
+    if (state is SettingsNfcScanResult) {
+      final uid = state.uid;
+      if (_capturedUid != uid) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _capturedUid != uid) {
+            setState(() {
+              _capturedUid = uid;
+              _scanErrorMessage = null;
+            });
+          }
+        });
+      }
+    } else if (state is SettingsError) {
+      final message = state.message;
+      if (_capturedUid != null && _scanErrorMessage != message) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _scanErrorMessage != message) {
+            setState(() => _scanErrorMessage = message);
+          }
+        });
+      }
+    }
+  }
+
+  void _startTicker(DateTime startedAt) {
+    if (_ticker != null && _scanStartedAt == startedAt) return;
+    _ticker?.cancel();
+    _scanStartedAt = startedAt;
+    _scanElapsedSeconds = 0;
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() => _scanElapsedSeconds++);
+    });
+  }
+
+  void _stopTicker() {
+    _ticker?.cancel();
+    _ticker = null;
+  }
+
+  double get _scanProgress {
+    if (_scanStartedAt == null) return 0;
+    final total = kNfcScanTimeout.inMilliseconds;
+    if (total <= 0) return 1;
+    return (_scanElapsedSeconds * 1000 / total).clamp(0.0, 1.0).toDouble();
+  }
+
+  int get _scanRemainingSeconds {
+    final remaining = kNfcScanTimeout.inSeconds - _scanElapsedSeconds;
+    return remaining < 0 ? 0 : remaining;
   }
 
   Future<void> _onSave(String uid) async {
@@ -1169,6 +1246,11 @@ class _NfcScanSheetState extends State<_NfcScanSheet> {
 
     return BlocBuilder<SettingsCubit, SettingsState>(
       builder: (context, state) {
+        _syncScanLifecycle(state);
+        final capturedUid = _capturedUid ??
+            (state is SettingsNfcScanResult ? state.uid : null);
+        final isScanning = state is SettingsNfcScanning && capturedUid == null;
+
         return ConstrainedBox(
           constraints: BoxConstraints(
             maxHeight: MediaQuery.of(context).size.height * 0.8,
@@ -1188,14 +1270,25 @@ class _NfcScanSheetState extends State<_NfcScanSheet> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                if (state is SettingsNfcScanResult) ...[
+                if (capturedUid != null) ...[
+                  if (_scanErrorMessage != null) ...[
+                    Text(
+                      _scanErrorMessage!,
+                      key: const Key('nfc_scan_error_inline'),
+                      style: const TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   Flexible(
                     child: SingleChildScrollView(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Card UID: ${nfcTruncateUid(state.uid)}',
+                            'Card UID: ${nfcTruncateUid(capturedUid)}',
                             key: const Key('nfc_scan_uid'),
                             style: const TextStyle(
                               color: Colors.white70,
@@ -1245,13 +1338,69 @@ class _NfcScanSheetState extends State<_NfcScanSheet> {
                       ),
                       onPressed: _promptController.text.trim().isEmpty
                           ? null
-                          : () => _onSave(state.uid),
+                          : () => _onSave(capturedUid),
                       child: const Text(
                         'Save',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
+                      ),
+                    ),
+                  ),
+                ] else if (isScanning) ...[
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Scanning for NFC tag',
+                            key: Key('nfc_scanning_label'),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Tap the card to the back of your phone',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          LinearProgressIndicator(
+                            key: const Key('nfc_scan_progress'),
+                            value: _scanProgress,
+                            color: tealAccent,
+                            backgroundColor: const Color(0xFF334155),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${_scanRemainingSeconds}s left of '
+                            '${kNfcScanTimeout.inSeconds}s',
+                            key: const Key('nfc_scan_remaining'),
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          TextButton(
+                            key: const Key('nfc_scan_cancel_button'),
+                            onPressed: () async {
+                              final navigator = Navigator.of(context);
+                              await context.read<SettingsCubit>().cancelNfcScan();
+                              if (mounted) {
+                                navigator.pop();
+                              }
+                            },
+                            child: const Text('Cancel'),
+                          ),
+                        ],
                       ),
                     ),
                   ),

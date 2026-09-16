@@ -2,6 +2,10 @@ import 'package:dartz/dartz.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
 
+/// Wall-clock budget for a single card read, shared by the platform wrapper
+/// (enforcement) and the UI (progress display).
+const Duration kNfcScanTimeout = Duration(seconds: 20);
+
 enum EmoneyCardBrand { mandiriEmoney, bcaFlazz, briBrizzi, bniTapCash, unknown }
 
 class EmoneyTransaction {
@@ -67,4 +71,7 @@ abstract class NfcServiceBase {
   Future<Either<Failure, EmoneyBalance>> readEmoneyBalance({
     String? expectedCardUid,
   });
+
+  /// Stops an in-flight read and closes the NFC session. Never throws.
+  Future<void> cancelCardRead();
 }
