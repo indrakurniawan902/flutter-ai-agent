@@ -1242,9 +1242,20 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _scanNfcTag() async {
-    if (_isNfcScanning) return;
+    if (_isNfcScanning) {
+      // Deliberate double-tap guard: it now tells the user instead of staying
+      // silent.
+      AppToast.info(context, 'NFC scan already in progress.');
+      return;
+    }
     final cubit = _resolveAgentCubit();
-    if (cubit == null) return;
+    if (cubit == null) {
+      AppToast.error(
+        context,
+        'Agent is not ready yet. Try again once the chat screen has finished loading.',
+      );
+      return;
+    }
     _isNfcScanning = true;
     try {
       final dispatched = await cubit.scanNfcAndDispatchPrompt();
@@ -1261,15 +1272,29 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           context.pushNamed(AppRoutes.nrSettings);
         },
       );
+    } catch (error) {
+      if (!mounted) return;
+      AppToast.error(context, 'NFC scan failed: $error');
     } finally {
       _isNfcScanning = false;
     }
   }
 
   Future<void> _scanNfcBalance() async {
-    if (_isNfcScanning) return;
+    if (_isNfcScanning) {
+      // Deliberate double-tap guard: it now tells the user instead of staying
+      // silent.
+      AppToast.info(context, 'NFC scan already in progress.');
+      return;
+    }
     final cubit = _resolveAgentCubit();
-    if (cubit == null) return;
+    if (cubit == null) {
+      AppToast.error(
+        context,
+        'Agent is not ready yet. Try again once the chat screen has finished loading.',
+      );
+      return;
+    }
     _isNfcScanning = true;
     try {
       final balance = await cubit.scanNfcEmoneyBalance();
@@ -1290,6 +1315,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           'Could not read e-Money balance. Enable NFC and tap the card, or use Settings > NFC Tag Triggers.',
         );
       }
+    } catch (error) {
+      if (!mounted) return;
+      AppToast.error(context, 'NFC scan failed: $error');
     } finally {
       _isNfcScanning = false;
     }
