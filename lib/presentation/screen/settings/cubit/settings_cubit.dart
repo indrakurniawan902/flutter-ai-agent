@@ -1,4 +1,5 @@
 import 'package:flutter_ai_agent/common/constant.dart';
+import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
@@ -60,7 +61,7 @@ class SettingsCubit extends Cubit<SettingsState> {
 
   /// Loads configuration from secure storage or falls back to defaults.
   Future<void> loadSettings() async {
-    emit(SettingsLoading(
+    _safeEmit(SettingsLoading(
       baseUrl: state.baseUrl,
       apiKey: state.apiKey,
       model: state.model,
@@ -81,7 +82,7 @@ class SettingsCubit extends Cubit<SettingsState> {
         nfcPromptBindings = const [];
       }
 
-      emit(SettingsLoaded(
+      _safeEmit(SettingsLoaded(
         baseUrl: baseUrl,
         apiKey: apiKey,
         model: model,
@@ -94,7 +95,7 @@ class SettingsCubit extends Cubit<SettingsState> {
         await loadVoiceSettings();
       }
     } catch (e) {
-      emit(SettingsError(
+      _safeEmit(SettingsError(
         message: FailureMessage.humanize(e, context: 'Failed to load settings'),
         baseUrl: state.baseUrl,
         apiKey: state.apiKey,
@@ -119,7 +120,7 @@ class SettingsCubit extends Cubit<SettingsState> {
         uri == null ||
         (!uri.isScheme('http') && !uri.isScheme('https')) ||
         uri.host.isEmpty) {
-      emit(SettingsError(
+      _safeEmit(SettingsError(
         baseUrl: baseUrl,
         apiKey: apiKey,
         model: model,
@@ -132,7 +133,7 @@ class SettingsCubit extends Cubit<SettingsState> {
 
     final trimmedApiKey = apiKey.trim();
     if (trimmedApiKey.isEmpty) {
-      emit(SettingsError(
+      _safeEmit(SettingsError(
         baseUrl: baseUrl,
         apiKey: apiKey,
         model: model,
@@ -145,7 +146,7 @@ class SettingsCubit extends Cubit<SettingsState> {
 
     final clampedTemp = temperature.clamp(0.0, 2.0);
 
-    emit(SettingsSaving(
+    _safeEmit(SettingsSaving(
       baseUrl: trimmedUrl,
       apiKey: trimmedApiKey,
       model: model.trim(),
@@ -162,7 +163,7 @@ class SettingsCubit extends Cubit<SettingsState> {
         progressiveToolPruning: progressiveToolPruning,
       );
 
-      emit(SettingsSuccess(
+      _safeEmit(SettingsSuccess(
         baseUrl: trimmedUrl,
         apiKey: trimmedApiKey,
         model: model.trim(),
@@ -172,7 +173,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       ));
       return true;
     } catch (e) {
-      emit(SettingsError(
+      _safeEmit(SettingsError(
         baseUrl: trimmedUrl,
         apiKey: trimmedApiKey,
         model: model.trim(),
@@ -197,7 +198,7 @@ class SettingsCubit extends Cubit<SettingsState> {
         await _storageService.saveApiKey('');
       }
 
-      emit(SettingsLoaded(
+      _safeEmit(SettingsLoaded(
         baseUrl: AppConstants.defaultBaseUrl,
         apiKey: key,
         model: AppConstants.defaultModel,
@@ -205,7 +206,7 @@ class SettingsCubit extends Cubit<SettingsState> {
         progressiveToolPruning: true,
       ));
     } catch (e) {
-      emit(SettingsError(
+      _safeEmit(SettingsError(
         baseUrl: state.baseUrl,
         apiKey: state.apiKey,
         model: state.model,
@@ -218,7 +219,7 @@ class SettingsCubit extends Cubit<SettingsState> {
 
   /// Syncs settings state from the active server profile.
   void updateFromProfile(ServerProfile profile) {
-    emit(SettingsLoaded(
+    _safeEmit(SettingsLoaded(
       baseUrl: profile.gatewayUrl,
       apiKey: profile.token,
       model: profile.model,
@@ -231,7 +232,7 @@ class SettingsCubit extends Cubit<SettingsState> {
   Future<void> saveNfcPromptBindings(List<NfcTagPromptBinding> bindings) async {
     await _storageService.saveNfcPromptBindings(bindings);
     final current = state;
-    emit(SettingsLoaded(
+    _safeEmit(SettingsLoaded(
       baseUrl: current.baseUrl,
       apiKey: current.apiKey,
       model: current.model,
@@ -313,27 +314,72 @@ class SettingsCubit extends Cubit<SettingsState> {
       return;
     }
 
+    final current = state;
+    if (current is SettingsLoaded) {
+      _safeEmit(SettingsNfcScanning(
+        startedAt: DateTime.now(),
+        baseUrl: current.baseUrl,
+        apiKey: current.apiKey,
+        model: current.model,
+        temperature: current.temperature,
+        progressiveToolPruning: current.progressiveToolPruning,
+        nfcPromptBindings: current.nfcPromptBindings,
+        nfcAvailable: current.nfcAvailable,
+        ttsEngineMode: current.ttsEngineMode,
+        piperVoiceId: current.piperVoiceId,
+        piperVoiceReady: current.piperVoiceReady,
+        piperError: current.piperError,
+      ));
+    }
+
     final result = await nfc.readCardUid();
     result.fold(
-      (failure) => _emitNfcScanFailure(failure.message),
+      (failure) {
+        if (failure is NfcScanCancelledFailure) {
+          _safeEmit(SettingsLoaded(
+            baseUrl: current.baseUrl,
+            apiKey: current.apiKey,
+            model: current.model,
+            temperature: current.temperature,
+            progressiveToolPruning: current.progressiveToolPruning,
+            nfcPromptBindings: current is SettingsLoaded
+                ? current.nfcPromptBindings
+                : const [],
+            nfcAvailable: current is SettingsLoaded
+                ? current.nfcAvailable
+                : true,
+          ));
+          return;
+        }
+        _emitNfcScanFailure(failure.message);
+      },
       (uid) {
-        final current = state;
-        emit(SettingsNfcScanResult(
+        final latest = state;
+        _safeEmit(SettingsNfcScanResult(
           uid: uid,
-          baseUrl: current.baseUrl,
-          apiKey: current.apiKey,
-          model: current.model,
-          temperature: current.temperature,
-          progressiveToolPruning: current.progressiveToolPruning,
-          nfcPromptBindings: current is SettingsLoaded
-              ? current.nfcPromptBindings
+          baseUrl: latest.baseUrl,
+          apiKey: latest.apiKey,
+          model: latest.model,
+          temperature: latest.temperature,
+          progressiveToolPruning: latest.progressiveToolPruning,
+          nfcPromptBindings: latest is SettingsLoaded
+              ? latest.nfcPromptBindings
               : const [],
-          nfcAvailable: current is SettingsLoaded
-              ? current.nfcAvailable
+          nfcAvailable: latest is SettingsLoaded
+              ? latest.nfcAvailable
               : true,
         ));
       },
     );
+  }
+
+  /// Stops an in-flight card read. Never throws; no-op when no scan is running.
+  Future<void> cancelNfcScan() async {
+    try {
+      await _nfcService?.cancelCardRead();
+    } catch (_) {
+      // Best effort: a failed cancel must not surface to the UI.
+    }
   }
 
   /// Confirms a scanned UID by persisting the prompt/label pair.
@@ -390,7 +436,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       }
       final latest = state;
       if (latest is SettingsLoaded) {
-        emit(latest.copyWith(
+        _safeEmit(latest.copyWith(
           ttsEngineMode: mode,
           piperVoiceId: resolvedVoiceId,
           piperVoiceReady: readiness,
@@ -401,7 +447,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       try {
         final latest = state;
         if (latest is SettingsLoaded) {
-          emit(latest.copyWith(piperError: e.toString()));
+          _safeEmit(latest.copyWith(piperError: e.toString()));
         }
       } catch (_) {}
     }
@@ -419,13 +465,13 @@ class SettingsCubit extends Cubit<SettingsState> {
       } catch (_) {}
       final current = state;
       if (current is SettingsLoaded) {
-        emit(current.copyWith(ttsEngineMode: mode, piperError: null));
+        _safeEmit(current.copyWith(ttsEngineMode: mode, piperError: null));
       }
     } catch (e) {
       try {
         final current = state;
         if (current is SettingsLoaded) {
-          emit(current.copyWith(piperError: e.toString()));
+          _safeEmit(current.copyWith(piperError: e.toString()));
         }
       } catch (_) {}
     }
@@ -452,7 +498,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       if (current is SettingsLoaded) {
         final updated = Map<String, bool>.from(current.piperVoiceReady);
         updated[voiceId] = ready;
-        emit(current.copyWith(
+        _safeEmit(current.copyWith(
           piperVoiceId: voiceId,
           piperVoiceReady: updated,
           piperError: null,
@@ -462,7 +508,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       try {
         final current = state;
         if (current is SettingsLoaded) {
-          emit(current.copyWith(piperError: e.toString()));
+          _safeEmit(current.copyWith(piperError: e.toString()));
         }
       } catch (_) {}
     }
@@ -474,12 +520,12 @@ class SettingsCubit extends Cubit<SettingsState> {
     if (startState is! SettingsLoaded) return;
     final descriptor = piperVoiceById(voiceId);
     if (descriptor == null) {
-      emit(startState.copyWith(piperError: 'Unknown voice: $voiceId'));
+      _safeEmit(startState.copyWith(piperError: 'Unknown voice: $voiceId'));
       return;
     }
     final store = _piperVoiceStore;
     if (store == null) {
-      emit(startState.copyWith(piperError: 'Voice store unavailable'));
+      _safeEmit(startState.copyWith(piperError: 'Voice store unavailable'));
       return;
     }
     SettingsVoiceDownloadInProgress progressState(
@@ -514,7 +560,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       return readiness;
     }
 
-    emit(progressState(startState, 0));
+    _safeEmit(progressState(startState, 0));
     try {
       await store.downloadVoice(
         descriptor,
@@ -525,7 +571,7 @@ class SettingsCubit extends Cubit<SettingsState> {
             value = value.clamp(0.0, 1.0);
             final latest = state;
             if (latest is SettingsLoaded) {
-              emit(progressState(latest, value));
+              _safeEmit(progressState(latest, value));
             }
           } catch (_) {}
         },
@@ -533,7 +579,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       final readiness = await probeAll();
       final latest = state;
       if (latest is SettingsLoaded) {
-        emit(SettingsLoaded(
+        _safeEmit(SettingsLoaded(
           baseUrl: latest.baseUrl,
           apiKey: latest.apiKey,
           model: latest.model,
@@ -551,7 +597,7 @@ class SettingsCubit extends Cubit<SettingsState> {
         final readiness = await probeAll();
         final latest = state;
         if (latest is SettingsLoaded) {
-          emit(SettingsLoaded(
+          _safeEmit(SettingsLoaded(
             baseUrl: latest.baseUrl,
             apiKey: latest.apiKey,
             model: latest.model,
@@ -570,7 +616,7 @@ class SettingsCubit extends Cubit<SettingsState> {
         try {
           final latest = state;
           if (latest is SettingsLoaded) {
-            emit(latest.copyWith(
+            _safeEmit(latest.copyWith(
               piperError:
                   'Voice model checksum mismatch - download rejected',
             ));
@@ -582,7 +628,7 @@ class SettingsCubit extends Cubit<SettingsState> {
         final readiness = await probeAll();
         final latest = state;
         if (latest is SettingsLoaded) {
-          emit(SettingsLoaded(
+          _safeEmit(SettingsLoaded(
             baseUrl: latest.baseUrl,
             apiKey: latest.apiKey,
             model: latest.model,
@@ -600,7 +646,7 @@ class SettingsCubit extends Cubit<SettingsState> {
         try {
           final latest = state;
           if (latest is SettingsLoaded) {
-            emit(latest.copyWith(piperError: e.toString()));
+            _safeEmit(latest.copyWith(piperError: e.toString()));
           }
         } catch (_) {}
       }
@@ -615,7 +661,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       if (store == null) {
         final current = state;
         if (current is SettingsLoaded) {
-          emit(current.copyWith(piperError: 'Voice store unavailable'));
+          _safeEmit(current.copyWith(piperError: 'Voice store unavailable'));
         }
         return;
       }
@@ -624,7 +670,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       } catch (e) {
         final current = state;
         if (current is SettingsLoaded) {
-          emit(current.copyWith(piperError: e.toString()));
+          _safeEmit(current.copyWith(piperError: e.toString()));
         }
         return;
       }
@@ -638,7 +684,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       if (current is SettingsLoaded) {
         final updated = Map<String, bool>.from(current.piperVoiceReady);
         updated[voiceId] = ready;
-        emit(current.copyWith(
+        _safeEmit(current.copyWith(
           piperVoiceReady: updated,
           piperError: null,
         ));
@@ -647,15 +693,24 @@ class SettingsCubit extends Cubit<SettingsState> {
       try {
         final current = state;
         if (current is SettingsLoaded) {
-          emit(current.copyWith(piperError: e.toString()));
+          _safeEmit(current.copyWith(piperError: e.toString()));
         }
       } catch (_) {}
     }
   }
 
+  /// Emits [next] unless this cubit was closed while an awaited call was
+  /// still in flight. Bloc throws a StateError on emit-after-close; every
+  /// emit in this class is reachable from an await, so the guard belongs
+  /// here rather than at each call site.
+  void _safeEmit(SettingsState next) {
+    if (isClosed) return;
+    emit(next);
+  }
+
   void _emitNfcScanFailure(String message) {
     final current = state;
-    emit(SettingsError(
+    _safeEmit(SettingsError(
       baseUrl: current.baseUrl,
       apiKey: current.apiKey,
       model: current.model,

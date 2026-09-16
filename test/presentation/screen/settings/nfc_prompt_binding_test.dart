@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:bloc_test/bloc_test.dart';
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/nfc_tag_prompt_binding.dart';
 import 'package:flutter_ai_agent/domain/services/tools/nfc_prompt_resolver.dart';
@@ -329,6 +330,79 @@ void main() {
       expect(scanResult.model, loadedBase.model);
       expect(scanResult.nfcPromptBindings, [binding]);
       expect(scanResult.nfcAvailable, isTrue);
+    });
+
+    test('scanAndBindNfcTag does not throw when the cubit is closed before the failure lands', () async {
+      final readCompleter = Completer<Either<Failure, String>>();
+      when(() => mockNfc.isAvailable())
+          .thenAnswer((_) async => const Right(true));
+      when(() => mockNfc.isEnabled())
+          .thenAnswer((_) async => const Right(true));
+      when(() => mockNfc.readCardUid())
+          .thenAnswer((_) => readCompleter.future);
+
+      final cubit = SettingsCubit(
+        secureStorageService: mockStorage,
+        nfcService: mockNfc,
+        autoLoad: false,
+      );
+      cubit.emit(loadedBase);
+
+      final scanFuture = cubit.scanAndBindNfcTag();
+      await Future<void>.delayed(Duration.zero);
+      await cubit.close();
+      readCompleter.complete(const Left(ServerFailure('NFC scan timed out')));
+
+      await expectLater(scanFuture, completes);
+      expect(cubit.state, isA<SettingsNfcScanning>());
+    });
+
+    test('cancelNfcScan delegates to the service cancel seam', () async {
+      when(() => mockNfc.cancelCardRead()).thenAnswer((_) async {});
+
+      final cubit = SettingsCubit(
+        secureStorageService: mockStorage,
+        nfcService: mockNfc,
+        autoLoad: false,
+      );
+      cubit.emit(loadedBase);
+
+      await cubit.cancelNfcScan();
+
+      verify(() => mockNfc.cancelCardRead()).called(1);
+    });
+
+    test('scanAndBindNfcTag emits SettingsNfcScanning while the read is pending', () async {
+      final readCompleter = Completer<Either<Failure, String>>();
+      when(() => mockNfc.isAvailable())
+          .thenAnswer((_) async => const Right(true));
+      when(() => mockNfc.isEnabled())
+          .thenAnswer((_) async => const Right(true));
+      when(() => mockNfc.readCardUid())
+          .thenAnswer((_) => readCompleter.future);
+
+      final cubit = SettingsCubit(
+        secureStorageService: mockStorage,
+        nfcService: mockNfc,
+        autoLoad: false,
+      );
+      final before = loadedBase.copyWith(nfcPromptBindings: [binding]);
+      cubit.emit(before);
+
+      final scanFuture = cubit.scanAndBindNfcTag();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(cubit.state, isA<SettingsNfcScanning>());
+      final scanning = cubit.state as SettingsNfcScanning;
+      expect(scanning.startedAt, isNotNull);
+      expect(scanning.baseUrl, before.baseUrl);
+      expect(scanning.nfcPromptBindings, [binding]);
+
+      readCompleter.complete(const Right('04A2B3C4D5'));
+      await scanFuture;
+
+      expect(cubit.state, isA<SettingsNfcScanResult>());
+      expect((cubit.state as SettingsNfcScanResult).uid, '04A2B3C4D5');
     });
 
     test('confirmNfcPromptBinding preserves existing bindings and settings fields', () async {

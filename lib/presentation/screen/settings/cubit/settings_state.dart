@@ -192,6 +192,42 @@ class SettingsNfcScanResult extends SettingsLoaded {
       ];
 }
 
+/// A card read is in flight; the UI renders elapsed time against the budget.
+class SettingsNfcScanning extends SettingsLoaded {
+  final DateTime startedAt;
+
+  const SettingsNfcScanning({
+    required this.startedAt,
+    super.baseUrl = '',
+    super.apiKey = '',
+    super.model = '',
+    super.temperature = 0.7,
+    super.progressiveToolPruning = true,
+    super.nfcPromptBindings = const [],
+    super.nfcAvailable = false,
+    super.ttsEngineMode = TtsEngineMode.system,
+    super.piperVoiceId = 'id_ID-news_tts-medium',
+    super.piperVoiceReady = const {},
+    super.piperError,
+  });
+
+  @override
+  List<Object?> get props => [
+        startedAt,
+        baseUrl,
+        apiKey,
+        model,
+        temperature,
+        progressiveToolPruning,
+        nfcPromptBindings,
+        nfcAvailable,
+        ttsEngineMode,
+        piperVoiceId,
+        piperVoiceReady,
+        piperError,
+      ];
+}
+
 /// A Piper voice model download is in progress.
 class SettingsVoiceDownloadInProgress extends SettingsLoaded {
   final String downloadingVoiceId;
