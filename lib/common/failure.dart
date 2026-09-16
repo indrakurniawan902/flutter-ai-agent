@@ -102,3 +102,18 @@ class VoiceTurnNeedsApprovalFailure extends Failure {
         'voice_turn_needs_approval: the agent is waiting for action approval',
   ]);
 }
+
+/// A tag was discovered but this app cannot talk to it: it exposes no
+/// transceive capability, or its brand is not in EmoneyApduProfile.
+class NfcCardUnsupportedFailure extends Failure {
+  const NfcCardUnsupportedFailure([
+    super.message = 'Unrecognized or unsupported e-money card',
+  ]);
+}
+
+/// The NFC session ended without a card being read in time.
+class NfcScanTimeoutFailure extends Failure {
+  const NfcScanTimeoutFailure([
+    super.message = 'NFC scan timed out. Please tap the card again.',
+  ]);
+}

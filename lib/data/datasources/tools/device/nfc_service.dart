@@ -126,8 +126,9 @@ class DefaultNfcPlatformWrapper implements NfcPlatformWrapper {
   RawNfcCard? _toRawCard(NfcTag tag) {
     final androidTag = NfcTagAndroid.from(tag);
     if (androidTag == null) return null;
-    final transceive =
-        IsoDepAndroid.from(tag)?.transceive ?? NfcAAndroid.from(tag)?.transceive;
+    final transceive = IsoDepAndroid.from(tag)?.transceive ??
+        NfcAAndroid.from(tag)?.transceive ??
+        NfcBAndroid.from(tag)?.transceive;
     if (transceive == null) return null;
     return RawNfcCard(
       uid: androidTag.id,
@@ -293,9 +294,7 @@ class NfcService implements NfcServiceBase {
 
           final profile = await _detectBrand(card);
           if (profile == null) {
-            return const Left(
-              ServerFailure('Unrecognized or unsupported e-money card'),
-            );
+            return const Left(NfcCardUnsupportedFailure());
           }
 
           final balanceResponse = await _transceive(card, profile.balanceApdu);
@@ -310,8 +309,19 @@ class NfcService implements NfcServiceBase {
         },
       );
     } on TimeoutException {
-      return const Left(
-        ServerFailure('NFC scan timed out. Please tap the card again.'),
+      return const Left(NfcScanTimeoutFailure());
+    } on UnsupportedError catch (e) {
+      // Only the wrapper's deliberate no-transceive error means "unsupported
+      // card". Anything else (notably the read-only guard in assertInsAllowed)
+      // must stay loud: fall through to the generic branch, which logs via
+      // FailureMessage.humanize.
+      if (e.message == 'Discovered NFC tag has no transceive capability') {
+        return const Left(NfcCardUnsupportedFailure());
+      }
+      return Left(
+        ServerFailure(
+          FailureMessage.humanize(e, context: 'Failed to read e-money balance'),
+        ),
       );
     } catch (e) {
       return Left(

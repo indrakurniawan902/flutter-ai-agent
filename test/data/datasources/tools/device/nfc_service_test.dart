@@ -3,10 +3,16 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dartz/dartz.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/data/datasources/tools/device/nfc_service.dart';
 import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+// ignore: implementation_imports
+import 'package:nfc_manager/src/nfc_manager_android/pigeon.g.dart';
+
+const String _host = 'dev.flutter.pigeon.nfc_manager.HostApiPigeon.';
+const String _flutter = 'dev.flutter.pigeon.nfc_manager.FlutterApiPigeon.';
 
 /// Records every APDU sent through [transceive] so tests can assert the
 /// service never emitted a mutating command or a balance read it shouldn't.
@@ -16,6 +22,7 @@ class FakeNfcPlatformWrapper implements NfcPlatformWrapper {
     required this.responder,
     this.availabilityValue = 'enabled',
     this.scanError,
+    this.techList = const <String>['android.nfc.tech.IsoDep'],
   });
 
   final List<int> uid;
@@ -23,6 +30,7 @@ class FakeNfcPlatformWrapper implements NfcPlatformWrapper {
       responder;
   final String availabilityValue;
   final Object? scanError;
+  final List<String> techList;
 
   final List<List<int>> sentApdus = <List<int>>[];
   final List<Set<String>> scanPollingOptions = <Set<String>>[];
@@ -55,7 +63,7 @@ class FakeNfcPlatformWrapper implements NfcPlatformWrapper {
     return NfcScanResult(
       card: RawNfcCard(
         uid: Uint8List.fromList(uid),
-        techList: const <String>['android.nfc.tech.IsoDep'],
+        techList: techList,
         transceive: (apdu) async {
           sentApdus.add(apdu.toList());
           return Uint8List.fromList(await responder(this, apdu.toList()));
@@ -94,11 +102,13 @@ FakeNfcPlatformWrapper fakeCardFor({
   String availability = 'enabled',
   List<int> uid = const <int>[0x04, 0xAB, 0xCD, 0xEF],
   Object? scanError,
+  List<String> techList = const <String>['android.nfc.tech.IsoDep'],
 }) {
   return FakeNfcPlatformWrapper(
     uid: uid,
     availabilityValue: availability,
     scanError: scanError,
+    techList: techList,
     responder: (self, apdu) async {
       if (_sameApdu(apdu, wanted)) return <int>[0x90, 0x00];
       if (_sameApdu(apdu, _readBinaryBalance) ||
@@ -258,6 +268,187 @@ void main() {
 
       expect(result.isRight(), isTrue);
       expect(platform.sentApdus, isNotEmpty);
+    });
+
+    test('accepts a Type B-only card (no IsoDep/NfcA tech)', () async {
+      final platform = fakeCardFor(
+        wanted: _mandiriSelect,
+        techList: const <String>['android.nfc.tech.NfcB'],
+      );
+      final service = NfcService(platformWrapper: platform);
+
+      final result = await service.readEmoneyBalance();
+
+      expect(result.isRight(), isTrue);
+      result.fold(
+        (_) => fail('Expected Right'),
+        (balance) {
+          expect(balance.brand, EmoneyCardBrand.mandiriEmoney);
+          expect(balance.balanceRupiah, 12345);
+          expect(balance.cardUid, '04abcdef');
+        },
+      );
+    });
+
+    test('real wrapper accepts a Type B-only card and transceives over nfcB',
+        () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      final typeBTransceiveArgs = <List<Object?>>[];
+      final typeATransceiveArgs = <List<Object?>>[];
+
+      ByteData? encode(Object? value) =>
+          HostApiPigeon.pigeonChannelCodec.encodeMessage(<Object?>[value]);
+      ByteData? encodeEmpty() =>
+          HostApiPigeon.pigeonChannelCodec.encodeMessage(<Object?>[]);
+
+      messenger.setMockMessageHandler(
+        '${_host}nfcAdapterIsEnabled',
+        (message) async => encode(true),
+      );
+      messenger.setMockMessageHandler(
+        '${_host}nfcAdapterEnableReaderMode',
+        (message) async => encodeEmpty(),
+      );
+      messenger.setMockMessageHandler(
+        '${_host}nfcAdapterDisableReaderMode',
+        (message) async => encodeEmpty(),
+      );
+      messenger.setMockMessageHandler(
+        '${_host}nfcATransceive',
+        (message) async {
+          typeATransceiveArgs.add(
+            HostApiPigeon.pigeonChannelCodec.decodeMessage(message)
+                as List<Object?>,
+          );
+          return encode(Uint8List.fromList(<int>[0x6A, 0x82]));
+        },
+      );
+      messenger.setMockMessageHandler(
+        '${_host}nfcBTransceive',
+        (message) async {
+          final args = HostApiPigeon.pigeonChannelCodec.decodeMessage(message)
+              as List<Object?>;
+          typeBTransceiveArgs.add(args);
+          final apdu = (args[1]! as Uint8List).toList();
+          if (_sameApdu(apdu, _mandiriSelect)) {
+            return encode(Uint8List.fromList(<int>[0x90, 0x00]));
+          }
+          if (_sameApdu(apdu, _readBinaryBalance)) {
+            return encode(
+              Uint8List.fromList(<int>[0x00, 0x00, 0x30, 0x39, 0x90, 0x00]),
+            );
+          }
+          return encode(Uint8List.fromList(_failureSw()));
+        },
+      );
+
+      final tag = TagPigeon(
+        handle: 'typeb',
+        id: Uint8List.fromList(const <int>[0x04, 0xAB, 0xCD, 0xEF]),
+        techList: <String>['android.nfc.tech.NfcB'],
+        nfcB: NfcBPigeon(
+          applicationData: Uint8List(0),
+          protocolInfo: Uint8List(0),
+        ),
+      );
+
+      final service = NfcService(platformWrapper: DefaultNfcPlatformWrapper());
+      final pending = service.readEmoneyBalance();
+      // The plugin registers its inbound tag handler while starting the
+      // reader mode, so the tag may only be delivered after that.
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await messenger.handlePlatformMessage(
+        '${_flutter}onTagDiscovered',
+        HostApiPigeon.pigeonChannelCodec.encodeMessage(<Object?>[tag]),
+        (_) {},
+      );
+      final result = await pending;
+
+      expect(result.isRight(), isTrue);
+      result.fold(
+        (_) => fail('Expected Right'),
+        (balance) {
+          expect(balance.brand, EmoneyCardBrand.mandiriEmoney);
+          expect(balance.balanceRupiah, 12345);
+          expect(balance.cardUid, '04abcdef');
+        },
+      );
+      expect(typeBTransceiveArgs, isNotEmpty);
+      expect(typeBTransceiveArgs[0][0], 'typeb');
+      expect(
+        (typeBTransceiveArgs[0][1]! as Uint8List).toList(),
+        _mandiriSelect,
+      );
+      expect(typeATransceiveArgs, isEmpty);
+    });
+
+    test('unreadable card -> NfcCardUnsupportedFailure, not a scan timeout',
+        () async {
+      final platform = FakeNfcPlatformWrapper(
+        uid: const <int>[0x04, 0xAB],
+        techList: const <String>['android.nfc.tech.NfcB'],
+        responder: (self, apdu) async => _failureSw(),
+      );
+      final service = NfcService(platformWrapper: platform);
+
+      final result = await service.readEmoneyBalance();
+
+      expect(result.isLeft(), isTrue);
+      result.fold(
+        (failure) {
+          expect(failure, isA<NfcCardUnsupportedFailure>());
+          expect(failure, isNot(isA<NfcScanTimeoutFailure>()));
+          expect(failure.message, 'Unrecognized or unsupported e-money card');
+        },
+        (_) => fail('Expected Left'),
+      );
+    });
+
+    test('card without transceive capability -> NfcCardUnsupportedFailure',
+        () async {
+      final platform = FakeNfcPlatformWrapper(
+        uid: const <int>[0x04, 0xAB],
+        responder: (self, apdu) async => _failureSw(),
+        scanError: UnsupportedError(
+          'Discovered NFC tag has no transceive capability',
+        ),
+      );
+      final service = NfcService(platformWrapper: platform);
+
+      final result = await service.readEmoneyBalance();
+
+      expect(result.isLeft(), isTrue);
+      result.fold(
+        (failure) {
+          expect(failure, isA<NfcCardUnsupportedFailure>());
+          expect(failure.message, 'Unrecognized or unsupported e-money card');
+        },
+        (_) => fail('Expected Left'),
+      );
+    });
+
+    test('a read-only guard violation stays loud, not cardUnsupported', () async {
+      final platform = FakeNfcPlatformWrapper(
+        uid: const <int>[0x04, 0xAB],
+        responder: (self, apdu) async => _failureSw(),
+        scanError: UnsupportedError(
+          'Refusing to send mutating NFC APDU with INS 0xd6',
+        ),
+      );
+      final service = NfcService(platformWrapper: platform);
+
+      final result = await service.readEmoneyBalance();
+
+      expect(result.isLeft(), isTrue);
+      result.fold(
+        (failure) {
+          expect(failure, isNot(isA<NfcCardUnsupportedFailure>()));
+          expect(failure.message, contains('Failed to read e-money balance'));
+        },
+        (_) => fail('Expected Left'),
+      );
     });
   });
 
