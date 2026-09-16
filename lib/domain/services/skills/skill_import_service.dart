@@ -29,11 +29,12 @@ class SkillImportService {
 
   /// Fetches, parses and scans a remote skill without registering it.
   Future<Either<Failure, SkillImportPreview>> buildPreview(String url) async {
-    final invalid = SkillRemoteLoaderBase.validateSourceUrl(url);
+    final normalized = SkillRemoteLoaderBase.normalizeSkillSourceUrl(url);
+    final invalid = SkillRemoteLoaderBase.validateSourceUrl(normalized);
     if (invalid != null) {
       return Left(ParseFailure(invalid));
     }
-    final fetched = await _loader.fetchSkillMarkdown(url);
+    final fetched = await _loader.fetchSkillMarkdown(normalized);
     if (fetched.isLeft()) {
       return Left(fetched.fold((l) => l, (_) => const ParseFailure('Fetch')));
     }
@@ -47,7 +48,7 @@ class SkillImportService {
     );
     return Right(
       SkillImportPreview(
-        sourceUrl: url,
+        sourceUrl: normalized,
         skill: skill,
         rawMarkdown: markdown,
         scan: scan,
