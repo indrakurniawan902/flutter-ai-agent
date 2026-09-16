@@ -188,7 +188,8 @@ class SettingsCubit extends Cubit<SettingsState> {
   /// Resets configuration back to default values.
   /// Preserves the current API key by default so user credentials aren't lost.
   Future<void> resetToDefaults({bool preserveApiKey = true}) async {
-    final key = preserveApiKey ? state.apiKey : '';
+    final before = state;
+    final key = preserveApiKey ? before.apiKey : '';
     try {
       await _storageService.saveBaseUrl(AppConstants.defaultBaseUrl);
       await _storageService.saveModel(AppConstants.defaultModel);
@@ -198,13 +199,25 @@ class SettingsCubit extends Cubit<SettingsState> {
         await _storageService.saveApiKey('');
       }
 
-      _safeEmit(SettingsLoaded(
-        baseUrl: AppConstants.defaultBaseUrl,
-        apiKey: key,
-        model: AppConstants.defaultModel,
-        temperature: AppConstants.defaultTemperature,
-        progressiveToolPruning: true,
-      ));
+      if (before is SettingsLoaded) {
+        // A reset is about endpoint settings; the user's TTS/piper choices
+        // survive it. copyWith carries every field, so this is lossless.
+        _safeEmit(before.copyWith(
+          baseUrl: AppConstants.defaultBaseUrl,
+          apiKey: key,
+          model: AppConstants.defaultModel,
+          temperature: AppConstants.defaultTemperature,
+          progressiveToolPruning: true,
+        ));
+      } else {
+        _safeEmit(SettingsLoaded(
+          baseUrl: AppConstants.defaultBaseUrl,
+          apiKey: key,
+          model: AppConstants.defaultModel,
+          temperature: AppConstants.defaultTemperature,
+          progressiveToolPruning: true,
+        ));
+      }
     } catch (e) {
       _safeEmit(SettingsError(
         baseUrl: state.baseUrl,
@@ -219,12 +232,22 @@ class SettingsCubit extends Cubit<SettingsState> {
 
   /// Syncs settings state from the active server profile.
   void updateFromProfile(ServerProfile profile) {
+    final current = state;
+    if (current is SettingsLoaded) {
+      _safeEmit(current.copyWith(
+        baseUrl: profile.gatewayUrl,
+        apiKey: profile.token,
+        model: profile.model,
+        temperature: profile.temperature,
+      ));
+      return;
+    }
     _safeEmit(SettingsLoaded(
       baseUrl: profile.gatewayUrl,
       apiKey: profile.token,
       model: profile.model,
       temperature: profile.temperature,
-      progressiveToolPruning: state.progressiveToolPruning,
+      progressiveToolPruning: current.progressiveToolPruning,
     ));
   }
 

@@ -317,6 +317,13 @@ void main() {
       ByteData? encodeEmpty() =>
           HostApiPigeon.pigeonChannelCodec.encodeMessage(<Object?>[]);
 
+      // Deterministic startup window: the mocked enableReaderMode reply is
+      // held open until the test explicitly releases it, so the cancel is
+      // guaranteed to land while startSession is still in flight.
+      final startupEntered = Completer<void>();
+      final startupGate = Completer<void>();
+      var insideStartupWindow = false;
+
       messenger.setMockMessageHandler(
         '${_host}nfcAdapterIsEnabled',
         (message) async => encode(true),
@@ -324,7 +331,10 @@ void main() {
       messenger.setMockMessageHandler(
         '${_host}nfcAdapterEnableReaderMode',
         (message) async {
-          await Future<void>.delayed(const Duration(milliseconds: 80));
+          insideStartupWindow = true;
+          startupEntered.complete();
+          await startupGate.future;
+          insideStartupWindow = false;
           return encodeEmpty();
         },
       );
@@ -335,6 +345,7 @@ void main() {
 
       final unhandledErrors = <Object>[];
       final wrapper = DefaultNfcPlatformWrapper();
+      var windowExercised = false;
 
       await runZonedGuarded(() async {
         final pending = wrapper.runWithCard<void>(
@@ -343,9 +354,12 @@ void main() {
           action: (card) async {},
         );
 
-        // Let the call get inside the startSession startup window.
-        await Future<void>.delayed(const Duration(milliseconds: 10));
+        await startupEntered.future;
+        windowExercised = insideStartupWindow;
         await wrapper.cancel();
+        // Release the blocked startup reply before asserting, so a failure
+        // here cannot leave the mocked session open and hang the test.
+        startupGate.complete();
 
         await expectLater(
           pending,
@@ -355,6 +369,11 @@ void main() {
         unhandledErrors.add(error);
       });
 
+      expect(
+        windowExercised,
+        isTrue,
+        reason: 'cancel must land while startSession is still in flight',
+      );
       expect(unhandledErrors, isEmpty);
     });
   });
