@@ -428,6 +428,28 @@ void main() {
         (_) => fail('Expected Left'),
       );
     });
+
+    test('a read-only guard violation stays loud, not cardUnsupported', () async {
+      final platform = FakeNfcPlatformWrapper(
+        uid: const <int>[0x04, 0xAB],
+        responder: (self, apdu) async => _failureSw(),
+        scanError: UnsupportedError(
+          'Refusing to send mutating NFC APDU with INS 0xd6',
+        ),
+      );
+      final service = NfcService(platformWrapper: platform);
+
+      final result = await service.readEmoneyBalance();
+
+      expect(result.isLeft(), isTrue);
+      result.fold(
+        (failure) {
+          expect(failure, isNot(isA<NfcCardUnsupportedFailure>()));
+          expect(failure.message, contains('Failed to read e-money balance'));
+        },
+        (_) => fail('Expected Left'),
+      );
+    });
   });
 
   group('EmoneyApduParser (fixture driven)', () {
