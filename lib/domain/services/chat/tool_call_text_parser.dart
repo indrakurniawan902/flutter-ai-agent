@@ -308,6 +308,15 @@ class ToolCallTextParser {
     // First REAL fence starting at or after `i`. Fences are disjoint and sorted
     // and `i` only moves right, so this advances monotonically.
     var fj = 0;
+    // Character budget for the rescans below. Both maps above answer from a
+    // SINGLE left-to-right walk carrying one quote state, while the previously
+    // shipped parser restarted the quote state at every opener. Where a message
+    // desyncs those two readings the maps hold no answer at all, so the opener
+    // is dropped even though the shipped parser recovered it. Rescanning from
+    // such an opener reproduces the shipped answer; the budget keeps the total
+    // work linear, because a message that desyncs everywhere would otherwise pay
+    // for a scan at every opener.
+    var rescanBudget = text.length * 4;
     var inString = false;
     while (i < text.length) {
       // `fi` only moves right, so the fence test is O(1) amortised. The old
@@ -353,6 +362,17 @@ class ToolCallTextParser {
             }
           }
         }
+        if (end == null && rescanBudget > 0) {
+          // Neither map has an answer for this opener. Fall back to the shipped
+          // parser's own rule, which restarts the quote state here instead of
+          // trusting a walk that may have desynced upstream. The rescan is
+          // charged for every character it examines -- including a span that
+          // never balances -- so the total work stays linear.
+          final cost = <int>[0];
+          final rescan = _scanFrom(text, i, rescanBudget, cost);
+          rescanBudget -= cost[0];
+          if (rescan != null) end = rescan;
+        }
         if (end != null) {
           final decoded = _tryDecode(text.substring(i, end));
           if (decoded != null) {
@@ -377,6 +397,60 @@ class ToolCallTextParser {
       }
       i++;
     }
+  }
+
+  /// Exclusive end of the shortest balanced span starting at [start], with the
+  /// quote state restarted at [start].
+  ///
+  /// This is the previously shipped parser's own rule, kept for the openers
+  /// where both maps above hold no answer. Those maps answer from a single
+  /// left-to-right walk carrying one quote state, so a message whose quotes
+  /// desync that walk leaves openers unanswered that the shipped parser
+  /// recovered; restarting here reproduces its answer. Returns null when the
+  /// span never balances, exactly as the shipped helper did.
+  ///
+  /// [cost] receives the number of characters examined, and is charged even on
+  /// failure: a span that never balances is exactly the case that walks to
+  /// end-of-string, and leaving that uncharged made a brace flood quadratic.
+  /// The walk also stops at [budget] characters, so one rescan can never spend
+  /// more than the caller has left.
+  int? _scanFrom(String text, int start, int budget, List<int> cost) {
+    final closers = <int>[];
+    var i = start;
+    var inString = false;
+    final limit = start + budget;
+    while (i < text.length && i < limit) {
+      final c = text.codeUnitAt(i);
+      if (inString) {
+        if (c == 0x5C) {
+          i += 2;
+          continue;
+        }
+        if (c == 0x22) inString = false;
+        i++;
+        continue;
+      }
+      if (c == 0x22) {
+        inString = true;
+      } else if (c == 0x7B) {
+        closers.add(0x7D);
+      } else if (c == 0x5B) {
+        closers.add(0x5D);
+      } else if (c == 0x7D || c == 0x5D) {
+        if (closers.isEmpty || closers.last != c) {
+          cost[0] = i - start + 1;
+          return null;
+        }
+        closers.removeLast();
+        if (closers.isEmpty) {
+          cost[0] = i - start + 1;
+          return i + 1;
+        }
+      }
+      i++;
+    }
+    cost[0] = i - start;
+    return null;
   }
 
   /// Decodes and validates one candidate span, or null when it is not a
