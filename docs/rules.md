@@ -279,10 +279,9 @@ Details per item live in [`architecture.md §15`](./architecture.md#15-flames-ex
 1. **Zero emoji in chrome.** `Icons.*` only across app bars, navigation,
    cards, buttons, and modals. No emojis in UI icons, headers, or HITL
    sheets (§1.7, §10).
-2. **Dev/prod flavors only.** `lib/main_development.dart` + 
-   `lib/main_production.dart` with `lib/main.dart` fallback; no `staging`
-   flavor. Android flavors mirror dev/prod with per-flavor app name and
-   `applicationIdSuffix`.
+2. **Single entrypoint, no flavors.** `lib/main.dart` → `bootstrap()` only;
+   no Dart flavors and no Android product flavors or `applicationIdSuffix`.
+   Flavors stay off unless a project genuinely needs distinct environments.
 3. **VPS lock discipline.** On the 2-vCPU VPS, serialize heavy commands
    with `flock /tmp/flutter.lock` — never run parallel flutter compiles
    (`flutter analyze`, `flutter test`, `build_runner build`).

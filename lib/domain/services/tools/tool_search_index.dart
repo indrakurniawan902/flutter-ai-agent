@@ -56,8 +56,18 @@ class ToolSearchIndex {
       ],
     ),
     ToolCategorySpec(
-      <String>['photo', 'scan', 'image', 'qr', 'ocr', 'camera', 'picture'],
-      <String>['camera_take_photo'],
+      <String>[
+        'photo',
+        'scan',
+        'image',
+        'qr',
+        'ocr',
+        'camera',
+        'picture',
+      ],
+      <String>[
+        'camera_take_photo',
+      ],
     ),
     ToolCategorySpec(
       <String>[

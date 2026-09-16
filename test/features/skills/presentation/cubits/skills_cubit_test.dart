@@ -98,6 +98,7 @@ Instructions.
 ''';
 
       cubit.registerSkillFromMarkdown(markdown);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
 
       final loaded = cubit.state as SkillsLoaded;
       expect(loaded.allSkills.length, 3);

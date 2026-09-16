@@ -64,6 +64,15 @@ void main() {
       expect(function['description'].toString(), isNotEmpty);
       expect(function['parameters'], isA<Map>());
     });
+
+    test('description states the untrusted-data class and keeps READ-ONLY',
+        () {
+      final description = registry.getTool('ui_find_elements')!.description;
+
+      expect(description, contains('UNTRUSTED SCREEN CONTENT'));
+      expect(description, contains('SCREEN INJECTION SUSPECTED'));
+      expect(description, contains('READ-ONLY'));
+    });
   });
 
   group('ui_find_elements execution', () {

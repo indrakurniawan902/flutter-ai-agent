@@ -22,50 +22,15 @@
       "group": "test"
     },
     {
-      "label": "Build APK - Development",
+      "label": "Build APK",
       "type": "shell",
       "command": "flutter",
       "args": [
         "build",
         "apk",
         "--split-per-abi",
-        "--flavor",
-        "development",
         "-t",
-        "lib/main_development.dart"
-      ],
-      "problemMatcher": [],
-      "group": "build"
-    },
-    {
-      "label": "Build APK - Production",
-      "type": "shell",
-      "command": "flutter",
-      "args": [
-        "build",
-        "apk",
-        "--split-per-abi",
-        "--release",
-        "--flavor",
-        "production",
-        "-t",
-        "lib/main_production.dart"
-      ],
-      "problemMatcher": [],
-      "group": "build"
-    },
-    {
-      "label": "Build AppBundle - Production",
-      "type": "shell",
-      "command": "flutter",
-      "args": [
-        "build",
-        "appbundle",
-        "--release",
-        "--flavor",
-        "production",
-        "-t",
-        "lib/main_production.dart"
+        "lib/main.dart"
       ],
       "problemMatcher": [],
       "group": "build"

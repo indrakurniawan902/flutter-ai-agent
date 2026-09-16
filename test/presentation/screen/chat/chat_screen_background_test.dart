@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
+import 'package:flutter_ai_agent/domain/services/voice/voice_prompt_dispatcher.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_input_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/chat_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
@@ -16,11 +17,10 @@ void main() {
   late MockAgentCubit mockAgentCubit;
   late MockVoiceInputService mockVoiceInputService;
   late MockVoiceOutputService mockVoiceOutputService;
-  late MockBackgroundService mockBackgroundService;
+  late VoicePromptDispatcherRegistry registry;
 
   late StreamController<AgentState> agentStateController;
   late StreamController<VoiceInputStatus> voiceInputStatusController;
-  late StreamController<String> backgroundActionController;
 
   setUp(() async {
     await sl.reset();
@@ -28,21 +28,22 @@ void main() {
     mockAgentCubit = MockAgentCubit();
     mockVoiceInputService = MockVoiceInputService();
     mockVoiceOutputService = MockVoiceOutputService();
-    mockBackgroundService = MockBackgroundService();
+    registry = VoicePromptDispatcherRegistry();
 
     agentStateController = StreamController<AgentState>.broadcast();
     voiceInputStatusController =
         StreamController<VoiceInputStatus>.broadcast();
-    backgroundActionController = StreamController<String>.broadcast();
 
     when(() => mockAgentCubit.state).thenReturn(const AgentIdle());
+    when(() => mockAgentCubit.isClosed).thenReturn(false);
     when(() => mockAgentCubit.sessions).thenReturn(const []);
     when(() => mockAgentCubit.activeSessionId).thenReturn(null);
     when(() => mockAgentCubit.activeSessionTitle).thenReturn('New chat');
     when(() => mockAgentCubit.refreshSessions()).thenAnswer((_) async {});
     when(() => mockAgentCubit.newChat()).thenAnswer((_) async {});
     when(() => mockAgentCubit.switchSession(any())).thenAnswer((_) async {});
-    when(() => mockAgentCubit.renameSession(any(), any())).thenAnswer((_) async {});
+    when(() => mockAgentCubit.renameSession(any(), any()))
+        .thenAnswer((_) async {});
     when(() => mockAgentCubit.deleteSession(any())).thenAnswer((_) async {});
     when(() => mockAgentCubit.messages).thenReturn([]);
     when(
@@ -87,79 +88,72 @@ void main() {
     when(() => mockVoiceOutputService.interrupt()).thenAnswer((_) async {});
     when(() => mockVoiceOutputService.dispose()).thenReturn(null);
 
-    when(
-      () => mockBackgroundService.actionStream,
-    ).thenAnswer((_) => backgroundActionController.stream);
-    when(
-      () => mockBackgroundService.getPendingAction(),
-    ).thenAnswer((_) async => null);
-    when(
-      () => mockBackgroundService.clearPendingAction(),
-    ).thenAnswer((_) async {});
-    when(() => mockBackgroundService.dispose()).thenReturn(null);
-
     sl.registerFactory<AgentCubit>(() => mockAgentCubit);
+    sl.registerSingleton<VoicePromptDispatcherRegistry>(registry);
   });
 
   tearDown(() async {
     await agentStateController.close();
     await voiceInputStatusController.close();
-    await backgroundActionController.close();
     await sl.reset();
   });
 
-  Widget createWidgetUnderTest({String? initialPendingAction}) {
-    if (initialPendingAction != null) {
-      when(
-        () => mockBackgroundService.getPendingAction(),
-      ).thenAnswer((_) async => initialPendingAction);
-    }
-
+  Widget createWidgetUnderTest() {
     return MaterialApp(
       home: ChatScreen(
         voiceInputService: mockVoiceInputService,
         voiceOutputService: mockVoiceOutputService,
-        backgroundService: mockBackgroundService,
       ),
     );
   }
 
-  testWidgets(
-      'ChatScreen listens to backgroundActionStream and starts voice input on "voice_input"',
+  testWidgets('ChatScreen registers its chat dispatcher on mount',
       (tester) async {
+    // Act
     await tester.pumpWidget(createWidgetUnderTest());
     await tester.pump();
 
-    backgroundActionController.add('voice_input');
-    await tester.pump();
+    // Assert
+    expect(registry.active, isNotNull);
+    expect(registry.active!.transportId, 'chat');
+  });
 
-    verify(() => mockVoiceInputService.startListening()).called(1);
+  testWidgets('ChatScreen unregisters its chat dispatcher on dispose',
+      (tester) async {
+    // Arrange
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pump();
+    expect(registry.active, isNotNull);
+
+    // Act
+    await tester.pumpWidget(const SizedBox());
+
+    // Assert
+    expect(registry.hasReadyTransport, isFalse);
+    expect(registry.active, isNull);
   });
 
   testWidgets(
-      'ChatScreen listens to backgroundActionStream and sends status check on "quick_status"',
+      'a mounted ChatScreen owns a READY chat transport until it unmounts',
       (tester) async {
+    // Act: mount the screen.
     await tester.pumpWidget(createWidgetUnderTest());
     await tester.pump();
 
-    backgroundActionController.add('quick_status');
+    // Assert: the registry sees a ready transport registered by the screen.
+    final mounted = registry.active;
+    expect(mounted, isNotNull);
+    final transport = mounted!;
+    expect(transport.isReady, isTrue);
+    expect(transport.transportId, 'chat');
+    expect(registry.hasReadyTransport, isTrue);
+
+    // Act: unmount the screen.
+    await tester.pumpWidget(const SizedBox());
     await tester.pump();
 
-    verify(
-      () => mockAgentCubit.sendMessage(any(that: contains('status'))),
-    ).called(1);
-  });
-
-  testWidgets('ChatScreen handles pendingAction on startup and clears it',
-      (tester) async {
-    await tester.pumpWidget(
-      createWidgetUnderTest(initialPendingAction: 'voice_input'),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-
-    verify(() => mockBackgroundService.getPendingAction()).called(1);
-    verify(() => mockVoiceInputService.startListening()).called(1);
-    verify(() => mockBackgroundService.clearPendingAction()).called(1);
+    // Assert: the transport is gone, so the headless fallback can take over.
+    expect(registry.active, isNull);
+    expect(registry.hasReadyTransport, isFalse);
   });
 }

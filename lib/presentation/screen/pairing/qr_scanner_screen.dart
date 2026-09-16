@@ -4,10 +4,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
+import 'package:flutter_ai_agent/domain/services/gateway/pairing_destination.dart';
 import 'package:flutter_ai_agent/domain/tools/pairing/pairing_parser.dart';
 import 'package:flutter_ai_agent/domain/tools/pairing/qr_scanner_controller.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/app_settings_opener.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/permission_rationale_modal.dart';
+import 'package:flutter_ai_agent/presentation/screen/pairing/widgets/pairing_destination_dialog.dart';
 import 'package:flutter_ai_agent/presentation/widget/app_toast.dart';
 import 'package:flutter_ai_agent/utils/permission_gate.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -26,6 +28,12 @@ class QrScannerScreen extends StatefulWidget {
   final PairingParser parser;
   final DateTime? currentTime;
   final void Function(PairingPayload payload)? onPayloadScanned;
+
+  /// Origin of the currently configured active gateway, when one exists.
+  ///
+  /// Used only to render the replacement notice in the destination
+  /// confirmation dialog; never to skip that confirmation.
+  final String? currentGatewayOrigin;
   final Widget Function(
     BuildContext context,
     void Function(String barcode) onDetect,
@@ -38,6 +46,7 @@ class QrScannerScreen extends StatefulWidget {
     this.parser = const PairingParser(),
     this.currentTime,
     this.onPayloadScanned,
+    this.currentGatewayOrigin,
     this.scannerWidgetBuilder,
     this.permissionGate,
   });
@@ -144,27 +153,60 @@ class _QrScannerScreenState extends State<QrScannerScreen>
     });
   }
 
-  void _handleBarcode(String rawBarcode) {
+  Future<void> _handleBarcode(String rawBarcode) async {
     if (_isProcessing) return;
     _isProcessing = true;
 
-    final result = widget.parser.parse(
-      rawBarcode,
-      currentTime: widget.currentTime,
-    );
+    // The guard reset lives in `finally`: an unexpected throw anywhere below
+    // (including a parser regression) must never latch the scanner dead.
+    try {
+      final result = widget.parser.parse(
+        rawBarcode,
+        currentTime: widget.currentTime,
+      );
 
-    result.fold(
-      (failure) {
-        _isProcessing = false;
+      PairingPayload? parsed;
+      result.fold(
+        (failure) {
+          if (!mounted) return;
+          AppToast.error(context, failure.message);
+        },
+        (value) => parsed = value,
+      );
+      final payload = parsed;
+      if (payload == null) return;
+
+      final destination = resolvePairingDestination(payload.gatewayUrl);
+      if (destination == null) {
         if (!mounted) return;
-        AppToast.error(context, failure.message);
-      },
-      (payload) {
-        if (!mounted) return;
-        widget.onPayloadScanned?.call(payload);
-        Navigator.of(context).pop(payload);
-      },
-    );
+        AppToast.error(
+          context,
+          'Invalid pairing payload: gatewayUrl could not be resolved',
+        );
+        return;
+      }
+
+      final confirmed = await showPairingDestinationConfirmation(
+        context,
+        payload: payload,
+        currentGatewayOrigin: widget.currentGatewayOrigin,
+      );
+      if (!mounted) return;
+
+      if (!confirmed) return;
+
+      widget.onPayloadScanned?.call(payload);
+      Navigator.of(context).pop(payload);
+    } catch (_) {
+      if (mounted) {
+        AppToast.error(
+          context,
+          'Could not process the pairing code. Please try again.',
+        );
+      }
+    } finally {
+      _isProcessing = false;
+    }
   }
 
   Future<void> _showManualInputDialog() async {
@@ -247,7 +289,7 @@ class _QrScannerScreenState extends State<QrScannerScreen>
               onPressed: () {
                 final text = textController.text;
                 Navigator.of(dialogContext).pop();
-                _handleBarcode(text);
+                unawaited(_handleBarcode(text));
               },
               child: const Text('Submit'),
             ),

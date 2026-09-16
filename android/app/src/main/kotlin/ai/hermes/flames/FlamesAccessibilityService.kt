@@ -68,6 +68,13 @@ class FlamesAccessibilityService : AccessibilityService() {
                 }
                 val (node, depth) = queue.removeFirst()
                 try {
+                    // Secure fields: drop the node AND its whole subtree so
+                    // password text is never collected, even when the platform
+                    // or OEM does not redact it. Skipping the children too
+                    // avoids leaking the field's hint/label descendants.
+                    if (node.isPassword) {
+                        continue
+                    }
                     val rect = Rect()
                     node.getBoundsInScreen(rect)
                     nodes.add(

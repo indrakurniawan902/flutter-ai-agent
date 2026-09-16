@@ -115,6 +115,138 @@ void main() {
     expect(assistantToolMessage.content, isNot(contains('"name"')));
   });
 
+  test(
+      'oversized text response skips the text tool-call scan and is surfaced untruncated',
+      () async {
+    final counts = <String, int>{};
+    final order = <String>[];
+    registerCountingTool('get_battery', counts, order);
+
+    final fixture = '${'[' * 40000}${']' * 40000}';
+
+    stubStream(
+      turn1: [
+        ChatChunk(contentDelta: fixture, finishReason: 'stop'),
+      ],
+    );
+
+    final stopwatch = Stopwatch()..start();
+    await cubit.sendMessage('Check battery');
+    stopwatch.stop();
+
+    expect(cubit.state, isA<AgentSuccess>());
+    final response = (cubit.state as AgentSuccess).response;
+    expect(response.length, equals(fixture.length));
+    expect(response, equals(fixture));
+    expect(counts['get_battery'], equals(0));
+    expect(order, isEmpty);
+    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 5)));
+  }, timeout: const Timeout(Duration(seconds: 30)));
+
+  test(
+      'long-but-below-cap text response still recovers and executes a bare tool call',
+      () async {
+    final counts = <String, int>{};
+    final order = <String>[];
+    registerCountingTool('get_battery', counts, order);
+
+    final padding = 'Battery status follows shortly. ' * 1000;
+    final fixture =
+        '$padding{"name": "get_battery", "arguments": {}}';
+    expect(fixture.length, lessThan(64 * 1024));
+
+    stubStream(
+      turn1: [
+        ChatChunk(contentDelta: fixture, finishReason: 'stop'),
+      ],
+      turn2: const [
+        ChatChunk(contentDelta: 'Battery is 85%.', finishReason: 'stop'),
+      ],
+    );
+
+    await cubit.sendMessage('Check battery');
+
+    expect(counts['get_battery'], equals(1));
+    expect(order, equals(['get_battery']));
+    expect(cubit.state, isA<AgentSuccess>());
+    expect((cubit.state as AgentSuccess).response, equals('Battery is 85%.'));
+
+    final assistantToolMessage = cubit.messages[1];
+    expect(assistantToolMessage.role, equals('assistant'));
+    expect(
+      assistantToolMessage.content,
+      startsWith('Battery status follows shortly.'),
+    );
+    expect(assistantToolMessage.content, isNot(contains('"name"')));
+    expect(assistantToolMessage.toolCalls, isNotNull);
+    expect(assistantToolMessage.toolCalls!.first.name, equals('get_battery'));
+  });
+
+  test(
+      'a text response of exactly the scan cap still recovers a bare tool call',
+      () async {
+    final counts = <String, int>{};
+    final order = <String>[];
+    registerCountingTool('get_battery', counts, order);
+
+    const bareCall = '{"name": "get_battery", "arguments": {}}';
+    final padding =
+        ('Battery status follows shortly. ' * 3000).substring(0, 64 * 1024 - bareCall.length);
+    final fixture = '$padding$bareCall';
+    expect(fixture.length, equals(64 * 1024));
+
+    stubStream(
+      turn1: [
+        ChatChunk(contentDelta: fixture, finishReason: 'stop'),
+      ],
+      turn2: const [
+        ChatChunk(contentDelta: 'Battery is 85%.', finishReason: 'stop'),
+      ],
+    );
+
+    await cubit.sendMessage('Check battery');
+
+    expect(counts['get_battery'], equals(1));
+    expect(order, equals(['get_battery']));
+    expect(cubit.state, isA<AgentSuccess>());
+    expect((cubit.state as AgentSuccess).response, equals('Battery is 85%.'));
+
+    final assistantToolMessage = cubit.messages[1];
+    expect(assistantToolMessage.role, equals('assistant'));
+    expect(assistantToolMessage.content, equals(padding));
+    expect(assistantToolMessage.content, isNot(contains('"name"')));
+    expect(assistantToolMessage.toolCalls, isNotNull);
+    expect(assistantToolMessage.toolCalls!.first.name, equals('get_battery'));
+  }, timeout: const Timeout(Duration(seconds: 30)));
+
+  test(
+      'a text response one character over the scan cap skips the fallback and surfaces the text in full',
+      () async {
+    final counts = <String, int>{};
+    final order = <String>[];
+    registerCountingTool('get_battery', counts, order);
+
+    const bareCall = '{"name": "get_battery", "arguments": {}}';
+    final padding = ('Battery status follows shortly. ' * 3000)
+        .substring(0, 64 * 1024 + 1 - bareCall.length);
+    final fixture = '$padding$bareCall';
+    expect(fixture.length, equals(64 * 1024 + 1));
+
+    stubStream(
+      turn1: [
+        ChatChunk(contentDelta: fixture, finishReason: 'stop'),
+      ],
+    );
+
+    await cubit.sendMessage('Check battery');
+
+    expect(counts['get_battery'], equals(0));
+    expect(order, isEmpty);
+    expect(cubit.state, isA<AgentSuccess>());
+    expect((cubit.state as AgentSuccess).response, equals(fixture));
+    expect((cubit.state as AgentSuccess).response.length, equals(fixture.length));
+  }, timeout: const Timeout(Duration(seconds: 30)));
+
   test('fenced tool_call block is executed', () async {
     final counts = <String, int>{};
     final order = <String>[];

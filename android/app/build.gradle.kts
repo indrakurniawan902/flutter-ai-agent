@@ -39,18 +39,6 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
-
-    flavorDimensions += "env"
-
-    productFlavors {
-        create("development") {
-            dimension = "env"
-            applicationIdSuffix = ".dev"
-        }
-        create("production") {
-            dimension = "env"
-        }
-    }
 }
 
 kotlin {

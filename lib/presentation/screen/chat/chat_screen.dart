@@ -15,7 +15,6 @@ import 'package:flutter_ai_agent/domain/entities/chat/chat_attachment.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_mode.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
-import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/battery_optimization_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/file_workspace_service.dart';
@@ -32,10 +31,12 @@ import 'package:flutter_ai_agent/presentation/screen/share/cubit/share_target_cu
 import 'package:flutter_ai_agent/presentation/widget/app_toast.dart';
 import 'package:flutter_ai_agent/presentation/screen/share/cubit/share_target_state.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
+import 'package:flutter_ai_agent/domain/services/voice/voice_prompt_dispatcher.dart';
 import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_routes.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
+import 'package:flutter_ai_agent/presentation/voice/chat_voice_prompt_dispatcher.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_approval_sheet.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/action_confirmation_card.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/app_settings_opener.dart';
@@ -68,7 +69,6 @@ class ChatScreen extends StatefulWidget {
   final Widget Function(BuildContext context)? qrScannerBuilder;
   final VoiceInputServiceBase? voiceInputService;
   final VoiceOutputServiceBase? voiceOutputService;
-  final BackgroundServiceBase? backgroundService;
   final PermissionGate? permissionGate;
 
   const ChatScreen({
@@ -82,7 +82,6 @@ class ChatScreen extends StatefulWidget {
     this.qrScannerBuilder,
     this.voiceInputService,
     this.voiceOutputService,
-    this.backgroundService,
     this.permissionGate,
   });
 
@@ -104,12 +103,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   VoiceInputServiceBase? _voiceService;
   VoiceOutputServiceBase? _voiceOutputService;
-  BackgroundServiceBase? _backgroundService;
+  VoicePromptDispatcherRegistry? _dispatcherRegistry;
   bool _isSpeakerMuted = false;
   StreamSubscription<VoiceInputStatus>? _voiceStatusSub;
   StreamSubscription<String>? _voiceErrorSub;
   StreamSubscription<String>? _voiceOutputErrorSub;
-  StreamSubscription<String>? _backgroundActionSub;
   bool _isVoiceRecording = false;
   bool _isHoldToSpeak = false;
   late ChatMode _mode;
@@ -200,21 +198,28 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             : null);
     _isSpeakerMuted = _voiceOutputService?.isMuted ?? false;
 
-    _backgroundService = widget.backgroundService ??
-        (sl.isRegistered<BackgroundServiceBase>()
-            ? sl<BackgroundServiceBase>()
-            : null);
-
-    _backgroundActionSub =
-        _backgroundService?.actionStream.listen(_handleBackgroundAction);
-    _checkPendingBackgroundAction();
-
     _rpcCubit = widget.gatewayRpcCubit ??
         (sl.isRegistered<GatewayRpcCubit>() ? sl<GatewayRpcCubit>() : null);
     _linkCubit = widget.gatewayLinkCubit ??
         (sl.isRegistered<GatewayLinkCubit>() ? sl<GatewayLinkCubit>() : null);
     _agentCubit = widget.agentCubit ??
         (sl.isRegistered<AgentCubit>() ? sl<AgentCubit>() : null);
+
+    // The mounted screen wins the registry over the headless fallback so an
+    // open Chat keeps updating; the notification action needs no screen.
+    _dispatcherRegistry = sl.isRegistered<VoicePromptDispatcherRegistry>()
+        ? sl<VoicePromptDispatcherRegistry>()
+        : null;
+    _dispatcherRegistry?.register(
+      ChatVoicePromptDispatcher(
+        resolveCubit: () => _agentCubit,
+        resolveGatewayClient: _resolveGatewayClient,
+        mode: () => _mode,
+        // This screen speaks AgentSuccess itself whenever it is mounted on the
+        // direct path, so the turn service must not speak the same reply.
+        speaksReply: () => _mode == ChatMode.direct,
+      ),
+    );
 
     _cameraVisionService = sl.isRegistered<CameraVisionServiceBase>()
         ? sl<CameraVisionServiceBase>()
@@ -415,7 +420,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _backgroundActionSub?.cancel();
+    _dispatcherRegistry?.unregister('chat');
     _voiceStatusSub?.cancel();
     _voiceErrorSub?.cancel();
     _voiceOutputErrorSub?.cancel();
@@ -508,30 +513,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       return await _permissionGate.requestWithRationale(context, type);
     } catch (_) {
       return true;
-    }
-  }
-
-  void _handleBackgroundAction(String action) {
-    if (!mounted) return;
-    switch (action.toLowerCase().trim()) {
-      case 'voice_input':
-        if (!_isVoiceRecording) {
-          _startVoiceInput();
-        }
-        break;
-      case 'quick_status':
-        _agentCubit?.sendMessage(
-          'Quick status check: summarize battery, device context, and agent readiness.',
-        );
-        break;
-    }
-  }
-
-  Future<void> _checkPendingBackgroundAction() async {
-    final pending = await _backgroundService?.getPendingAction();
-    if (pending != null && mounted) {
-      _handleBackgroundAction(pending);
-      await _backgroundService?.clearPendingAction();
     }
   }
 
@@ -1216,9 +1197,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _openQrScanner() async {
+    final currentOrigin =
+        _resolveServerProfileCubit()?.state.activeProfile?.gatewayUrl;
     final payload = await Navigator.of(context).push<PairingPayload>(
       MaterialPageRoute(
-        builder: widget.qrScannerBuilder ?? (_) => const QrScannerScreen(),
+        builder: widget.qrScannerBuilder ??
+            (_) => QrScannerScreen(currentGatewayOrigin: currentOrigin),
       ),
     );
 
@@ -1258,9 +1242,20 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _scanNfcTag() async {
-    if (_isNfcScanning) return;
+    if (_isNfcScanning) {
+      // Deliberate double-tap guard: it now tells the user instead of staying
+      // silent.
+      AppToast.info(context, 'NFC scan already in progress.');
+      return;
+    }
     final cubit = _resolveAgentCubit();
-    if (cubit == null) return;
+    if (cubit == null) {
+      AppToast.error(
+        context,
+        'Agent is not ready yet. Try again once the chat screen has finished loading.',
+      );
+      return;
+    }
     _isNfcScanning = true;
     try {
       final dispatched = await cubit.scanNfcAndDispatchPrompt();
@@ -1277,15 +1272,29 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           context.pushNamed(AppRoutes.nrSettings);
         },
       );
+    } catch (error) {
+      if (!mounted) return;
+      AppToast.error(context, 'NFC scan failed: $error');
     } finally {
       _isNfcScanning = false;
     }
   }
 
   Future<void> _scanNfcBalance() async {
-    if (_isNfcScanning) return;
+    if (_isNfcScanning) {
+      // Deliberate double-tap guard: it now tells the user instead of staying
+      // silent.
+      AppToast.info(context, 'NFC scan already in progress.');
+      return;
+    }
     final cubit = _resolveAgentCubit();
-    if (cubit == null) return;
+    if (cubit == null) {
+      AppToast.error(
+        context,
+        'Agent is not ready yet. Try again once the chat screen has finished loading.',
+      );
+      return;
+    }
     _isNfcScanning = true;
     try {
       final balance = await cubit.scanNfcEmoneyBalance();
@@ -1306,6 +1315,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           'Could not read e-Money balance. Enable NFC and tap the card, or use Settings > NFC Tag Triggers.',
         );
       }
+    } catch (error) {
+      if (!mounted) return;
+      AppToast.error(context, 'NFC scan failed: $error');
     } finally {
       _isNfcScanning = false;
     }
@@ -2389,61 +2401,70 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           ),
           const SizedBox(height: 8),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              OutlinedButton.icon(
-                key: const Key('notification_listener_banner_rebind_button'),
-                icon: const Icon(Icons.refresh_outlined, size: 14),
-                label: const Text('Hubungkan Ulang'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: HermesColors.amber,
-                  side: const BorderSide(color: HermesColors.amber),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  visualDensity: VisualDensity.compact,
-                ),
-                onPressed: () async {
-                  if (sl.isRegistered<NotificationTriageServiceBase>()) {
-                    final triage = sl<NotificationTriageServiceBase>();
-                    final success = await triage.requestRebind();
-                    if (!context.mounted) return;
-                    if (success) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content:
-                              Text('Listener berhasil terhubung kembali.'),
+              Expanded(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      key: const Key(
+                        'notification_listener_banner_rebind_button',
+                      ),
+                      icon: const Icon(Icons.refresh_outlined, size: 14),
+                      label: const Text('Hubungkan Ulang'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: HermesColors.amber,
+                        side: const BorderSide(color: HermesColors.amber),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      onPressed: () async {
+                        if (sl.isRegistered<NotificationTriageServiceBase>()) {
+                          final triage = sl<NotificationTriageServiceBase>();
+                          final success = await triage.requestRebind();
+                          if (!context.mounted) return;
+                          if (success) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content:
+                                    Text('Listener berhasil terhubung kembali.'),
+                              ),
+                            );
+                            await _checkNotificationListenerAndBatteryState();
+                          } else {
+                            await triage.requestPermission();
+                          }
+                        }
+                      },
+                    ),
+                    if (!_batteryOptimizationExempt)
+                      OutlinedButton.icon(
+                        key: const Key(
+                          'notification_listener_banner_battery_button',
                         ),
-                      );
-                      await _checkNotificationListenerAndBatteryState();
-                    } else {
-                      await triage.requestPermission();
-                    }
-                  }
-                },
-              ),
-              if (!_batteryOptimizationExempt) ...[
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  key: const Key(
-                    'notification_listener_banner_battery_button',
-                  ),
-                  icon: const Icon(Icons.battery_alert_outlined, size: 14),
-                  label: const Text('Optimasi Baterai'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: HermesColors.amber,
-                    side: const BorderSide(color: HermesColors.amber),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  onPressed: () async {
-                    if (sl.isRegistered<BatteryOptimizationServiceBase>()) {
-                      await sl<BatteryOptimizationServiceBase>()
-                          .requestDisableBatteryOptimization();
-                    }
-                  },
+                        icon: const Icon(Icons.battery_alert_outlined, size: 14),
+                        label: const Text('Optimasi Baterai'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: HermesColors.amber,
+                          side: const BorderSide(color: HermesColors.amber),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onPressed: () async {
+                          if (sl
+                              .isRegistered<BatteryOptimizationServiceBase>()) {
+                            await sl<BatteryOptimizationServiceBase>()
+                                .requestDisableBatteryOptimization();
+                          }
+                        },
+                      ),
+                  ],
                 ),
-              ],
-              const Spacer(),
+              ),
               IconButton(
                 key: const Key('notification_listener_banner_dismiss_button'),
                 icon: const Icon(Icons.close, size: 16),

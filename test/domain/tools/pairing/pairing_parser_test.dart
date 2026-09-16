@@ -197,6 +197,174 @@ void main() {
       });
     });
 
+    group('Negative Cases: Destination Confusion', () {
+      test('rejects a payload URL carrying a dotted user-info segment', () {
+        final json = jsonEncode({
+          'gatewayUrl': 'https://trusted.example@pair.evil.example:8443',
+          'token': 'secret-token-abc',
+          'profileName': 'Remote Node',
+          'timestamp': testNow.toIso8601String(),
+        });
+
+        final result = parser.parse(json, currentTime: testNow);
+
+        expect(result.isLeft(), isTrue);
+        result.fold(
+          (failure) {
+            expect(failure, isA<ParseFailure>());
+            expect(failure.message, contains('user-info'));
+          },
+          (_) => fail('Should fail when URL carries user-info'),
+        );
+      });
+
+      test('rejects user-info on an otherwise-private host', () {
+        final json = jsonEncode({
+          'gatewayUrl': 'http://pair.evil.example@192.168.1.50:18789',
+          'token': 'secret-token-abc',
+          'profileName': 'Remote Node',
+          'timestamp': testNow.toIso8601String(),
+        });
+
+        final result = parser.parse(json, currentTime: testNow);
+
+        expect(result.isLeft(), isTrue);
+        result.fold(
+          (failure) {
+            expect(failure, isA<ParseFailure>());
+            expect(failure.message, contains('user-info'));
+          },
+          (_) => fail('Should fail when private host URL carries user-info'),
+        );
+      });
+
+      test('rejects plaintext to a public host', () {
+        final json = jsonEncode({
+          'gatewayUrl': 'http://pair.evil.example:18789',
+          'token': 'secret-token-abc',
+          'profileName': 'Remote Node',
+          'timestamp': testNow.toIso8601String(),
+        });
+
+        final result = parser.parse(json, currentTime: testNow);
+
+        expect(result.isLeft(), isTrue);
+        result.fold(
+          (failure) {
+            expect(failure, isA<ParseFailure>());
+            expect(failure.message, contains('plaintext'));
+          },
+          (_) => fail('Should fail when plaintext targets a public host'),
+        );
+      });
+
+      test('accepts https to a public host (user confirmation is the control)', () {
+        final json = jsonEncode({
+          'gatewayUrl': 'https://pair.evil.example:8443',
+          'token': 'secret-token-abc',
+          'profileName': 'Remote Node',
+          'timestamp': testNow.toIso8601String(),
+        });
+
+        final result = parser.parse(json, currentTime: testNow);
+
+        expect(result.isRight(), isTrue);
+      });
+
+      test('accepts the plaintext LAN URL', () {
+        final json = jsonEncode({
+          'gatewayUrl': 'http://192.168.1.50:18789',
+          'token': 'secret-token-abc',
+          'profileName': 'Remote Node',
+          'timestamp': testNow.toIso8601String(),
+        });
+
+        final result = parser.parse(json, currentTime: testNow);
+
+        expect(result.isRight(), isTrue);
+      });
+
+      test('accepts plaintext to 10.0.0.7 port 18789', () {
+        final json = jsonEncode({
+          'gatewayUrl': 'http://10.0.0.7:18789',
+          'token': 'secret-token-abc',
+          'profileName': 'Remote Node',
+          'timestamp': testNow.toIso8601String(),
+        });
+
+        final result = parser.parse(json, currentTime: testNow);
+
+        expect(result.isRight(), isTrue);
+      });
+
+      test('accepts plaintext to localhost port 18789', () {
+        final json = jsonEncode({
+          'gatewayUrl': 'http://localhost:18789',
+          'token': 'secret-token-abc',
+          'profileName': 'Remote Node',
+          'timestamp': testNow.toIso8601String(),
+        });
+
+        final result = parser.parse(json, currentTime: testNow);
+
+        expect(result.isRight(), isTrue);
+      });
+
+      test('returns ParseFailure without throwing for an oversized port on https', () {
+        final json = jsonEncode({
+          'gatewayUrl': 'https://pair.evil.example:99999999999999999999',
+          'token': 'secret-token-abc',
+          'profileName': 'Remote Node',
+          'timestamp': testNow.toIso8601String(),
+        });
+
+        final result = parser.parse(json, currentTime: testNow);
+
+        expect(result.isLeft(), isTrue);
+        result.fold(
+          (failure) => expect(failure, isA<ParseFailure>()),
+          (_) => fail('Should fail on an oversized port'),
+        );
+      });
+
+      test('returns ParseFailure without throwing for an oversized port on a plaintext private host', () {
+        final json = jsonEncode({
+          'gatewayUrl': 'http://192.168.1.50:99999999999999999999',
+          'token': 'secret-token-abc',
+          'profileName': 'Remote Node',
+          'timestamp': testNow.toIso8601String(),
+        });
+
+        final result = parser.parse(json, currentTime: testNow);
+
+        expect(result.isLeft(), isTrue);
+        result.fold(
+          (failure) => expect(failure, isA<ParseFailure>()),
+          (_) => fail('Should fail on an oversized port'),
+        );
+      });
+
+      test('rejects an empty host without skipping the transport policy', () {
+        final json = jsonEncode({
+          'gatewayUrl': 'http://',
+          'token': 'secret-token-abc',
+          'profileName': 'Remote Node',
+          'timestamp': testNow.toIso8601String(),
+        });
+
+        final result = parser.parse(json, currentTime: testNow);
+
+        expect(result.isLeft(), isTrue);
+        result.fold(
+          (failure) {
+            expect(failure, isA<ParseFailure>());
+            expect(failure.message, isNot(contains('valid HTTP/HTTPS')));
+          },
+          (_) => fail('Should fail when the destination is unresolvable'),
+        );
+      });
+    });
+
     group('Negative Cases: Expired Token', () {
       test('returns ParseFailure when token has expired based on default maxAge (15 mins)', () {
         final oldTimestamp = testNow.subtract(const Duration(minutes: 16));

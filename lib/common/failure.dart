@@ -77,3 +77,28 @@ class CameraTimeoutFailure extends Failure {
     super.message = 'camera_timeout: Image capture timed out',
   ]);
 }
+
+class VoiceTurnBusyFailure extends Failure {
+  const VoiceTurnBusyFailure([
+    super.message = 'voice_turn_busy: a voice turn is already in progress',
+  ]);
+}
+
+class VoiceTurnEmptyFailure extends Failure {
+  const VoiceTurnEmptyFailure([
+    super.message = 'voice_turn_empty: no speech was recognized',
+  ]);
+}
+
+class VoiceTurnNoTransportFailure extends Failure {
+  const VoiceTurnNoTransportFailure([
+    super.message = 'voice_turn_no_transport: no chat transport is available',
+  ]);
+}
+
+class VoiceTurnNeedsApprovalFailure extends Failure {
+  const VoiceTurnNeedsApprovalFailure([
+    super.message =
+        'voice_turn_needs_approval: the agent is waiting for action approval',
+  ]);
+}

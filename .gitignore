@@ -52,3 +52,6 @@ app.*.map.json
 .hermes/
 
 .ref/
+
+# Transient worker task specs — live in docs/tasks/ (was repo root)
+/.task-*

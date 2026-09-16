@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:injectable/injectable.dart';
 import 'package:yaml/yaml.dart';
 
 import 'package:flutter_ai_agent/domain/entities/skills/doc_builder_skill_descriptor.dart';
 import 'package:flutter_ai_agent/domain/entities/skills/skill.dart';
+import 'package:flutter_ai_agent/domain/services/skills/skills_local_datasource.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 
 /// Manages registration, parsing, lifecycle, prompt injection, and tool registry sync
@@ -10,8 +13,16 @@ import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 @lazySingleton
 class SkillsRegistryService {
   final Map<String, Skill> _skills = {};
+  final SkillsLocalDatasourceBase? _localDatasource;
+  final void Function(Object error, StackTrace stack)? _onStorageError;
+  bool _hydrated = false;
+  Future<bool>? _hydration;
 
-  SkillsRegistryService({@ignoreParam bool loadDefaults = true}) {
+  SkillsRegistryService({
+    @ignoreParam bool loadDefaults = true,
+    SkillsLocalDatasourceBase? localDatasource,
+    @ignoreParam void Function(Object error, StackTrace stack)? onStorageError,
+  }) : _localDatasource = localDatasource, _onStorageError = onStorageError {
     if (loadDefaults) {
       _initializeBundledSkills();
     }
@@ -110,6 +121,101 @@ class SkillsRegistryService {
     _skills[skill.id] = skill;
   }
 
+  /// Loads persisted imported skills + enabled overrides once. Idempotent
+  /// and failure-tolerant: returns false when storage is unavailable,
+  /// never throws.
+  ///
+  /// Re-entrancy: concurrent callers share the SAME hydration future, so a
+  /// caller that joins while a load is in flight receives that load's real
+  /// result rather than an immediate success. A failed hydration clears the
+  /// shared future so a later call retries; a successful one stays cached.
+  /// With no datasource there is nothing to share, so the false result is
+  /// returned without caching.
+  Future<bool> hydrateFromStorage() {
+    if (_localDatasource == null) {
+      return Future.value(false);
+    }
+    final existing = _hydration;
+    if (existing != null) return existing;
+    final completer = Completer<bool>();
+    _hydration = completer.future;
+    _hydrate().then(
+      completer.complete,
+      onError: completer.completeError,
+    );
+    return completer.future;
+  }
+
+  Future<bool> _hydrate() async {
+    final datasource = _localDatasource;
+    if (datasource == null) {
+      return false;
+    }
+    if (_hydrated) {
+      return true;
+    }
+    _hydrated = true;
+    try {
+      final imported = await datasource.loadImportedSkills();
+      for (final skill in imported) {
+        registerSkill(skill);
+      }
+      final states = await datasource.loadSkillStates();
+      for (final entry in states.entries) {
+        final existing = _skills[entry.key];
+        if (existing != null) {
+          _skills[entry.key] =
+              existing.copyWith(isEnabled: entry.value);
+        }
+      }
+      return true;
+    } catch (error, stack) {
+      _hydrated = false;
+      _hydration = null;
+      _onStorageError?.call(error, stack);
+      return false;
+    }
+  }
+
+  /// Registers an imported community skill and persists it so it survives
+  /// a restart.
+  ///
+  /// Collision rule: unless [allowOverride] is true, an import never
+  /// overwrites an existing skill id. The bundled skill is preserved and
+  /// the import is re-namespaced to `<id>__community`, then
+  /// `<id>__community2`, `<id>__community3`, ... until the id is free.
+  /// The persisted skill keeps its final id so hydration round-trips.
+  Future<void> registerImportedSkill(
+    Skill skill, {
+    String? sourceUrl,
+    bool allowOverride = false,
+  }) async {
+    var stored = skill;
+    if (!allowOverride && _skills.containsKey(skill.id)) {
+      var candidate = '${skill.id}__community';
+      var suffix = 2;
+      while (_skills.containsKey(candidate)) {
+        candidate = '${skill.id}__community$suffix';
+        suffix++;
+      }
+      stored = skill.copyWith(id: candidate, isCommunity: true);
+    }
+    registerSkill(stored);
+    final datasource = _localDatasource;
+    if (datasource == null) {
+      return;
+    }
+    try {
+      await datasource.saveImportedSkill(
+        stored,
+        sourceUrl: sourceUrl,
+      );
+      await datasource.saveSkillState(stored.id, stored.isEnabled);
+    } catch (error, stack) {
+      _onStorageError?.call(error, stack);
+    }
+  }
+
   /// Parses and registers a skill directly from a YAML/Markdown string.
   Skill registerSkillFromMarkdown(String markdownContent) {
     final skill = parseSkillFromMarkdown(markdownContent);
@@ -119,8 +225,24 @@ class SkillsRegistryService {
 
   /// Removes a skill from the registry.
   void unregisterSkill(String skillIdOrName) {
+    final removedIds = <String>[];
+    final direct = _skills[skillIdOrName];
+    if (direct != null) {
+      removedIds.add(direct.id);
+    }
+    for (final s in _skills.values.toList()) {
+      if (s.name == skillIdOrName && !removedIds.contains(s.id)) {
+        removedIds.add(s.id);
+      }
+    }
     _skills.remove(skillIdOrName);
     _skills.removeWhere((_, s) => s.name == skillIdOrName);
+    final datasource = _localDatasource;
+    if (datasource != null) {
+      for (final id in removedIds) {
+        unawaited(_deletePersisted(id));
+      }
+    }
   }
 
   /// Enables or disables a skill.
@@ -128,6 +250,25 @@ class SkillsRegistryService {
     final skill = getSkill(skillIdOrName);
     if (skill != null) {
       _skills[skill.id] = skill.copyWith(isEnabled: isEnabled);
+      if (_localDatasource != null) {
+        unawaited(_persistSkillState(skill.id, isEnabled));
+      }
+    }
+  }
+
+  Future<void> _persistSkillState(String id, bool isEnabled) async {
+    try {
+      await _localDatasource?.saveSkillState(id, isEnabled);
+    } catch (error, stack) {
+      _onStorageError?.call(error, stack);
+    }
+  }
+
+  Future<void> _deletePersisted(String id) async {
+    try {
+      await _localDatasource?.deleteImportedSkill(id);
+    } catch (error, stack) {
+      _onStorageError?.call(error, stack);
     }
   }
 

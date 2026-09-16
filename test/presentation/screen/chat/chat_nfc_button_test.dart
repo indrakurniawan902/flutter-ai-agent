@@ -242,6 +242,42 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets(
+      'tapping scan while a scan is already in flight tells the user instead of staying silent',
+      (tester) async {
+    final gate = Completer<void>();
+    when(() => fakeNfc.readCardUid()).thenAnswer((_) async {
+      await gate.future;
+      return const Right('aabbcc');
+    });
+
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_nfc_scan_button')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('chat_nfc_scan_button')));
+    await tester.pump();
+
+    expect(find.textContaining('already in progress'), findsOneWidget);
+
+    gate.complete();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('tapping the scan button surfaces a toast when the NFC call throws',
+      (tester) async {
+    when(() => fakeNfc.readCardUid()).thenThrow(StateError('nfc boom'));
+
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_nfc_scan_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('NFC scan failed'), findsOneWidget);
+  });
+
   group('AgentCubit NFC pre-flight checks and DI', () {
     test('scanNfcAndDispatchPrompt returns false when NFC is not available',
         () async {

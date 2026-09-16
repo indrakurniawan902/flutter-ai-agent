@@ -2,7 +2,6 @@ package ai.hermes.flames
 
 import android.Manifest
 import android.app.AlarmManager
-import android.app.NotificationListenerService
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -14,6 +13,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
+import android.service.notification.NotificationListenerService
 import androidx.annotation.NonNull
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
@@ -36,6 +36,7 @@ class MainActivity : FlutterActivity() {
     private val EXACT_ALARM_CHANNEL = "ai.hermes.flames/exact_alarm"
     private val HEALTH_CHANNEL = "ai.hermes.flames/health"
     private val ACCESSIBILITY_CHANNEL = "ai.hermes.flames/accessibility_inspector"
+    private val OVERLAY_BUBBLE_CHANNEL = "ai.hermes.flames/overlay_bubble"
 
     private val CONTACTS_PERMISSION_REQUEST_CODE = 1001
     private var pendingContactsResult: MethodChannel.Result? = null
@@ -64,16 +65,21 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    override fun onDestroy() {
+        FlamesBackgroundService.detachDartChannel()
+        super.onDestroy()
+    }
+
     private fun extractActionFromIntent(intent: Intent?): String? {
+        when (intent?.action) {
+            Intent.ACTION_SEND,
+            Intent.ACTION_SEND_MULTIPLE,
+            Intent.ACTION_VIEW -> return null
+        }
         val actionExtra = intent?.getStringExtra("extra_flames_action")
-        if (!actionExtra.isNullOrBlank()) {
+        if (actionExtra != null && actionExtra in ALLOWED_ACTIONS) {
             pendingAction = actionExtra
             return actionExtra
-        }
-        if (intent?.action == FlamesQuickTile.ACTION_QUICK_TILE_TRIGGER) {
-            val fallbackAction = "voice_input"
-            pendingAction = fallbackAction
-            return fallbackAction
         }
         return null
     }
@@ -188,9 +194,69 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
+        // Overlay Bubble Channel
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, OVERLAY_BUBBLE_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "isPermissionGranted" -> {
+                        result.success(
+                            Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
+                                Settings.canDrawOverlays(this)
+                        )
+                    }
+                    "requestPermission" -> {
+                        try {
+                            val intent = Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:$packageName")
+                            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            try {
+                                startActivity(intent)
+                            } catch (_: Exception) {
+                                val fallback = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                try {
+                                    startActivity(fallback)
+                                } catch (_: Exception) {
+                                    result.success(false)
+                                    return@setMethodCallHandler
+                                }
+                            }
+                            result.success(true)
+                        } catch (_: Exception) {
+                            result.success(false)
+                        }
+                    }
+                    "isBubbleVisible" -> {
+                        result.success(FlamesOverlayBubble.isVisible())
+                    }
+                    "showBubble" -> {
+                        if (!Settings.canDrawOverlays(this)) {
+                            result.success(false)
+                        } else {
+                            FlamesBackgroundService.showBubble(this)
+                            result.success(true)
+                        }
+                    }
+                    "hideBubble" -> {
+                        FlamesBackgroundService.hideBubble(this)
+                        result.success(true)
+                    }
+                    "setRecording" -> {
+                        val recording = call.argument<Boolean>("recording") ?: false
+                        FlamesOverlayBubble.setRecording(recording)
+                        result.success(true)
+                    }
+                    else -> {
+                        result.notImplemented()
+                    }
+                }
+            }
+
         // Background Service & Quick Settings Tile Channel
         val bgChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BACKGROUND_CHANNEL)
         backgroundMethodChannel = bgChannel
+        FlamesBackgroundService.attachDartChannel(bgChannel)
         bgChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "startForegroundService" -> {
@@ -375,6 +441,7 @@ class MainActivity : FlutterActivity() {
                             "nfc" -> Settings.ACTION_NFC_SETTINGS
                             "app_details" -> Settings.ACTION_APPLICATION_DETAILS_SETTINGS
                             "accessibility" -> Settings.ACTION_ACCESSIBILITY_SETTINGS
+                            "overlay" -> Settings.ACTION_MANAGE_OVERLAY_PERMISSION
                             else -> null
                         }
                         if (action == null) {
@@ -547,5 +614,9 @@ class MainActivity : FlutterActivity() {
         } catch (_: Exception) {
             false
         }
+    }
+
+    private companion object {
+        val ALLOWED_ACTIONS = setOf("voice_input", "cancel_voice", "quick_status")
     }
 }

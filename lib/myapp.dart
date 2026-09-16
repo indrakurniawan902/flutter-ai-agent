@@ -2,23 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 
-import 'package:flutter_ai_agent/common/flavor_config.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/common/constant.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/domain/repositories/action_center/action_center_repository.dart';
+import 'package:flutter_ai_agent/domain/services/skills/skills_registry_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart';
 import 'package:flutter_ai_agent/utils/app_theme.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_router.dart';
+import 'package:flutter_ai_agent/presentation/voice/voice_turn_action_listener.dart';
 
-Future<void> bootstrap(FlavorConfig flavor) async {
-  FlavorConfig.current = flavor;
+Future<void> bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
   await _initHiveAdapters();
   configureInjection();
+  await _primeSkillsRegistry();
   await _hydrateGeofenceEngine();
   await _primeActionCenterStore();
-  runApp(MyApp(flavor: flavor));
+  runApp(const MyApp());
 }
 
 /// Seeds the ambient trigger engine with the geofences persisted by the
@@ -49,6 +50,16 @@ Future<void> _initHiveAdapters() async {
   }
 }
 
+/// Hydrates persisted imported skills once so the registry (and the agent
+/// system prompt) includes them even when the Skills Hub tab never opens.
+Future<void> _primeSkillsRegistry() async {
+  try {
+    await getIt<SkillsRegistryService>().hydrateFromStorage();
+  } catch (e) {
+    debugPrint('Skills registry hydration skipped: $e');
+  }
+}
+
 /// Resolves the async Action Center graph once so the box is open and
 /// screens can read [ActionCenterRepository] synchronously.
 Future<void> _primeActionCenterStore() async {
@@ -60,12 +71,10 @@ Future<void> _primeActionCenterStore() async {
 }
 
 class MyApp extends StatelessWidget {
-  final FlavorConfig? flavor;
   final GoRouter? router;
 
   const MyApp({
     super.key,
-    this.flavor,
     this.router,
   });
 
@@ -76,6 +85,9 @@ class MyApp extends StatelessWidget {
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
+      builder: (context, child) => VoiceTurnActionListener(
+        child: child ?? const SizedBox.shrink(),
+      ),
       routeInformationProvider: effectiveRouter.routeInformationProvider,
       routeInformationParser: effectiveRouter.routeInformationParser,
       routerDelegate: effectiveRouter.routerDelegate,

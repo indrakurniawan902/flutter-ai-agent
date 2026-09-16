@@ -20,6 +20,8 @@ import 'package:flutter_ai_agent/data/datasources/local/memory/sqlite_memory_dat
     as _i445;
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart'
     as _i348;
+import 'package:flutter_ai_agent/data/datasources/local/skills/skills_local_datasource.dart'
+    as _i1021;
 import 'package:flutter_ai_agent/data/datasources/remote/chat/chat_datasource.dart'
     as _i522;
 import 'package:flutter_ai_agent/data/datasources/remote/chat/sse_parser.dart'
@@ -30,8 +32,10 @@ import 'package:flutter_ai_agent/data/datasources/remote/pairing/scanner_control
     as _i319;
 import 'package:flutter_ai_agent/data/datasources/skills/doc_builder_skill.dart'
     as _i701;
+import 'package:flutter_ai_agent/data/datasources/remote/skills/skill_remote_loader.dart'
+    as _i1042;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/accessibility_inspector_service.dart'
-    as _i1021;
+    as _i974;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/ambient_trigger_service.dart'
     as _i315;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/background_service.dart'
@@ -60,10 +64,12 @@ import 'package:flutter_ai_agent/data/datasources/tools/chat/notification_servic
     as _i89;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/notification_triage_service.dart'
     as _i447;
+import 'package:flutter_ai_agent/data/datasources/tools/chat/overlay_bubble_service.dart'
+    as _i607;
+import 'package:flutter_ai_agent/data/datasources/tools/chat/piper_tts_engine.dart'
+    as _i753;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/url_reader_service.dart'
     as _i840;
-import 'package:flutter_ai_agent/data/datasources/tools/chat/piper_tts_engine.dart'
-    as _i754;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/voice_input_service.dart'
     as _i845;
 import 'package:flutter_ai_agent/data/datasources/tools/chat/voice_output_service.dart'
@@ -78,6 +84,8 @@ import 'package:flutter_ai_agent/data/repositories/chat_repository_impl.dart'
     as _i236;
 import 'package:flutter_ai_agent/data/services/tools/tool_pruning_service_impl.dart'
     as _i641;
+import 'package:flutter_ai_agent/data/services/voice/voice_turn_service.dart'
+    as _i599;
 import 'package:flutter_ai_agent/domain/repositories/action_center/action_center_repository.dart'
     as _i474;
 import 'package:flutter_ai_agent/domain/repositories/chat/chat_local_repository.dart'
@@ -94,12 +102,26 @@ import 'package:flutter_ai_agent/domain/services/share/share_target_service.dart
     as _i205;
 import 'package:flutter_ai_agent/domain/services/shortcuts/quick_actions_service.dart'
     as _i355;
+import 'package:flutter_ai_agent/domain/services/skills/skill_import_service.dart'
+    as _i124;
+import 'package:flutter_ai_agent/domain/services/skills/skill_remote_loader.dart'
+    as _i680;
+import 'package:flutter_ai_agent/domain/services/skills/skill_security_scanner.dart'
+    as _i988;
+import 'package:flutter_ai_agent/domain/services/skills/skills_local_datasource.dart'
+    as _i292;
 import 'package:flutter_ai_agent/domain/services/skills/skills_registry_service.dart'
     as _i791;
 import 'package:flutter_ai_agent/domain/services/tools/tool_pruning_service.dart'
     as _i939;
+import 'package:flutter_ai_agent/domain/services/voice/gateway_voice_prompt_dispatcher.dart'
+    as _i407;
+import 'package:flutter_ai_agent/domain/services/voice/voice_prompt_dispatcher.dart'
+    as _i31;
+import 'package:flutter_ai_agent/domain/services/voice/voice_turn_service.dart'
+    as _i316;
 import 'package:flutter_ai_agent/domain/tools/chat/accessibility_inspector_service.dart'
-    as _i1022;
+    as _i435;
 import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart'
     as _i290;
 import 'package:flutter_ai_agent/domain/tools/chat/background_service.dart'
@@ -130,6 +152,8 @@ import 'package:flutter_ai_agent/domain/tools/chat/notification_service.dart'
     as _i919;
 import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.dart'
     as _i396;
+import 'package:flutter_ai_agent/domain/tools/chat/overlay_bubble_service.dart'
+    as _i885;
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart' as _i732;
 import 'package:flutter_ai_agent/domain/tools/chat/url_reader_service.dart'
     as _i14;
@@ -191,8 +215,11 @@ extension GetItInjectableX on _i174.GetIt {
       () => _i445.SqliteMemoryDatasource.create(),
     );
     gh.lazySingleton<_i598.SseParser>(() => _i598.SseParser());
-    gh.lazySingleton<_i791.SkillsRegistryService>(
-      () => _i791.SkillsRegistryService(),
+    gh.lazySingleton<_i988.SkillSecurityScanner>(
+      () => _i988.SkillSecurityScanner(),
+    );
+    gh.lazySingleton<_i31.VoicePromptDispatcherRegistry>(
+      () => _i31.VoicePromptDispatcherRegistry(),
     );
     gh.lazySingleton<_i301.PairingParser>(() => const _i301.PairingParser());
     gh.lazySingleton<_i919.NotificationServiceBase>(
@@ -215,11 +242,20 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i14.UrlReaderServiceBase>(
       () => _i840.UrlReaderService.create(gh<_i361.Dio>()),
     );
+    gh.lazySingleton<_i292.SkillsLocalDatasourceBase>(
+      () => _i1021.SkillsLocalDatasource.create(),
+    );
     gh.lazySingleton<_i821.QrScannerControllerBase>(
       () => _i319.MobileScannerControllerWrapper(),
     );
     gh.lazySingleton<_i547.ClipboardServiceBase>(
       () => _i105.ClipboardService.create(),
+    );
+    gh.lazySingleton<_i435.AccessibilityInspectorServiceBase>(
+      () => _i974.AccessibilityInspectorService.create(),
+    );
+    gh.lazySingleton<_i680.SkillRemoteLoaderBase>(
+      () => _i1042.SkillRemoteLoader.create(gh<_i361.Dio>()),
     );
     gh.lazySingleton<_i192.LlmRepository>(
       () => _i236.LlmRepositoryImpl(
@@ -241,6 +277,9 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i987.LocalMemoryServiceBase>(
       () => _i734.LocalMemoryService.create(),
     );
+    gh.lazySingleton<_i45.PiperVoiceStoreBase>(
+      () => _i753.PiperVoiceStore.create(),
+    );
     gh.lazySingleton<_i815.CameraVisionServiceBase>(
       () => _i561.CameraVisionService.create(),
     );
@@ -252,12 +291,6 @@ extension GetItInjectableX on _i174.GetIt {
     );
     gh.lazySingleton<_i45.PlatformTtsEngine>(
       () => _i753.FlutterTtsPlatformEngine(),
-    );
-    gh.lazySingleton<_i45.PiperVoiceStoreBase>(
-      () => _i754.PiperVoiceStore.create(),
-    );
-    gh.lazySingleton<_i45.PiperTtsEngineBase>(
-      () => _i754.PiperTtsEngine.create(gh<_i45.PiperVoiceStoreBase>()),
     );
     gh.lazySingleton<_i173.IntentLauncherServiceBase>(
       () => _i313.IntentLauncherServiceImpl.create(),
@@ -305,9 +338,6 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i396.NotificationTriageServiceBase>(
       () => _i447.NotificationTriageService.create(),
     );
-    gh.lazySingleton<_i1022.AccessibilityInspectorServiceBase>(
-      () => _i1021.AccessibilityInspectorService.create(),
-    );
     gh.lazySingleton<_i753.TtsClient>(
       () => _i753.DioTtsClient.create(
         gh<_i361.Dio>(),
@@ -319,54 +349,42 @@ extension GetItInjectableX on _i174.GetIt {
         datasource: await getAsync<_i561.ActionCenterDatasource>(),
       ),
     );
-    gh.factory<_i452.SettingsCubit>(
-      () => _i452.SettingsCubit.create(
-        secureStorageService: gh<_i348.SecureStorageService>(),
-        nfcService: gh<_i350.NfcServiceBase>(),
-        piperVoiceStore: gh<_i45.PiperVoiceStoreBase>(),
-        voiceOutputService: gh<_i45.VoiceOutputServiceBase>(),
-      ),
-    );
-    gh.factory<_i96.SkillsCubit>(
-      () => _i96.SkillsCubit(
-        skillsRegistryService: gh<_i791.SkillsRegistryService>(),
-      ),
+    gh.lazySingleton<_i885.OverlayBubbleServiceBase>(
+      () => _i607.OverlayBubbleService.create(gh<_i348.SecureStorageService>()),
     );
     gh.lazySingleton<_i445.ChatLocalRepository>(
       () => _i92.ChatLocalRepositoryImpl(
         datasource: gh<_i613.ChatLocalDatasource>(),
       ),
     );
-    gh.lazySingleton<_i732.ToolRegistry>(
-      () {
-        final registry = _i732.ToolRegistry(
-          clipboardService: gh<_i547.ClipboardServiceBase>(),
-          locationService: gh<_i292.LocationServiceBase>(),
-          deviceContextService: gh<_i3.DeviceContextServiceBase>(),
-          cameraVisionService: gh<_i815.CameraVisionServiceBase>(),
-          calendarService: gh<_i1020.CalendarServiceBase>(),
-          notificationService: gh<_i919.NotificationServiceBase>(),
-          fileWorkspaceService: gh<_i745.FileWorkspaceServiceBase>(),
-          notificationTriageService: gh<_i396.NotificationTriageServiceBase>(),
-          localMemoryService: gh<_i987.LocalMemoryServiceBase>(),
-          ambientTriggerService: gh<_i290.AmbientTriggerServiceBase>(),
-          voiceInputService: gh<_i652.VoiceInputServiceBase>(),
-          voiceOutputService: gh<_i45.VoiceOutputServiceBase>(),
-          backgroundService: gh<_i791.BackgroundServiceBase>(),
-          contactLauncherTools: gh<_i777.ContactLauncherTools>(),
-          intentLauncherService: gh<_i173.IntentLauncherServiceBase>(),
-          urlReaderService: gh<_i14.UrlReaderServiceBase>(),
-          nfcService: gh<_i350.NfcServiceBase>(),
-          healthService: gh<_i662.HealthServiceBase>(),
-          accessibilityInspectorService:
-              gh<_i1022.AccessibilityInspectorServiceBase>(),
-        );
-        // MANUAL: build_runner cannot generate this - DocBuilderSkill is not
-        // annotated. Re-add after every DI regeneration.
-        _i701.DocBuilderSkill.registerTools(registry);
-        return registry;
-      },
-    );
+    gh.lazySingleton<_i732.ToolRegistry>(() {
+      final registry = _i732.ToolRegistry(
+        clipboardService: gh<_i547.ClipboardServiceBase>(),
+        locationService: gh<_i292.LocationServiceBase>(),
+        deviceContextService: gh<_i3.DeviceContextServiceBase>(),
+        cameraVisionService: gh<_i815.CameraVisionServiceBase>(),
+        calendarService: gh<_i1020.CalendarServiceBase>(),
+        notificationService: gh<_i919.NotificationServiceBase>(),
+        fileWorkspaceService: gh<_i745.FileWorkspaceServiceBase>(),
+        notificationTriageService: gh<_i396.NotificationTriageServiceBase>(),
+        localMemoryService: gh<_i987.LocalMemoryServiceBase>(),
+        ambientTriggerService: gh<_i290.AmbientTriggerServiceBase>(),
+        voiceInputService: gh<_i652.VoiceInputServiceBase>(),
+        voiceOutputService: gh<_i45.VoiceOutputServiceBase>(),
+        backgroundService: gh<_i791.BackgroundServiceBase>(),
+        contactLauncherTools: gh<_i777.ContactLauncherTools>(),
+        intentLauncherService: gh<_i173.IntentLauncherServiceBase>(),
+        urlReaderService: gh<_i14.UrlReaderServiceBase>(),
+        nfcService: gh<_i350.NfcServiceBase>(),
+        healthService: gh<_i662.HealthServiceBase>(),
+        accessibilityInspectorService:
+            gh<_i435.AccessibilityInspectorServiceBase>(),
+      );
+      // MANUAL: build_runner cannot generate this - DocBuilderSkill is not
+      // annotated. Re-add after every DI regeneration.
+      _i701.DocBuilderSkill.registerTools(registry);
+      return registry;
+    });
     gh.factory<_i15.AgentCubit>(
       () => _i15.AgentCubit.create(
         llmRepository: gh<_i192.LlmRepository>(),
@@ -376,13 +394,18 @@ extension GetItInjectableX on _i174.GetIt {
         nfcService: gh<_i350.NfcServiceBase>(),
       ),
     );
+    gh.lazySingleton<_i791.SkillsRegistryService>(
+      () => _i791.SkillsRegistryService(
+        localDatasource: gh<_i292.SkillsLocalDatasourceBase>(),
+      ),
+    );
+    gh.lazySingleton<_i45.PiperTtsEngineBase>(
+      () => _i753.PiperTtsEngine.create(gh<_i45.PiperVoiceStoreBase>()),
+    );
     gh.factory<_i819.ServerProfileCubit>(
       () => _i819.ServerProfileCubit.create(
         secureStorageService: gh<_i348.SecureStorageService>(),
       ),
-    );
-    gh.lazySingleton<_i122.GatewayClient>(
-      () => gatewayModule.provideGatewayClient(gh<_i732.ToolRegistry>()),
     );
     gh.lazySingleton<_i45.VoiceOutputServiceBase>(
       () => _i753.VoiceOutputService.create(
@@ -393,8 +416,40 @@ extension GetItInjectableX on _i174.GetIt {
         gh<_i348.SecureStorageService>(),
       ),
     );
+    gh.lazySingleton<_i122.GatewayClient>(
+      () => gatewayModule.provideGatewayClient(gh<_i732.ToolRegistry>()),
+    );
+    gh.factory<_i452.SettingsCubit>(
+      () => _i452.SettingsCubit.create(
+        secureStorageService: gh<_i348.SecureStorageService>(),
+        nfcService: gh<_i350.NfcServiceBase>(),
+        piperVoiceStore: gh<_i45.PiperVoiceStoreBase>(),
+        voiceOutputService: gh<_i45.VoiceOutputServiceBase>(),
+      ),
+    );
+    gh.lazySingleton<_i316.VoiceTurnServiceBase>(
+      () => _i599.VoiceTurnService.create(
+        gh<_i652.VoiceInputServiceBase>(),
+        gh<_i45.VoiceOutputServiceBase>(),
+        gh<_i31.VoicePromptDispatcherRegistry>(),
+      ),
+    );
+    gh.lazySingleton<_i124.SkillImportService>(
+      () => _i124.SkillImportService(
+        loader: gh<_i680.SkillRemoteLoaderBase>(),
+        registry: gh<_i791.SkillsRegistryService>(),
+        scanner: gh<_i988.SkillSecurityScanner>(),
+        toolRegistry: gh<_i732.ToolRegistry>(),
+      ),
+    );
     gh.lazySingleton<_i27.GatewayClientBase>(
       () => gatewayModule.provideGatewayClientBase(gh<_i122.GatewayClient>()),
+    );
+    gh.factory<_i96.SkillsCubit>(
+      () => _i96.SkillsCubit(
+        skillsRegistryService: gh<_i791.SkillsRegistryService>(),
+        skillImportService: gh<_i124.SkillImportService>(),
+      ),
     );
     gh.factory<_i118.GatewayRpcCubit>(
       () => _i118.GatewayRpcCubit.create(
@@ -412,6 +467,11 @@ extension GetItInjectableX on _i174.GetIt {
       () => _i98.GatewayLinkCubit.create(
         gatewayClient: gh<_i27.GatewayClientBase>(),
         backgroundService: gh<_i791.BackgroundServiceBase>(),
+      ),
+    );
+    gh.lazySingleton<_i407.GatewayVoicePromptDispatcher>(
+      () => _i407.GatewayVoicePromptDispatcher(
+        client: gh<_i27.GatewayClientBase>(),
       ),
     );
     return this;

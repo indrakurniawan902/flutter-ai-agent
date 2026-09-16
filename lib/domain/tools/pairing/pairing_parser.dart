@@ -4,6 +4,7 @@ import 'package:dartz/dartz.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
+import 'package:flutter_ai_agent/domain/services/gateway/pairing_destination.dart';
 import 'package:injectable/injectable.dart';
 
 /// Parses and validates pairing payloads from QR codes or manual input.
@@ -17,6 +18,11 @@ class PairingParser {
   /// - JSON well-formedness.
   /// - Required fields: [gatewayUrl], [token], [profileName].
   /// - [gatewayUrl] is a valid HTTP or HTTPS URL.
+  /// - [gatewayUrl] carries no user-info credentials (a payload whose URL
+  ///   embeds a trusted-looking user-info segment would open the socket to a
+  ///   different host entirely).
+  /// - Plaintext (`http`) [gatewayUrl] is only accepted for local-network
+  ///   hosts; HTTPS to any host is admitted and gated by user confirmation.
   /// - Token freshness if [checkExpiration] is true.
   Either<Failure, PairingPayload> parse(
     String rawData, {
@@ -58,6 +64,34 @@ class PairingParser {
     if (!isValidHttpUrl) {
       return const Left(
         ParseFailure('Invalid pairing payload: gatewayUrl must be a valid HTTP/HTTPS URL'),
+      );
+    }
+
+    // No legitimate gateway URL in this codebase carries user-info: the
+    // credential travels in the authentication frame. A payload whose URL
+    // embeds a user-info segment naming a trusted-looking host opens the
+    // socket to a different host entirely, so reject it outright.
+    if (uri.userInfo.isNotEmpty) {
+      return const Left(
+        ParseFailure('Invalid pairing payload: gatewayUrl must not contain user-info credentials'),
+      );
+    }
+
+    // Transport policy: plaintext pairing is deliberate for local networks
+    // only. HTTPS to any host stays valid here - the origin confirmation
+    // step is the control for a hostile public HTTPS origin. Fail closed: a
+    // URL the resolver cannot turn into a usable destination (empty host,
+    // nonsense port, ...) is rejected instead of skipping the policy.
+    final destination = resolvePairingDestination(rawGateway);
+    if (destination == null) {
+      return const Left(
+        ParseFailure('Invalid pairing payload: gatewayUrl does not resolve to a usable destination'),
+      );
+    }
+
+    if (destination.isPlaintext && !isPlaintextPairingAllowed(rawGateway)) {
+      return const Left(
+        ParseFailure('Invalid pairing payload: plaintext gatewayUrl is only allowed for local network hosts'),
       );
     }
 

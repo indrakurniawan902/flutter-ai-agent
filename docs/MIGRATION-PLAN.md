@@ -16,7 +16,7 @@
 
 ```text
 lib/
-  main.dart / main_development.dart / main_production.dart / app.dart
+  main.dart                     # single entrypoint → bootstrap()
   common/          # injection/, constant.dart, failure.dart, exception.dart,
                    # remote_response_mapper.dart, hive_constant.dart
   data/            # datasources/{remote,local}/<feature>/, models/<feature>/,
@@ -64,19 +64,22 @@ lib/
   service; promote to a shared data service if reused beyond settings).
 - **`lib/features/navigation/presentation/widgets/floating_bottom_nav_bar.dart`** →
   `lib/presentation/widget/floating_bottom_nav_bar.dart` (shared across shells).
-- **Root entries** (`lib/app.dart`, `lib/main*.dart`) stay at repo root; `test/helpers/`,
+- **Root entry** (`lib/main.dart`) stays at repo root — there is no `lib/app.dart`
+  and no `lib/main*.dart` family any more; `test/helpers/`,
   `test/integration/`, `test/app_test.dart` stay put.
 - **`lib/features/gateway/**`** — listed in architecture/features but has no files
   tracked today; when gateway code lands, follow the same rules (implementation
   under `data/tools/gateway/` or `data/datasources/`, contract under
   `domain/repositories/gateway/`).
 
-## 4. Full file-by-file mapping (105 files = 63 lib + 42 test)
+## 4. Full file-by-file mapping (103 files = 61 lib + 42 test)
 
-<!-- TABLE GENERATED FROM git ls-files lib test (105 rows) -->
+<!-- TABLE GENERATED FROM git ls-files lib test (103 rows); the two dev/prod flavor
+     entrypoints were dropped when that flavor split was reverted, so this table is now
+     hand-maintained at 103 rows. -->
 | Old path (today) | New path (layer-first target) | Note |
 |---|---|---|
-| `lib/app.dart` | `lib/myapp.dart` | [DONE] deleted and consolidated into lib/myapp.dart + lib/main_{development,production}.dart per T13.7 (GoRouter + myapp bootstrap) |
+| `lib/app.dart` | `lib/myapp.dart` | [DONE] deleted and consolidated into lib/myapp.dart + the single lib/main.dart per T13.7 (GoRouter + myapp bootstrap) |
 | `lib/common/constants.dart` | `—` | re-export shim -> DELETE (update imports, no replacement path) |
 | `lib/common/either_extensions.dart` | `—` | re-export shim -> DELETE (update imports, no replacement path) |
 | `lib/common/failures.dart` | `—` | re-export shim -> DELETE (update imports, no replacement path) |
@@ -136,9 +139,7 @@ lib/
 | `lib/features/settings/presentation/screens/settings_screen.dart` | `lib/presentation/screen/settings/settings_screen.dart` | [DONE] |
 | `lib/features/skills/presentation/screens/skills_hub_screen.dart` | `lib/presentation/screen/skills/skills_hub_screen.dart` | [DONE] |
 | `lib/features/splash/presentation/screens/splash_screen.dart` | `lib/presentation/screen/splash/splash_screen.dart` | [DONE] |
-| `lib/main.dart` | `lib/main_{development,production}.dart` | [DONE] deleted and consolidated into lib/myapp.dart + lib/main_{development,production}.dart per T13.7 (GoRouter + myapp bootstrap) |
-| `lib/main_development.dart` | `lib/main_development.dart` | stays at repo root |
-| `lib/main_production.dart` | `lib/main_production.dart` | stays at repo root |
+| `lib/main.dart` | `lib/main.dart` | [DONE] single entrypoint; the dev/prod split introduced by T13.7 was reverted (this card removed it) |
 | `test/app_test.dart` | `test/app_test.dart` | stays (mirrors repo-root file / shared helpers / e2e) |
 | `test/core/di/injection_container_test.dart` | `test/common/injection/injection_container_test.dart` | [DONE] mirrors new injection home |
 | `test/core/theme/hermes_theme_test.dart` | `test/utils/hermes_theme_test.dart` | mirrors token move to utils/ |

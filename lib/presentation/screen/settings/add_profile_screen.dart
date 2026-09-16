@@ -82,6 +82,7 @@ class _AddProfileViewState extends State<_AddProfileView> {
   bool _isTesting = false;
   String? _probeMessage;
   bool? _probeSuccess;
+  bool _probeNotice = false;
   bool _obscureToken = true;
   bool _operationHandled = false;
   ServerProfileProbeService? _probeService;
@@ -143,6 +144,7 @@ class _AddProfileViewState extends State<_AddProfileView> {
                       _mode = selection.first;
                       _probeMessage = null;
                       _probeSuccess = null;
+                      _probeNotice = false;
                     });
                   },
                 ),
@@ -157,13 +159,19 @@ class _AddProfileViewState extends State<_AddProfileView> {
                   decoration: _inputDecoration(
                     isHermesNode ? 'Server URL' : 'Base URL',
                     isHermesNode
-                        ? 'https://hermes.example.com/v1'
+                        ? 'https://hermes.example.com'
                         : 'https://api.openai.com/v1',
                   ),
-                  validator: (value) => isAcceptableGatewayUrl(value ?? '')
-                      ? null
-                      : 'Enter a valid HTTP/HTTPS/WS/WSS URL',
+                  validator: (value) => _validateUrl(value, isHermesNode),
                 ),
+                if (isHermesNode) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Leave the path empty — the bridge route /device/ws is appended automatically.',
+                    key: Key('add_profile_url_helper'),
+                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 TextFormField(
                   key: const Key('add_profile_token_field'),
@@ -173,8 +181,8 @@ class _AddProfileViewState extends State<_AddProfileView> {
                   enableSuggestions: false,
                   style: const TextStyle(color: Colors.white),
                   decoration: _inputDecoration(
-                    'Auth Token / API Key',
-                    'sk-...',
+                    isHermesNode ? 'Device Token' : 'Auth Token / API Key',
+                    isHermesNode ? 'device bridge token' : 'sk-...',
                   ).copyWith(
                     suffixIcon: IconButton(
                       tooltip: _obscureToken ? 'Show token' : 'Hide token',
@@ -249,22 +257,33 @@ class _AddProfileViewState extends State<_AddProfileView> {
                 if (_probeMessage != null)
                   Container(
                     key: Key(
-                      _probeSuccess == true
-                          ? 'add_profile_probe_success'
-                          : 'add_profile_probe_error',
+                      _probeNotice
+                          ? 'add_profile_probe_notice'
+                          : _probeSuccess == true
+                              ? 'add_profile_probe_success'
+                              : 'add_profile_probe_error',
                     ),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: _probeSuccess == true
-                          ? const Color(0xFF145A32)
-                          : const Color(0xFF7F1D1D),
+                      color: _probeNotice
+                          ? const Color(0xFF1E293B)
+                          : _probeSuccess == true
+                              ? const Color(0xFF145A32)
+                              : const Color(0xFF7F1D1D),
+                      border: _probeNotice
+                          ? Border.all(color: borderSlate)
+                          : null,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
                       children: [
                         Icon(
-                          _probeSuccess == true ? Icons.check_circle : Icons.error,
-                          color: Colors.white,
+                          _probeNotice
+                              ? Icons.info_outline
+                              : _probeSuccess == true
+                                  ? Icons.check_circle
+                                  : Icons.error,
+                          color: _probeNotice ? Colors.white70 : Colors.white,
                           size: 18,
                         ),
                         const SizedBox(width: 8),
@@ -333,6 +352,27 @@ class _AddProfileViewState extends State<_AddProfileView> {
     );
   }
 
+  String? _validateUrl(String? value, bool isHermesNode) {
+    final raw = value ?? '';
+    if (!isAcceptableGatewayUrl(raw)) {
+      return 'Enter a valid HTTP/HTTPS/WS/WSS URL';
+    }
+    if (!isHermesNode) return null;
+
+    final path = _parsePath(raw);
+    if (path == null || path.isEmpty || path == '/') return null;
+    return 'Leave the path empty — the app dials it verbatim instead of '
+        '/device/ws (found "$path")';
+  }
+
+  String? _parsePath(String raw) {
+    try {
+      return Uri.tryParse(raw.trim())?.path;
+    } catch (_) {
+      return null;
+    }
+  }
+
   InputDecoration _inputDecoration(String label, String hint) {
     return InputDecoration(
       labelText: label,
@@ -366,6 +406,19 @@ class _AddProfileViewState extends State<_AddProfileView> {
       setState(() {
         _probeMessage = 'Fix URL and token first';
         _probeSuccess = false;
+        _probeNotice = false;
+      });
+      return;
+    }
+
+    if (_mode == AddProfileMode.hermesNode) {
+      setState(() {
+        _isTesting = false;
+        _probeMessage =
+            'REST probe does not apply to Hermes Node profiles — the Gateway '
+            'socket (/device/ws) is dialed when the profile is activated.';
+        _probeSuccess = null;
+        _probeNotice = true;
       });
       return;
     }
@@ -375,6 +428,7 @@ class _AddProfileViewState extends State<_AddProfileView> {
       setState(() {
         _probeMessage = 'Probe service unavailable';
         _probeSuccess = false;
+        _probeNotice = false;
       });
       return;
     }
@@ -383,15 +437,11 @@ class _AddProfileViewState extends State<_AddProfileView> {
 
     ProbeResult result;
     try {
-      if (_mode == AddProfileMode.hermesNode) {
-        result = await probeService.probeHermesNode(url: url, token: token);
-      } else {
-        result = await probeService.probeOpenAi(
-          url: url,
-          apiKey: token,
-          model: _modelController.text.trim(),
-        );
-      }
+      result = await probeService.probeOpenAi(
+        url: url,
+        apiKey: token,
+        model: _modelController.text.trim(),
+      );
     } catch (e) {
       result = ProbeResult(
         isSuccess: false,
@@ -405,6 +455,7 @@ class _AddProfileViewState extends State<_AddProfileView> {
       _isTesting = false;
       _probeMessage = result.message;
       _probeSuccess = result.isSuccess;
+      _probeNotice = false;
     });
   }
 

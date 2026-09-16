@@ -8,11 +8,13 @@ import 'package:flutter_ai_agent/domain/entities/pairing/pairing_payload.dart';
 import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_routes.dart';
+import 'package:flutter_ai_agent/presentation/screen/pairing/pairing_params.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_cubit.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/settings_params.dart';
+import 'package:flutter_ai_agent/presentation/screen/settings/widgets/overlay_bubble_settings_tile.dart';
 import 'package:flutter_ai_agent/presentation/widget/app_toast.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -155,7 +157,18 @@ class _SettingsViewState extends State<_SettingsView> {
   }
 
   Future<void> _onScanQr() async {
-    final result = await context.pushNamed<PairingPayload>(AppRoutes.nrPairing);
+    String? origin;
+    try {
+      origin =
+          context.read<ServerProfileCubit>().state.activeProfile?.gatewayUrl;
+    } catch (_) {
+      origin = null;
+    }
+
+    final result = await context.pushNamed<PairingPayload>(
+      AppRoutes.nrPairing,
+      extra: PairingParams(currentGatewayOrigin: origin),
+    );
 
     if (result != null && mounted) {
       _baseUrlController.text = result.gatewayUrl;
@@ -579,6 +592,8 @@ class _SettingsViewState extends State<_SettingsView> {
                       ),
                       const SizedBox(height: 24),
                       _buildVoiceSection(context, state),
+                      const SizedBox(height: 24),
+                      _buildOverlayBubbleSection(context, state),
                     ],
                   ],
                 ),
@@ -911,6 +926,44 @@ class _SettingsViewState extends State<_SettingsView> {
           ),
           const SizedBox(height: 12),
           body,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverlayBubbleSection(
+    BuildContext context,
+    SettingsLoaded state,
+  ) {
+    const tealAccent = Color(0xFF008080);
+
+    return Container(
+      key: const Key('settings_overlay_bubble_section'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF334155)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.bubble_chart, color: tealAccent, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Floating Bubble',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const OverlayBubbleSettingsTile(),
         ],
       ),
     );
