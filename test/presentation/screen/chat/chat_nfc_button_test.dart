@@ -8,6 +8,7 @@ import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_
 import 'package:flutter_ai_agent/domain/entities/chat/chat_chunk.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/nfc_tag_prompt_binding.dart';
 import 'package:flutter_ai_agent/domain/repositories/chat/llm_repository.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/intent_launcher_service.dart';
 import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
 import 'package:flutter_ai_agent/presentation/navigation/app_routes.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/chat_screen.dart';
@@ -24,6 +25,8 @@ class _FakeNfcService extends Mock implements NfcServiceBase {}
 class _FakeSecureStorageService extends Mock implements SecureStorageService {}
 
 class _MockLlmRepository extends Mock implements LlmRepository {}
+
+class _FakeIntentLauncher extends Mock implements IntentLauncherServiceBase {}
 
 void main() {
   late _FakeNfcService fakeNfc;
@@ -337,6 +340,29 @@ void main() {
   });
 
   testWidgets(
+      'the disabled-adapter CTA reaches the SYSTEM NFC settings, not the in-app screen',
+      (tester) async {
+    final fakeLauncher = _FakeIntentLauncher();
+    when(() => fakeLauncher.launchSystemSetting(any()))
+        .thenAnswer((_) async => const Right('opened'));
+    sl.registerSingleton<IntentLauncherServiceBase>(fakeLauncher);
+    when(() => fakeNfc.isEnabled())
+        .thenAnswer((_) async => const Right(false));
+
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_nfc_balance_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Open NFC Settings'));
+    await tester.pumpAndSettle();
+
+    verify(() => fakeLauncher.launchSystemSetting('nfc')).called(1);
+    AppToast.dismissAll();
+  });
+
+  testWidgets(
       'an unsupported card is reported as a card problem, not an NFC problem',
       (tester) async {
     when(() => fakeNfc.readEmoneyBalance()).thenAnswer(
@@ -391,6 +417,22 @@ void main() {
 
       expect(result.failureKind, NfcEmoneyScanFailureKind.unsupported);
       expect(result.balance, isNull);
+      verifyNever(() => fakeNfc.readEmoneyBalance());
+    });
+
+    test('a failed availability check is unavailable, not a missing NFC chip',
+        () async {
+      when(() => fakeNfc.isAvailable()).thenAnswer(
+        (_) async => Left(const ServerFailure('NFC adapter query failed')),
+      );
+
+      final result = await cubit.scanNfcEmoneyBalance();
+
+      expect(result.failureKind, NfcEmoneyScanFailureKind.unavailable);
+      expect(
+        result.failureKind,
+        isNot(NfcEmoneyScanFailureKind.unsupported),
+      );
       verifyNever(() => fakeNfc.readEmoneyBalance());
     });
 

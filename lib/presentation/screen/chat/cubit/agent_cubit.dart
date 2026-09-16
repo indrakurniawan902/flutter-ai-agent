@@ -633,14 +633,24 @@ class AgentCubit extends Cubit<AgentState> {
         NfcEmoneyScanFailureKind.unavailable,
       );
     }
-    final isAvailable = (await service.isAvailable()).getOrElse(() => false);
-    if (!isAvailable) {
+    final availabilityResult = await service.isAvailable();
+    if (availabilityResult.isLeft()) {
+      return const NfcEmoneyScanResult.failure(
+        NfcEmoneyScanFailureKind.unavailable,
+      );
+    }
+    if (!availabilityResult.getOrElse(() => false)) {
       return const NfcEmoneyScanResult.failure(
         NfcEmoneyScanFailureKind.unsupported,
       );
     }
-    final isEnabled = (await service.isEnabled()).getOrElse(() => false);
-    if (!isEnabled) {
+    final enabledResult = await service.isEnabled();
+    if (enabledResult.isLeft()) {
+      return const NfcEmoneyScanResult.failure(
+        NfcEmoneyScanFailureKind.unavailable,
+      );
+    }
+    if (!enabledResult.getOrElse(() => false)) {
       return const NfcEmoneyScanResult.failure(
         NfcEmoneyScanFailureKind.disabled,
       );

@@ -18,8 +18,10 @@ import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/battery_optimization_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/file_workspace_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/intent_launcher_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/system_settings_allow_list.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/url_reader_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_input_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
@@ -1328,7 +1330,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               'NFC is turned off. Turn it on to read the card.',
               actionLabel: 'Open NFC Settings',
               onAction: () {
-                context.pushNamed(AppRoutes.nrSettings);
+                unawaited(_openNfcSystemSettings());
               },
             );
           case NfcEmoneyScanFailureKind.unsupported:
@@ -1365,6 +1367,19 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         });
       }
     }
+  }
+
+  /// Opens the Android system NFC settings page. Falls back to the in-app
+  /// Settings screen when the launcher service is unavailable (e.g. tests
+  /// that do not register it).
+  Future<void> _openNfcSystemSettings() async {
+    if (sl.isRegistered<IntentLauncherServiceBase>()) {
+      await sl<IntentLauncherServiceBase>()
+          .launchSystemSetting(SystemSettingsAllowList.nfc);
+      return;
+    }
+    if (!mounted) return;
+    context.pushNamed(AppRoutes.nrSettings);
   }
 
   static String _emoneyBrandLabel(EmoneyCardBrand brand) {
