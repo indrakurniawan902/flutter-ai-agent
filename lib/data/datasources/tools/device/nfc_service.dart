@@ -79,6 +79,10 @@ class DefaultNfcPlatformWrapper implements NfcPlatformWrapper {
     required Future<T> Function(RawNfcCard card) action,
   }) async {
     final completer = Completer<T>();
+    // A cancel can land while startSession is still in flight, before the
+    // awaiting caller has attached its listener. Swallow the orphaned-error
+    // report here; the error still reaches the caller through the future below.
+    unawaited(completer.future.then<void>((_) {}, onError: (Object _) {}));
     final polling = pollingOptions.map(_mapPollingOption).toSet();
     // Install the canceller before awaiting session startup so a cancel that
     // arrives while startSession is still in flight is not a silent no-op.

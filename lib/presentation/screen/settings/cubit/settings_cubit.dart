@@ -232,6 +232,10 @@ class SettingsCubit extends Cubit<SettingsState> {
   Future<void> saveNfcPromptBindings(List<NfcTagPromptBinding> bindings) async {
     await _storageService.saveNfcPromptBindings(bindings);
     final current = state;
+    if (current is SettingsLoaded) {
+      _safeEmit(current.copyWith(nfcPromptBindings: bindings));
+      return;
+    }
     _safeEmit(SettingsLoaded(
       baseUrl: current.baseUrl,
       apiKey: current.apiKey,
@@ -239,9 +243,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       temperature: current.temperature,
       progressiveToolPruning: current.progressiveToolPruning,
       nfcPromptBindings: bindings,
-      nfcAvailable: current is SettingsLoaded
-          ? current.nfcAvailable
-          : (_nfcService != null),
+      nfcAvailable: _nfcService != null,
     ));
   }
 
@@ -361,6 +363,16 @@ class SettingsCubit extends Cubit<SettingsState> {
           nfcAvailable: latest is SettingsLoaded
               ? latest.nfcAvailable
               : true,
+          ttsEngineMode: latest is SettingsLoaded
+              ? latest.ttsEngineMode
+              : TtsEngineMode.system,
+          piperVoiceId: latest is SettingsLoaded
+              ? latest.piperVoiceId
+              : 'id_ID-news_tts-medium',
+          piperVoiceReady: latest is SettingsLoaded
+              ? latest.piperVoiceReady
+              : const {},
+          piperError: latest is SettingsLoaded ? latest.piperError : null,
         ));
       },
     );

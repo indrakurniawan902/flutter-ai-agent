@@ -306,6 +306,57 @@ void main() {
 
       expect(disableReaderModeCalls, greaterThanOrEqualTo(1));
     });
+
+    test('cancel during session startup delivers the cancellation without an unhandled zone error', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+
+      ByteData? encode(Object? value) =>
+          HostApiPigeon.pigeonChannelCodec.encodeMessage(<Object?>[value]);
+      ByteData? encodeEmpty() =>
+          HostApiPigeon.pigeonChannelCodec.encodeMessage(<Object?>[]);
+
+      messenger.setMockMessageHandler(
+        '${_host}nfcAdapterIsEnabled',
+        (message) async => encode(true),
+      );
+      messenger.setMockMessageHandler(
+        '${_host}nfcAdapterEnableReaderMode',
+        (message) async {
+          await Future<void>.delayed(const Duration(milliseconds: 80));
+          return encodeEmpty();
+        },
+      );
+      messenger.setMockMessageHandler(
+        '${_host}nfcAdapterDisableReaderMode',
+        (message) async => encodeEmpty(),
+      );
+
+      final unhandledErrors = <Object>[];
+      final wrapper = DefaultNfcPlatformWrapper();
+
+      await runZonedGuarded(() async {
+        final pending = wrapper.runWithCard<void>(
+          pollingOptions: const <String>{'iso14443'},
+          timeout: const Duration(seconds: 5),
+          action: (card) async {},
+        );
+
+        // Let the call get inside the startSession startup window.
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        await wrapper.cancel();
+
+        await expectLater(
+          pending,
+          throwsA(isA<NfcScanCancelledFailure>()),
+        );
+      }, (error, stack) {
+        unhandledErrors.add(error);
+      });
+
+      expect(unhandledErrors, isEmpty);
+    });
   });
 
   group('NfcService.readEmoneyBalance', () {

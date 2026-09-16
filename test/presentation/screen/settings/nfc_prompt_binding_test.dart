@@ -462,7 +462,14 @@ void main() {
         nfcService: mockNfc,
         autoLoad: false,
       );
-      cubit.emit(loadedBase.copyWith(nfcPromptBindings: [binding]));
+      final before = loadedBase.copyWith(
+        nfcPromptBindings: [binding],
+        ttsEngineMode: TtsEngineMode.piper,
+        piperVoiceId: 'id_ID-custom_voice-medium',
+        piperVoiceReady: const {'id_ID-custom_voice-medium': true},
+        piperError: 'previous download warning',
+      );
+      cubit.emit(before);
 
       await cubit.scanAndBindNfcTag();
 
@@ -474,6 +481,75 @@ void main() {
       expect(scanResult.model, loadedBase.model);
       expect(scanResult.nfcPromptBindings, [binding]);
       expect(scanResult.nfcAvailable, isTrue);
+      expect(scanResult.ttsEngineMode, TtsEngineMode.piper);
+      expect(scanResult.piperVoiceId, 'id_ID-custom_voice-medium');
+      expect(scanResult.piperVoiceReady, const {'id_ID-custom_voice-medium': true});
+      expect(scanResult.piperError, 'previous download warning');
+    });
+
+    test('successful scan preserves TTS and piper fields', () async {
+      when(() => mockNfc.isAvailable())
+          .thenAnswer((_) async => const Right(true));
+      when(() => mockNfc.isEnabled())
+          .thenAnswer((_) async => const Right(true));
+      when(() => mockNfc.readCardUid())
+          .thenAnswer((_) async => const Right('04A2B3C4D5'));
+
+      final cubit = SettingsCubit(
+        secureStorageService: mockStorage,
+        nfcService: mockNfc,
+        autoLoad: false,
+      );
+      cubit.emit(SettingsLoaded(
+        baseUrl: loadedBase.baseUrl,
+        apiKey: loadedBase.apiKey,
+        model: loadedBase.model,
+        temperature: loadedBase.temperature,
+        nfcPromptBindings: [binding],
+        nfcAvailable: true,
+        ttsEngineMode: TtsEngineMode.piper,
+        piperVoiceId: 'id_ID-custom_voice-medium',
+        piperVoiceReady: const {'id_ID-custom_voice-medium': true},
+        piperError: 'previous download warning',
+      ));
+
+      await cubit.scanAndBindNfcTag();
+
+      final scanResult = cubit.state as SettingsNfcScanResult;
+      expect(scanResult.ttsEngineMode, TtsEngineMode.piper);
+      expect(scanResult.piperVoiceId, 'id_ID-custom_voice-medium');
+      expect(scanResult.piperVoiceReady, const {'id_ID-custom_voice-medium': true});
+      expect(scanResult.piperError, 'previous download warning');
+    });
+
+    test('saving a binding preserves TTS and piper fields', () async {
+      final cubit = SettingsCubit(
+        secureStorageService: mockStorage,
+        nfcService: mockNfc,
+        autoLoad: false,
+      );
+      cubit.emit(SettingsLoaded(
+        baseUrl: loadedBase.baseUrl,
+        apiKey: loadedBase.apiKey,
+        model: loadedBase.model,
+        temperature: loadedBase.temperature,
+        nfcPromptBindings: [binding],
+        nfcAvailable: true,
+        ttsEngineMode: TtsEngineMode.piper,
+        piperVoiceId: 'id_ID-custom_voice-medium',
+        piperVoiceReady: const {'id_ID-custom_voice-medium': true},
+        piperError: 'previous download warning',
+      ));
+
+      await cubit.confirmNfcPromptBinding('11223344', 'Second trigger');
+
+      expect(cubit.state, isA<SettingsLoaded>());
+      final loaded = cubit.state as SettingsLoaded;
+      expect(loaded.ttsEngineMode, TtsEngineMode.piper);
+      expect(loaded.piperVoiceId, 'id_ID-custom_voice-medium');
+      expect(loaded.piperVoiceReady, const {'id_ID-custom_voice-medium': true});
+      expect(loaded.piperError, 'previous download warning');
+      expect(loaded.nfcPromptBindings.length, 2);
     });
 
     test('scanAndBindNfcTag does not throw when the cubit is closed before the failure lands', () async {
