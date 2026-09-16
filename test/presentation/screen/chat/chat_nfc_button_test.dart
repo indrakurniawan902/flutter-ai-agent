@@ -278,6 +278,86 @@ void main() {
     expect(find.textContaining('NFC scan failed'), findsOneWidget);
   });
 
+  testWidgets(
+      'tapping the balance button shows progress while the scan is in flight',
+      (tester) async {
+    final gate = Completer<void>();
+    when(() => fakeNfc.readEmoneyBalance()).thenAnswer((_) async {
+      await gate.future;
+      return const Right(
+        EmoneyBalance(
+          brand: EmoneyCardBrand.mandiriEmoney,
+          cardUid: 'aabbcc',
+          balanceRupiah: 25000,
+        ),
+      );
+    });
+
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_nfc_balance_button')));
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsWidgets);
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byKey(const Key('chat_nfc_balance_button')),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    AppToast.dismissAll();
+  });
+
+  testWidgets('a disabled NFC adapter offers a one-tap NFC settings action',
+      (tester) async {
+    when(() => fakeNfc.isEnabled())
+        .thenAnswer((_) async => const Right(false));
+
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_nfc_balance_button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('NFC is turned off. Turn it on to read the card.'),
+      findsOneWidget,
+    );
+    expect(find.text('Open NFC Settings'), findsOneWidget);
+    expect(find.textContaining('Could not read e-Money balance'), findsNothing);
+    AppToast.dismissAll();
+  });
+
+  testWidgets(
+      'an unsupported card is reported as a card problem, not an NFC problem',
+      (tester) async {
+    when(() => fakeNfc.readEmoneyBalance()).thenAnswer(
+      (_) async => const Left(NfcCardUnsupportedFailure()),
+    );
+
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_nfc_balance_button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('Card not supported. Tap a Mandiri e-Money'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('NFC is turned off'), findsNothing);
+    expect(find.text('Open NFC Settings'), findsNothing);
+    AppToast.dismissAll();
+  });
+
   group('AgentCubit NFC pre-flight checks and DI', () {
     test('scanNfcAndDispatchPrompt returns false when NFC is not available',
         () async {

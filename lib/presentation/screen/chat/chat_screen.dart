@@ -1256,7 +1256,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       );
       return;
     }
-    _isNfcScanning = true;
+    if (!mounted) return;
+    setState(() {
+      _isNfcScanning = true;
+    });
     try {
       final dispatched = await cubit.scanNfcAndDispatchPrompt();
       if (!mounted) return;
@@ -1276,7 +1279,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       if (!mounted) return;
       AppToast.error(context, 'NFC scan failed: $error');
     } finally {
-      _isNfcScanning = false;
+      if (mounted) {
+        setState(() {
+          _isNfcScanning = false;
+        });
+      }
     }
   }
 
@@ -1295,7 +1302,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       );
       return;
     }
-    _isNfcScanning = true;
+    if (!mounted) return;
+    setState(() {
+      _isNfcScanning = true;
+    });
     try {
       final result = await cubit.scanNfcEmoneyBalance();
       if (!mounted) return;
@@ -1311,16 +1321,49 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           ),
         );
       } else {
-        AppToast.error(
-          context,
-          'Could not read e-Money balance. Enable NFC and tap the card, or use Settings > NFC Tag Triggers.',
-        );
+        switch (result.failureKind) {
+          case NfcEmoneyScanFailureKind.disabled:
+            AppToast.error(
+              context,
+              'NFC is turned off. Turn it on to read the card.',
+              actionLabel: 'Open NFC Settings',
+              onAction: () {
+                context.pushNamed(AppRoutes.nrSettings);
+              },
+            );
+          case NfcEmoneyScanFailureKind.unsupported:
+            AppToast.error(context, 'This device has no NFC hardware.');
+          case NfcEmoneyScanFailureKind.unavailable:
+            AppToast.error(
+              context,
+              'NFC is not ready yet. Try again in a moment.',
+            );
+          case NfcEmoneyScanFailureKind.cardUnsupported:
+            AppToast.error(
+              context,
+              'Card not supported. Tap a Mandiri e-Money, BCA Flazz, BRI Brizzi or BNI TapCash card.',
+            );
+          case NfcEmoneyScanFailureKind.readFailed:
+            AppToast.error(
+              context,
+              'Could not read the card. Hold it against the NFC antenna and try again.',
+            );
+          case null:
+            AppToast.error(
+              context,
+              'Could not read e-Money balance. Enable NFC and tap the card, or use Settings > NFC Tag Triggers.',
+            );
+        }
       }
     } catch (error) {
       if (!mounted) return;
       AppToast.error(context, 'NFC scan failed: $error');
     } finally {
-      _isNfcScanning = false;
+      if (mounted) {
+        setState(() {
+          _isNfcScanning = false;
+        });
+      }
     }
   }
 
@@ -1839,25 +1882,54 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 tooltip: 'Scan Pairing QR',
                 onPressed: _openQrScanner,
               ),
-              IconButton(
-                key: const Key('chat_nfc_scan_button'),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 26, minHeight: 32),
-                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
-                iconSize: 18,
-                icon: const Icon(Icons.nfc),
-                tooltip: 'Scan NFC Tag',
-                onPressed: _scanNfcTag,
+              // While a scan runs the button is disabled and shows progress; the
+              // wrapping detector still routes taps to the in-progress guard so a
+              // second tap explains itself instead of doing nothing.
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _isNfcScanning ? _scanNfcTag : null,
+                child: IconButton(
+                  key: const Key('chat_nfc_scan_button'),
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 26, minHeight: 32),
+                  visualDensity:
+                      const VisualDensity(horizontal: -4, vertical: -4),
+                  iconSize: 18,
+                  icon: _isNfcScanning
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.nfc),
+                  tooltip: _isNfcScanning ? 'Scanning NFC...' : 'Scan NFC Tag',
+                  onPressed: _isNfcScanning ? null : _scanNfcTag,
+                ),
               ),
-              IconButton(
-                key: const Key('chat_nfc_balance_button'),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 26, minHeight: 32),
-                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
-                iconSize: 18,
-                icon: const Icon(Icons.account_balance_wallet_outlined),
-                tooltip: 'Read e-Money Balance',
-                onPressed: _scanNfcBalance,
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _isNfcScanning ? _scanNfcBalance : null,
+                child: IconButton(
+                  key: const Key('chat_nfc_balance_button'),
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 26, minHeight: 32),
+                  visualDensity:
+                      const VisualDensity(horizontal: -4, vertical: -4),
+                  iconSize: 18,
+                  icon: _isNfcScanning
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.account_balance_wallet_outlined),
+                  tooltip: _isNfcScanning
+                      ? 'Reading e-Money balance...'
+                      : 'Read e-Money Balance',
+                  onPressed: _isNfcScanning ? null : _scanNfcBalance,
+                ),
               ),
               IconButton(
                 key: const Key('chat_reset_button'),
