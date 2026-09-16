@@ -315,20 +315,21 @@ class SettingsCubit extends Cubit<SettingsState> {
     }
 
     final current = state;
-    if (current is SettingsLoaded) {
+    final SettingsLoaded? preScan = current is SettingsLoaded ? current : null;
+    if (preScan != null) {
       _safeEmit(SettingsNfcScanning(
         startedAt: DateTime.now(),
-        baseUrl: current.baseUrl,
-        apiKey: current.apiKey,
-        model: current.model,
-        temperature: current.temperature,
-        progressiveToolPruning: current.progressiveToolPruning,
-        nfcPromptBindings: current.nfcPromptBindings,
-        nfcAvailable: current.nfcAvailable,
-        ttsEngineMode: current.ttsEngineMode,
-        piperVoiceId: current.piperVoiceId,
-        piperVoiceReady: current.piperVoiceReady,
-        piperError: current.piperError,
+        baseUrl: preScan.baseUrl,
+        apiKey: preScan.apiKey,
+        model: preScan.model,
+        temperature: preScan.temperature,
+        progressiveToolPruning: preScan.progressiveToolPruning,
+        nfcPromptBindings: preScan.nfcPromptBindings,
+        nfcAvailable: preScan.nfcAvailable,
+        ttsEngineMode: preScan.ttsEngineMode,
+        piperVoiceId: preScan.piperVoiceId,
+        piperVoiceReady: preScan.piperVoiceReady,
+        piperError: preScan.piperError,
       ));
     }
 
@@ -336,19 +337,11 @@ class SettingsCubit extends Cubit<SettingsState> {
     result.fold(
       (failure) {
         if (failure is NfcScanCancelledFailure) {
-          _safeEmit(SettingsLoaded(
-            baseUrl: current.baseUrl,
-            apiKey: current.apiKey,
-            model: current.model,
-            temperature: current.temperature,
-            progressiveToolPruning: current.progressiveToolPruning,
-            nfcPromptBindings: current is SettingsLoaded
-                ? current.nfcPromptBindings
-                : const [],
-            nfcAvailable: current is SettingsLoaded
-                ? current.nfcAvailable
-                : true,
-          ));
+          if (preScan != null) {
+            _safeEmit(preScan);
+            return;
+          }
+          _emitNfcScanFailure(failure.message);
           return;
         }
         _emitNfcScanFailure(failure.message);

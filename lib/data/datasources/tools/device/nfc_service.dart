@@ -80,6 +80,13 @@ class DefaultNfcPlatformWrapper implements NfcPlatformWrapper {
   }) async {
     final completer = Completer<T>();
     final polling = pollingOptions.map(_mapPollingOption).toSet();
+    // Install the canceller before awaiting session startup so a cancel that
+    // arrives while startSession is still in flight is not a silent no-op.
+    _canceller = () {
+      if (!completer.isCompleted) {
+        completer.completeError(const NfcScanCancelledFailure());
+      }
+    };
     try {
       await NfcManager.instance.startSession(
         pollingOptions: polling,
@@ -104,11 +111,6 @@ class DefaultNfcPlatformWrapper implements NfcPlatformWrapper {
           }
         },
       );
-      _canceller = () {
-        if (!completer.isCompleted) {
-          completer.completeError(const NfcScanCancelledFailure());
-        }
-      };
       return await completer.future.timeout(
         timeout,
         onTimeout: () => throw TimeoutException('NFC scan timed out', timeout),

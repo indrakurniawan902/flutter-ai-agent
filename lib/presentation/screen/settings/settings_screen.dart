@@ -1392,7 +1392,11 @@ class _NfcScanSheetState extends State<_NfcScanSheet> {
                           TextButton(
                             key: const Key('nfc_scan_cancel_button'),
                             onPressed: () async {
+                              final navigator = Navigator.of(context);
                               await context.read<SettingsCubit>().cancelNfcScan();
+                              if (mounted) {
+                                navigator.pop();
+                              }
                             },
                             child: const Text('Cancel'),
                           ),

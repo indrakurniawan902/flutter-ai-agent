@@ -7,6 +7,7 @@ import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/nfc_tag_prompt_binding.dart';
 import 'package:flutter_ai_agent/domain/services/tools/nfc_prompt_resolver.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
 import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_state.dart';
 import 'package:flutter_ai_agent/presentation/screen/settings/cubit/settings_cubit.dart';
@@ -217,6 +218,35 @@ void main() {
       await tester.pumpAndSettle();
 
       verify(() => mockSettingsCubit.cancelNfcScan()).called(greaterThanOrEqualTo(1));
+
+      await controller.close();
+    });
+
+    testWidgets('tapping Cancel in the scanning branch cancels and closes the sheet',
+        (tester) async {
+      final controller = StreamController<SettingsState>();
+      whenListen(mockSettingsCubit, controller.stream, initialState: loadedBase);
+      when(() => mockSettingsCubit.scanAndBindNfcTag())
+          .thenAnswer((_) async {});
+      when(() => mockSettingsCubit.cancelNfcScan()).thenAnswer((_) async {});
+
+      await tester.pumpWidget(buildWidget());
+      await tester.pump();
+
+      await tester.ensureVisible(find.byKey(const Key('nfc_add_trigger_button')));
+      await tester.tap(find.byKey(const Key('nfc_add_trigger_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      controller.add(SettingsNfcScanning(startedAt: DateTime.now()));
+      await tester.pump();
+      expect(find.byKey(const Key('nfc_scanning_label')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('nfc_scan_cancel_button')));
+      await tester.pumpAndSettle();
+
+      verify(() => mockSettingsCubit.cancelNfcScan()).called(greaterThanOrEqualTo(1));
+      expect(find.byKey(const Key('nfc_scanning_label')), findsNothing);
 
       await controller.close();
     });
@@ -517,6 +547,51 @@ void main() {
 
       expect(cubit.state, isA<SettingsNfcScanResult>());
       expect((cubit.state as SettingsNfcScanResult).uid, '04A2B3C4D5');
+    });
+
+    test('cancel restores the exact pre-scan state, preserving TTS and piper fields', () async {
+      final readCompleter = Completer<Either<Failure, String>>();
+      when(() => mockNfc.isAvailable())
+          .thenAnswer((_) async => const Right(true));
+      when(() => mockNfc.isEnabled())
+          .thenAnswer((_) async => const Right(true));
+      when(() => mockNfc.readCardUid())
+          .thenAnswer((_) => readCompleter.future);
+
+      final cubit = SettingsCubit(
+        secureStorageService: mockStorage,
+        nfcService: mockNfc,
+        autoLoad: false,
+      );
+      final preScan = SettingsLoaded(
+        baseUrl: loadedBase.baseUrl,
+        apiKey: loadedBase.apiKey,
+        model: loadedBase.model,
+        temperature: loadedBase.temperature,
+        nfcPromptBindings: [binding],
+        nfcAvailable: true,
+        ttsEngineMode: TtsEngineMode.piper,
+        piperVoiceId: 'id_ID-custom_voice-medium',
+        piperVoiceReady: const {'id_ID-custom_voice-medium': true},
+        piperError: 'previous download warning',
+      );
+      cubit.emit(preScan);
+
+      final scanFuture = cubit.scanAndBindNfcTag();
+      await Future<void>.delayed(Duration.zero);
+      expect(cubit.state, isA<SettingsNfcScanning>());
+
+      readCompleter.complete(const Left(NfcScanCancelledFailure()));
+      await scanFuture;
+
+      expect(cubit.state, preScan);
+      final restored = cubit.state as SettingsLoaded;
+      expect(restored.ttsEngineMode, TtsEngineMode.piper);
+      expect(restored.piperVoiceId, 'id_ID-custom_voice-medium');
+      expect(restored.piperVoiceReady, const {'id_ID-custom_voice-medium': true});
+      expect(restored.piperError, 'previous download warning');
+      expect(restored.nfcPromptBindings, [binding]);
+      expect(restored.nfcAvailable, isTrue);
     });
 
     test('confirmNfcPromptBinding preserves existing bindings and settings fields', () async {
