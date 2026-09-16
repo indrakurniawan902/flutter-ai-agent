@@ -107,6 +107,120 @@ void main() {
   });
 
   group('NFC scan and bind flow', () {
+    testWidgets('UID captured then a late timeout keeps the form and the typed text',
+        (tester) async {
+      final controller = StreamController<SettingsState>();
+      whenListen(mockSettingsCubit, controller.stream, initialState: loadedBase);
+      when(() => mockSettingsCubit.scanAndBindNfcTag())
+          .thenAnswer((_) async {});
+      when(() => mockSettingsCubit.cancelNfcScan()).thenAnswer((_) async {});
+
+      await tester.pumpWidget(buildWidget());
+      await tester.pump();
+
+      await tester.ensureVisible(find.byKey(const Key('nfc_add_trigger_button')));
+      await tester.tap(find.byKey(const Key('nfc_add_trigger_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      controller.add(const SettingsNfcScanResult(uid: '04A2B3C4D5'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.byKey(const Key('nfc_prompt_field')), 'Open the gate');
+      await tester.enterText(
+          find.byKey(const Key('nfc_label_field')), 'Gate Opener');
+      await tester.pump();
+
+      controller.add(const SettingsError(
+        message: 'NFC scan timed out. Please tap the card again.',
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('nfc_prompt_field')), findsOneWidget);
+      expect(find.byKey(const Key('nfc_label_field')), findsOneWidget);
+      expect(find.text('Open the gate'), findsOneWidget);
+      expect(find.text('Gate Opener'), findsOneWidget);
+      expect(find.byKey(const Key('nfc_scan_uid')), findsOneWidget);
+      expect(find.textContaining('04A2B3C4D5'), findsOneWidget);
+
+      final inlineError = find.byKey(const Key('nfc_scan_error_inline'));
+      expect(inlineError, findsOneWidget);
+      expect(
+        tester.widget<Text>(inlineError).data,
+        'NFC scan timed out. Please tap the card again.',
+      );
+
+      await controller.close();
+    });
+
+    testWidgets('scanning state shows progress and Cancel stops the scan',
+        (tester) async {
+      final controller = StreamController<SettingsState>();
+      whenListen(mockSettingsCubit, controller.stream, initialState: loadedBase);
+      when(() => mockSettingsCubit.scanAndBindNfcTag())
+          .thenAnswer((_) async {});
+      when(() => mockSettingsCubit.cancelNfcScan()).thenAnswer((_) async {});
+
+      await tester.pumpWidget(buildWidget());
+      await tester.pump();
+
+      await tester.ensureVisible(find.byKey(const Key('nfc_add_trigger_button')));
+      await tester.tap(find.byKey(const Key('nfc_add_trigger_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      controller.add(SettingsNfcScanning(startedAt: DateTime.now()));
+      await tester.pump();
+
+      expect(find.byKey(const Key('nfc_scanning_label')), findsOneWidget);
+      expect(find.byKey(const Key('nfc_scan_progress')), findsOneWidget);
+      expect(find.byKey(const Key('nfc_scan_remaining')), findsOneWidget);
+
+      final initialRemaining =
+          tester.widget<Text>(find.byKey(const Key('nfc_scan_remaining'))).data;
+      await tester.pump(const Duration(seconds: 3));
+      final laterRemaining =
+          tester.widget<Text>(find.byKey(const Key('nfc_scan_remaining'))).data;
+      expect(laterRemaining, isNot(initialRemaining));
+
+      await tester.tap(find.byKey(const Key('nfc_scan_cancel_button')));
+      await tester.pump();
+
+      verify(() => mockSettingsCubit.cancelNfcScan()).called(1);
+
+      await controller.close();
+    });
+
+    testWidgets('dismissing the sheet cancels the in-flight scan',
+        (tester) async {
+      final controller = StreamController<SettingsState>();
+      whenListen(mockSettingsCubit, controller.stream, initialState: loadedBase);
+      when(() => mockSettingsCubit.scanAndBindNfcTag())
+          .thenAnswer((_) async {});
+      when(() => mockSettingsCubit.cancelNfcScan()).thenAnswer((_) async {});
+
+      await tester.pumpWidget(buildWidget());
+      await tester.pump();
+
+      await tester.ensureVisible(find.byKey(const Key('nfc_add_trigger_button')));
+      await tester.tap(find.byKey(const Key('nfc_add_trigger_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      controller.add(SettingsNfcScanning(startedAt: DateTime.now()));
+      await tester.pump();
+
+      // Dismissing the sheet (back-navigation) must stop the platform read.
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      navigator.pop();
+      await tester.pumpAndSettle();
+
+      verify(() => mockSettingsCubit.cancelNfcScan()).called(greaterThanOrEqualTo(1));
+
+      await controller.close();
+    });
+
     testWidgets('scan result shows form, save calls confirmNfcPromptBinding',
         (tester) async {
       final controller = StreamController<SettingsState>();
