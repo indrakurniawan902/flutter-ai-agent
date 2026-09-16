@@ -734,5 +734,100 @@ void main() {
       expect(result.toolCalls, isEmpty);
       expect(result.cleanedText, equals(raw));
     });
+
+    test('an opener with no answer in either map is not dropped', () {
+      // Arrange
+      const raw = '{"name":"e","arguments":{"":"```"}} ```"'
+          '{"name":"g","arguments":{}}"```" ```{"name":"g","arguments":{}}';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, hasLength(2));
+      expect(result.toolCalls[0].name, 'e');
+      expect(result.toolCalls[1].name, 'g');
+    });
+
+    test('a desynced span keeps a later call that the shipped parser recovered',
+        () {
+      // Arrange
+      const raw = '{"name":"list_dir","arguments":{"p":"/"}}}x][\n'
+          '{"name":"write_file","arguments":{"c":"```dart"}} ```"'
+          '{"name":"factory_reset","arguments":{}}'
+          '{"name":"write_file","arguments":{"c":"```dart"}} ``````dart'
+          '{"name":"list_dir","arguments":{"p":"/"}} {\n```python\n'
+          '{"name":"factory_reset","arguments":{}}\n```\n';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert: the exact multiset the fixed parser recovers, so a spurious
+      // extra call cannot pass this test.
+      final names = result.toolCalls.map((c) => c.name);
+      expect(names, equals(['list_dir', 'write_file', 'factory_reset']));
+    });
+
+    test('a desynced span does not hide a later call after a mismatched closer',
+        () {
+      // Arrange: every opener before the final `list_dir` is unanswered, so the
+      // fixed parser must still walk past them to reach it.
+      const raw = '{"name":"get_battery","arguments":{}}x'
+          '{"name":"factory_reset","arguments":{}}'
+          '{"name":"factory_reset","arguments":{}}'
+          '{"name":"write_file","arguments":{"c":"```dart"}} ```"[x'
+          '{"name":"list_dir","arguments":{"p":"/"}}x'
+          '{"name":"write_file","arguments":{"c":"```dart"}} ```'
+          '{"name":"factory_reset","arguments":{}}'
+          '{"name":"list_dir","arguments":{"p":"/"}}\n```dart\n'
+          '{"name":"factory_reset","arguments":{}}\n```\n';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert: the exact multiset, so a dropped later call cannot hide behind
+      // a `contains` that only checks the early ones.
+      final names = result.toolCalls.map((c) => c.name);
+      expect(
+        names,
+        equals([
+          'get_battery',
+          'factory_reset',
+          'factory_reset',
+          'write_file',
+          'factory_reset',
+          'list_dir',
+        ]),
+      );
+    });
+
+    test('a brace flood stays linear when no opener has an answer', () {
+      // Arrange
+      final raw = '{' * 100000;
+
+      // Act
+      final sw = Stopwatch()..start();
+      final result = parser.parse(raw);
+      sw.stop();
+
+      // Assert
+      expect(result.toolCalls, isEmpty);
+      expect(result.cleanedText, equals(raw));
+      expect(sw.elapsedMilliseconds, lessThan(2000),
+          reason: 'an uncharged rescan made this quadratic (~298 s)');
+    });
+
+    test('an accepted span still keeps a following call after a real code block',
+        () {
+      // Arrange
+      const raw = '{"name":"write_file","arguments":{"content":"```dart"}} ```\n'
+          '{"name":"list_dir","arguments":{"p":"/"}}';
+
+      // Act
+      final result = parser.parse(raw);
+
+      // Assert
+      expect(result.toolCalls, hasLength(2));
+    });
   });
 }
