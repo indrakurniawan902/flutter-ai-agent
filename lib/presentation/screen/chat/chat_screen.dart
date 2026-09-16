@@ -2485,6 +2485,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   ],
                 ),
               ),
+              IconButton(
+                key: const Key('notification_listener_banner_dismiss_button'),
+                icon: const Icon(Icons.close, size: 16),
+                color: HermesColors.inkSecondary,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () {
+                  setState(() {
+                    _notificationListenerWarningDismissed = true;
+                  });
+                },
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -2552,18 +2564,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       ),
                   ],
                 ),
-              ),
-              IconButton(
-                key: const Key('notification_listener_banner_dismiss_button'),
-                icon: const Icon(Icons.close, size: 16),
-                color: HermesColors.inkSecondary,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                onPressed: () {
-                  setState(() {
-                    _notificationListenerWarningDismissed = true;
-                  });
-                },
               ),
             ],
           ),

@@ -800,6 +800,21 @@ void main() {
             find.byKey(const Key('notification_listener_banner_dismiss_button'));
         expect(dismissBtn, findsOneWidget);
 
+        final bannerRect = tester.getRect(
+          find.byKey(const Key('notification_listener_warning_banner')),
+        );
+        final dismissCenter = tester.getCenter(dismissBtn);
+        expect(
+          dismissCenter.dx,
+          greaterThan(bannerRect.center.dx),
+          reason: 'dismiss button must sit in the right half of the banner',
+        );
+        expect(
+          dismissCenter.dy,
+          lessThan(bannerRect.center.dy),
+          reason: 'dismiss button must sit in the top half of the banner',
+        );
+
         await tester.tap(dismissBtn);
         await tester.pumpAndSettle();
 
