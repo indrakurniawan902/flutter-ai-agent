@@ -2401,61 +2401,70 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           ),
           const SizedBox(height: 8),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              OutlinedButton.icon(
-                key: const Key('notification_listener_banner_rebind_button'),
-                icon: const Icon(Icons.refresh_outlined, size: 14),
-                label: const Text('Hubungkan Ulang'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: HermesColors.amber,
-                  side: const BorderSide(color: HermesColors.amber),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  visualDensity: VisualDensity.compact,
-                ),
-                onPressed: () async {
-                  if (sl.isRegistered<NotificationTriageServiceBase>()) {
-                    final triage = sl<NotificationTriageServiceBase>();
-                    final success = await triage.requestRebind();
-                    if (!context.mounted) return;
-                    if (success) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content:
-                              Text('Listener berhasil terhubung kembali.'),
+              Expanded(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      key: const Key(
+                        'notification_listener_banner_rebind_button',
+                      ),
+                      icon: const Icon(Icons.refresh_outlined, size: 14),
+                      label: const Text('Hubungkan Ulang'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: HermesColors.amber,
+                        side: const BorderSide(color: HermesColors.amber),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      onPressed: () async {
+                        if (sl.isRegistered<NotificationTriageServiceBase>()) {
+                          final triage = sl<NotificationTriageServiceBase>();
+                          final success = await triage.requestRebind();
+                          if (!context.mounted) return;
+                          if (success) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content:
+                                    Text('Listener berhasil terhubung kembali.'),
+                              ),
+                            );
+                            await _checkNotificationListenerAndBatteryState();
+                          } else {
+                            await triage.requestPermission();
+                          }
+                        }
+                      },
+                    ),
+                    if (!_batteryOptimizationExempt)
+                      OutlinedButton.icon(
+                        key: const Key(
+                          'notification_listener_banner_battery_button',
                         ),
-                      );
-                      await _checkNotificationListenerAndBatteryState();
-                    } else {
-                      await triage.requestPermission();
-                    }
-                  }
-                },
-              ),
-              if (!_batteryOptimizationExempt) ...[
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  key: const Key(
-                    'notification_listener_banner_battery_button',
-                  ),
-                  icon: const Icon(Icons.battery_alert_outlined, size: 14),
-                  label: const Text('Optimasi Baterai'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: HermesColors.amber,
-                    side: const BorderSide(color: HermesColors.amber),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  onPressed: () async {
-                    if (sl.isRegistered<BatteryOptimizationServiceBase>()) {
-                      await sl<BatteryOptimizationServiceBase>()
-                          .requestDisableBatteryOptimization();
-                    }
-                  },
+                        icon: const Icon(Icons.battery_alert_outlined, size: 14),
+                        label: const Text('Optimasi Baterai'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: HermesColors.amber,
+                          side: const BorderSide(color: HermesColors.amber),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onPressed: () async {
+                          if (sl
+                              .isRegistered<BatteryOptimizationServiceBase>()) {
+                            await sl<BatteryOptimizationServiceBase>()
+                                .requestDisableBatteryOptimization();
+                          }
+                        },
+                      ),
+                  ],
                 ),
-              ],
-              const Spacer(),
+              ),
               IconButton(
                 key: const Key('notification_listener_banner_dismiss_button'),
                 icon: const Icon(Icons.close, size: 16),
