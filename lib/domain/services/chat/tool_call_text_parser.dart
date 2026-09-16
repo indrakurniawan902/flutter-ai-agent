@@ -72,6 +72,53 @@ class ToolCallTextParser {
     );
   }
 
+  /// Fences that are genuinely markdown fences.
+  ///
+  /// [_findFences] pairs backtick runs by position alone, so a code fence a
+  /// model wrote *inside* a tool call's arguments (as in
+  /// `{"content":"```dart"}`) gets paired with any later closer. Such a run is
+  /// content, not a fence: a backtick run whose opener is reached inside a JSON
+  /// string is skipped here. Used only to decide whether a fallback span is
+  /// legitimate, so the main scan keeps the exact fence list it had.
+  List<_Fence> _realFences(String text, List<_Fence> fences) {
+    final real = <_Fence>[];
+    var inString = false;
+    var i = 0;
+    var fi = 0;
+    while (i < text.length) {
+      while (fi < fences.length && fences[fi].end <= i) {
+        fi++;
+      }
+      if (fi < fences.length && i == fences[fi].start) {
+        if (!inString) {
+          real.add(fences[fi]);
+          i = fences[fi].end;
+          fi++;
+          continue;
+        }
+        fi++;
+        continue;
+      }
+      final c = text.codeUnitAt(i);
+      if (inString) {
+        if (c == 0x5C) {
+          i += 2;
+          continue;
+        }
+        if (c == 0x22) inString = false;
+        i++;
+        continue;
+      }
+      if (c == 0x22) {
+        inString = true;
+        i++;
+        continue;
+      }
+      i++;
+    }
+    return real;
+  }
+
   List<_Fence> _findFences(String text) {
     final fences = <_Fence>[];
     var i = 0;
@@ -114,6 +161,62 @@ class ToolCallTextParser {
   /// ignored, so a code example is never executed.
   bool _isToolCallInfo(String info) =>
       info.isEmpty || info == 'json' || info == 'tool_call';
+
+  /// Fence-blind variant of [_matchEnds], matching the `_balancedEnd` helper the
+  /// previously shipped parser called at every opener.
+  ///
+  /// The fence-aware pass is the fast path and is what makes the scan linear,
+  /// but it skips fence interiors, so where a payload's closer sits inside one
+  /// it finds no end at all. The shipped parser still recovered a call there,
+  /// and losing those calls is a regression, not a speed-up. Computing this map
+  /// in ONE forward pass keeps the fallback linear; a per-opener re-scan is
+  /// quadratic and starves later openers once its work budget runs out.
+  Map<int, int> _matchEndsBlind(String text) {
+    final ends = <int, int>{};
+    final openers = <int>[];
+    var inString = false;
+    var i = 0;
+    while (i < text.length) {
+      final c = text.codeUnitAt(i);
+      if (inString) {
+        if (c == 0x5C) {
+          i += 2;
+          continue;
+        }
+        if (c == 0x22) inString = false;
+        i++;
+        continue;
+      }
+      if (c == 0x22) {
+        inString = true;
+        i++;
+        continue;
+      }
+      if (c == 0x7B || c == 0x5B) {
+        openers.add(i);
+        i++;
+        continue;
+      }
+      if (c == 0x7D || c == 0x5D) {
+        if (openers.isEmpty) {
+          i++;
+          continue;
+        }
+        final open = openers.last;
+        final expected = text.codeUnitAt(open) == 0x7B ? 0x7D : 0x5D;
+        if (expected == c) {
+          openers.removeLast();
+          ends[open] = i + 1;
+        } else {
+          openers.clear();
+        }
+        i++;
+        continue;
+      }
+      i++;
+    }
+    return ends;
+  }
 
   /// Maps each balanced opener index to the exclusive end of its shortest
   /// balanced span.
@@ -196,8 +299,15 @@ class ToolCallTextParser {
     List<_AcceptedSpan> accepted,
   ) {
     final ends = _matchEnds(text, fences);
+    // Only built when the fast path leaves an opener without an end, so an
+    // ordinary message never pays for it.
+    Map<int, int>? blindEnds;
+    List<_Fence>? realFences;
     var i = 0;
     var fi = 0;
+    // First REAL fence starting at or after `i`. Fences are disjoint and sorted
+    // and `i` only moves right, so this advances monotonically.
+    var fj = 0;
     var inString = false;
     while (i < text.length) {
       // `fi` only moves right, so the fence test is O(1) amortised. The old
@@ -225,7 +335,24 @@ class ToolCallTextParser {
         continue;
       }
       if (c == '{' || c == '[') {
-        final end = ends[i];
+        var end = ends[i];
+        if (end == null) {
+          blindEnds ??= _matchEndsBlind(text);
+          final blind = blindEnds[i];
+          if (blind != null) {
+            realFences ??= _realFences(text, fences);
+            while (fj < realFences.length && realFences[fj].start < i) {
+              fj++;
+            }
+            // Accept only a span that stays clear of every real fence. A span
+            // crossing one is not a legitimate bare call, and accepting it
+            // executed code sitting inside a tagged block while making a fenced
+            // payload quadratic.
+            if (fj >= realFences.length || realFences[fj].start >= blind) {
+              end = blind;
+            }
+          }
+        }
         if (end != null) {
           final decoded = _tryDecode(text.substring(i, end));
           if (decoded != null) {
