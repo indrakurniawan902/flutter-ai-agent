@@ -28,6 +28,39 @@ import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_
 import 'package:flutter_ai_agent/presentation/screen/chat/cubit/agent_state.dart';
 import 'package:flutter_ai_agent/utils/thought_extractor.dart';
 
+/// Why an e-money scan did not produce a balance.
+enum NfcEmoneyScanFailureKind {
+  /// The device has no NFC hardware.
+  unsupported,
+  /// NFC hardware exists but the adapter is switched off (actionable:
+  /// send the user to NFC settings).
+  disabled,
+  /// The service could not be reached / the cubit has no NFC service.
+  unavailable,
+  /// A card was found but it cannot be read: no transceive capability, or
+  /// an unrecognized brand.
+  cardUnsupported,
+  /// The read itself failed or timed out.
+  readFailed,
+}
+
+/// Outcome of [AgentCubit.scanNfcEmoneyBalance]. Either [balance] is set,
+/// or [failureKind] explains why it is not.
+class NfcEmoneyScanResult {
+  final EmoneyBalance? balance;
+  final NfcEmoneyScanFailureKind? failureKind;
+
+  const NfcEmoneyScanResult._({this.balance, this.failureKind});
+
+  const NfcEmoneyScanResult.success(EmoneyBalance balance)
+      : this._(balance: balance);
+
+  const NfcEmoneyScanResult.failure(NfcEmoneyScanFailureKind kind)
+      : this._(failureKind: kind);
+
+  bool get isSuccess => balance != null;
+}
+
 /// Orchestrates the full ReAct agent loop:
 /// User Prompt -> LLM -> Tool Call -> Tool Result -> LLM -> Final Text Answer
 /// with tier-based Human-in-the-Loop (HITL) gate.
@@ -593,16 +626,35 @@ class AgentCubit extends Cubit<AgentState> {
   }
 
   /// Reads an e-Money card balance over NFC.
-  Future<EmoneyBalance?> scanNfcEmoneyBalance() async {
+  Future<NfcEmoneyScanResult> scanNfcEmoneyBalance() async {
     final service = _nfcService;
-    if (service == null) return null;
+    if (service == null) {
+      return const NfcEmoneyScanResult.failure(
+        NfcEmoneyScanFailureKind.unavailable,
+      );
+    }
     final isAvailable = (await service.isAvailable()).getOrElse(() => false);
-    if (!isAvailable) return null;
+    if (!isAvailable) {
+      return const NfcEmoneyScanResult.failure(
+        NfcEmoneyScanFailureKind.unsupported,
+      );
+    }
     final isEnabled = (await service.isEnabled()).getOrElse(() => false);
-    if (!isEnabled) return null;
+    if (!isEnabled) {
+      return const NfcEmoneyScanResult.failure(
+        NfcEmoneyScanFailureKind.disabled,
+      );
+    }
 
     final result = await service.readEmoneyBalance();
-    return result.fold((_) => null, (balance) => balance);
+    return result.fold(
+      (failure) => NfcEmoneyScanResult.failure(
+        failure is NfcCardUnsupportedFailure
+            ? NfcEmoneyScanFailureKind.cardUnsupported
+            : NfcEmoneyScanFailureKind.readFailed,
+      ),
+      (balance) => NfcEmoneyScanResult.success(balance),
+    );
   }
 
   /// Pauses the agent loop and requests user approval for [request].

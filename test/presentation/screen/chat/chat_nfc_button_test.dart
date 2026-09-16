@@ -302,17 +302,19 @@ void main() {
       verifyNever(() => fakeNfc.readCardUid());
     });
 
-    test('scanNfcEmoneyBalance returns null when NFC is not available', () async {
+    test('scanNfcEmoneyBalance returns unsupported when NFC is not available',
+        () async {
       when(() => fakeNfc.isAvailable())
           .thenAnswer((_) async => const Right(false));
 
       final result = await cubit.scanNfcEmoneyBalance();
 
-      expect(result, isNull);
+      expect(result.failureKind, NfcEmoneyScanFailureKind.unsupported);
+      expect(result.balance, isNull);
       verifyNever(() => fakeNfc.readEmoneyBalance());
     });
 
-    test('scanNfcEmoneyBalance returns null when NFC is disabled', () async {
+    test('scanNfcEmoneyBalance returns disabled when NFC is disabled', () async {
       when(() => fakeNfc.isAvailable())
           .thenAnswer((_) async => const Right(true));
       when(() => fakeNfc.isEnabled())
@@ -320,8 +322,68 @@ void main() {
 
       final result = await cubit.scanNfcEmoneyBalance();
 
-      expect(result, isNull);
+      expect(result.failureKind, NfcEmoneyScanFailureKind.disabled);
+      expect(result.balance, isNull);
       verifyNever(() => fakeNfc.readEmoneyBalance());
+    });
+
+    test('scanNfcEmoneyBalance returns unavailable without an NFC service',
+        () async {
+      final cubitWithoutNfc = AgentCubit(
+        llmRepository: mockLlm,
+        secureStorageService: fakeStorage,
+      );
+      addTearDown(cubitWithoutNfc.close);
+
+      final result = await cubitWithoutNfc.scanNfcEmoneyBalance();
+
+      expect(result.failureKind, NfcEmoneyScanFailureKind.unavailable);
+      expect(result.balance, isNull);
+      expect(result.isSuccess, isFalse);
+    });
+
+    test('scanNfcEmoneyBalance maps an unsupported card distinctly', () async {
+      when(() => fakeNfc.readEmoneyBalance()).thenAnswer(
+        (_) async => const Left(NfcCardUnsupportedFailure()),
+      );
+
+      final result = await cubit.scanNfcEmoneyBalance();
+
+      expect(result.failureKind, NfcEmoneyScanFailureKind.cardUnsupported);
+      expect(result.failureKind, isNot(NfcEmoneyScanFailureKind.readFailed));
+      expect(result.failureKind, isNot(NfcEmoneyScanFailureKind.disabled));
+      expect(result.balance, isNull);
+    });
+
+    test('scanNfcEmoneyBalance maps a timeout to readFailed', () async {
+      when(() => fakeNfc.readEmoneyBalance()).thenAnswer(
+        (_) async => const Left(NfcScanTimeoutFailure()),
+      );
+
+      final result = await cubit.scanNfcEmoneyBalance();
+
+      expect(result.failureKind, NfcEmoneyScanFailureKind.readFailed);
+      expect(result.failureKind, isNot(NfcEmoneyScanFailureKind.cardUnsupported));
+      expect(result.balance, isNull);
+    });
+
+    test('scanNfcEmoneyBalance returns the balance on success', () async {
+      when(() => fakeNfc.readEmoneyBalance()).thenAnswer(
+        (_) async => const Right(
+          EmoneyBalance(
+            brand: EmoneyCardBrand.mandiriEmoney,
+            cardUid: '04abcdef',
+            balanceRupiah: 12345,
+          ),
+        ),
+      );
+
+      final result = await cubit.scanNfcEmoneyBalance();
+
+      expect(result.isSuccess, isTrue);
+      expect(result.balance, isNotNull);
+      expect(result.balance!.balanceRupiah, 12345);
+      expect(result.failureKind, isNull);
     });
 
     test('AgentCubit.create factory wires custom storage and nfcService', () {

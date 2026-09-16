@@ -1297,9 +1297,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
     _isNfcScanning = true;
     try {
-      final balance = await cubit.scanNfcEmoneyBalance();
+      final result = await cubit.scanNfcEmoneyBalance();
       if (!mounted) return;
-      if (balance != null) {
+      if (result.balance != null) {
+        final balance = result.balance!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
