@@ -27,6 +27,18 @@ class _CountingLoader implements SkillRemoteLoaderBase {
   }
 }
 
+class _RecordingLoader implements SkillRemoteLoaderBase {
+  String? lastUrl;
+  final Either<Failure, String> result;
+  _RecordingLoader(this.result);
+
+  @override
+  Future<Either<Failure, String>> fetchSkillMarkdown(String url) async {
+    lastUrl = url;
+    return result;
+  }
+}
+
 const String _validMarkdown = '''---
 name: remote_notes
 description: Organize notes quickly
@@ -135,6 +147,67 @@ void main() {
       expect(result.isLeft(), isTrue);
       expect(loader.called, isFalse);
     }
+  });
+
+  test('normalizeSkillSourceUrl rewrites github blob url to raw url', () {
+    expect(
+      SkillRemoteLoaderBase.normalizeSkillSourceUrl(
+        'https://github.com/obra/superpowers/blob/main/skills/brainstorming/SKILL.md',
+      ),
+      'https://raw.githubusercontent.com/obra/superpowers/main/skills/brainstorming/SKILL.md',
+    );
+  });
+
+  test('normalizeSkillSourceUrl leaves github raw url unchanged', () {
+    expect(
+      SkillRemoteLoaderBase.normalizeSkillSourceUrl(
+        'https://github.com/obra/superpowers/raw/main/skills/brainstorming/SKILL.md',
+      ),
+      'https://github.com/obra/superpowers/raw/main/skills/brainstorming/SKILL.md',
+    );
+  });
+
+  test('normalizeSkillSourceUrl leaves raw.githubusercontent url unchanged', () {
+    expect(
+      SkillRemoteLoaderBase.normalizeSkillSourceUrl(
+        'https://raw.githubusercontent.com/obra/superpowers/main/skills/brainstorming/SKILL.md',
+      ),
+      'https://raw.githubusercontent.com/obra/superpowers/main/skills/brainstorming/SKILL.md',
+    );
+  });
+
+  test('normalizeSkillSourceUrl leaves non-github and blobless urls unchanged', () {
+    expect(
+      SkillRemoteLoaderBase.normalizeSkillSourceUrl(
+        'https://example.com/a/blob/b/c/SKILL.md',
+      ),
+      'https://example.com/a/blob/b/c/SKILL.md',
+    );
+    expect(
+      SkillRemoteLoaderBase.normalizeSkillSourceUrl(
+        'https://github.com/obra/superpowers',
+      ),
+      'https://github.com/obra/superpowers',
+    );
+  });
+
+  test('buildPreview hands normalized raw url to loader and preview', () async {
+    final registry = SkillsRegistryService(loadDefaults: false);
+    final loader = _RecordingLoader(const Right(_validMarkdown));
+    final service = _service(loader: loader, registry: registry);
+    final result = await service.buildPreview(
+      'https://github.com/obra/superpowers/blob/main/skills/brainstorming/SKILL.md',
+    );
+    expect(result.isRight(), isTrue);
+    expect(
+      loader.lastUrl,
+      'https://raw.githubusercontent.com/obra/superpowers/main/skills/brainstorming/SKILL.md',
+    );
+    final preview = result.getOrElse(() => throw StateError('no preview'));
+    expect(
+      preview.sourceUrl,
+      'https://raw.githubusercontent.com/obra/superpowers/main/skills/brainstorming/SKILL.md',
+    );
   });
 
   test('loader network failure is propagated', () async {
