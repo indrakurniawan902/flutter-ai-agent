@@ -117,3 +117,9 @@ class NfcScanTimeoutFailure extends Failure {
     super.message = 'NFC scan timed out. Please tap the card again.',
   ]);
 }
+
+/// The caller cancelled the read (sheet dismissed or Cancel tapped) while the
+/// platform session was still waiting for a card.
+class NfcScanCancelledFailure extends Failure {
+  const NfcScanCancelledFailure([super.message = 'NFC scan cancelled']);
+}
