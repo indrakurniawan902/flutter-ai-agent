@@ -115,12 +115,13 @@ void main() {
   });
 
   group('GeofenceActionDispatcher', () {
-    test('none action does nothing', () async {
+    test('none action does nothing and reports none', () async {
       // Arrange
       final region = regionOf();
 
       // Act
-      await dispatcher.dispatch(region, eventOf(AmbientEventType.geofenceEnter));
+      final result =
+          await dispatcher.dispatch(region, eventOf(AmbientEventType.geofenceEnter));
 
       // Assert
       verifyNever(
@@ -130,6 +131,11 @@ void main() {
         ),
       );
       verifyNever(() => mockContactLauncher.openExternalUrl(any()));
+      expect(result.action, GeofenceAction.none);
+      expect(result.executed, isFalse);
+      expect(result.detail, 'none');
+      expect(result.payload, isEmpty);
+      expect(result.transportId, isNull);
     });
 
     test('notify sends the event title and body as a local notification',
@@ -139,7 +145,7 @@ void main() {
       final event = eventOf(AmbientEventType.geofenceEnter);
 
       // Act
-      await dispatcher.dispatch(region, event);
+      final result = await dispatcher.dispatch(region, event);
 
       // Assert
       verify(
@@ -149,6 +155,27 @@ void main() {
         ),
       ).called(1);
       verifyNever(() => mockContactLauncher.openExternalUrl(any()));
+      expect(result.action, GeofenceAction.notify);
+      expect(result.executed, isTrue);
+      expect(result.detail, 'notification');
+      expect(result.payload, isEmpty);
+    });
+
+    test('notify without a notification service reports unavailable', () async {
+      // Arrange
+      final bare = GeofenceActionDispatcher(
+        promptRegistry: registry,
+        contactLauncherTools: mockContactLauncher,
+      );
+      final region = regionOf(action: GeofenceAction.notify);
+
+      // Act
+      final result =
+          await bare.dispatch(region, eventOf(AmbientEventType.geofenceEnter));
+
+      // Assert
+      expect(result.executed, isFalse);
+      expect(result.detail, 'unavailable');
     });
 
     test('runPrompt dispatches the payload through the active transport',
@@ -162,7 +189,8 @@ void main() {
       );
 
       // Act
-      await dispatcher.dispatch(region, eventOf(AmbientEventType.geofenceEnter));
+      final result =
+          await dispatcher.dispatch(region, eventOf(AmbientEventType.geofenceEnter));
 
       // Assert
       expect(fake.dispatched, ['Turn on the lights']);
@@ -172,6 +200,11 @@ void main() {
           body: any(named: 'body'),
         ),
       );
+      expect(result.action, GeofenceAction.runPrompt);
+      expect(result.executed, isTrue);
+      expect(result.payload, 'Turn on the lights');
+      expect(result.transportId, 'chat');
+      expect(result.detail, 'prompt_dispatched');
     });
 
     test('runPrompt with an empty payload dispatches nothing', () async {
@@ -184,10 +217,14 @@ void main() {
       );
 
       // Act
-      await dispatcher.dispatch(region, eventOf(AmbientEventType.geofenceEnter));
+      final result =
+          await dispatcher.dispatch(region, eventOf(AmbientEventType.geofenceEnter));
 
       // Assert
       expect(fake.dispatched, isEmpty);
+      expect(result.executed, isFalse);
+      expect(result.detail, 'empty_payload');
+      expect(result.payload, isEmpty);
     });
 
     test('runPrompt without a ready transport is a silent no-op', () async {
@@ -200,9 +237,13 @@ void main() {
       );
 
       // Act + Assert: must not throw
-      await dispatcher.dispatch(region, eventOf(AmbientEventType.geofenceEnter));
+      final result =
+          await dispatcher.dispatch(region, eventOf(AmbientEventType.geofenceEnter));
 
       expect(notReady.dispatched, isEmpty);
+      expect(result.executed, isFalse);
+      expect(result.detail, 'no_ready_transport');
+      expect(result.transportId, isNull);
     });
 
     test('openUrl launches the payload URL', () async {
@@ -213,11 +254,16 @@ void main() {
       );
 
       // Act
-      await dispatcher.dispatch(region, eventOf(AmbientEventType.geofenceEnter));
+      final result =
+          await dispatcher.dispatch(region, eventOf(AmbientEventType.geofenceEnter));
 
       // Assert
       verify(() => mockContactLauncher.openExternalUrl('https://example.com'))
           .called(1);
+      expect(result.action, GeofenceAction.openUrl);
+      expect(result.executed, isTrue);
+      expect(result.payload, 'https://example.com');
+      expect(result.detail, 'url_opened');
     });
 
     test('openUrl with an empty payload does not launch', () async {
@@ -225,10 +271,32 @@ void main() {
       final region = regionOf(action: GeofenceAction.openUrl, payload: '');
 
       // Act
-      await dispatcher.dispatch(region, eventOf(AmbientEventType.geofenceEnter));
+      final result =
+          await dispatcher.dispatch(region, eventOf(AmbientEventType.geofenceEnter));
 
       // Assert
       verifyNever(() => mockContactLauncher.openExternalUrl(any()));
+      expect(result.executed, isFalse);
+      expect(result.detail, 'empty_payload');
+    });
+
+    test('openUrl failure reports the failure message as detail', () async {
+      // Arrange
+      when(() => mockContactLauncher.openExternalUrl(any())).thenAnswer(
+        (_) async => const Left(ServerFailure('Cannot launch URL: nope')),
+      );
+      final region = regionOf(
+        action: GeofenceAction.openUrl,
+        payload: 'https://example.com',
+      );
+
+      // Act
+      final result =
+          await dispatcher.dispatch(region, eventOf(AmbientEventType.geofenceEnter));
+
+      // Assert
+      expect(result.executed, isFalse);
+      expect(result.detail, 'Cannot launch URL: nope');
     });
 
     test('a throwing collaborator never escapes dispatch', () async {
@@ -241,14 +309,16 @@ void main() {
       ).thenThrow(Exception('notification plugin down'));
       final region = regionOf(action: GeofenceAction.notify);
 
-      // Act + Assert
-      await expectLater(
-        dispatcher.dispatch(region, eventOf(AmbientEventType.geofenceEnter)),
-        completes,
-      );
+      // Act
+      final result =
+          await dispatcher.dispatch(region, eventOf(AmbientEventType.geofenceEnter));
+
+      // Assert
+      expect(result.executed, isFalse);
+      expect(result.detail, 'error');
     });
 
-    test('trigger mismatch is ignored', () async {
+    test('trigger mismatch is ignored and reported', () async {
       // Arrange: enter-only region, exit event
       final fake = _FakeDispatcher('chat');
       registry.register(fake);
@@ -259,7 +329,8 @@ void main() {
       );
 
       // Act
-      await dispatcher.dispatch(region, eventOf(AmbientEventType.geofenceExit));
+      final result =
+          await dispatcher.dispatch(region, eventOf(AmbientEventType.geofenceExit));
 
       // Assert
       expect(fake.dispatched, isEmpty);
@@ -269,6 +340,8 @@ void main() {
           body: any(named: 'body'),
         ),
       );
+      expect(result.executed, isFalse);
+      expect(result.detail, 'trigger_mismatch');
     });
   });
 
@@ -287,8 +360,13 @@ void main() {
 
     setUp(() {
       mockDispatcher = MockGeofenceActionDispatcher();
-      when(() => mockDispatcher.dispatch(any(), any()))
-          .thenAnswer((_) async {});
+      when(() => mockDispatcher.dispatch(any(), any())).thenAnswer(
+        (invocation) async => GeofenceDispatchResult(
+          action: GeofenceAction.notify,
+          executed: true,
+          detail: 'notification',
+        ),
+      );
       service = AmbientTriggerService(
         battery: MockBatteryPlatformWrapper(),
         workmanager: MockWorkmanagerPlatformWrapper(),
@@ -322,7 +400,7 @@ void main() {
       );
 
       // Act: leave (exit fires), then re-enter inside the cooldown window
-      await service.checkGeofence(
+      final exitResult = await service.checkGeofence(
         latitude: 50.0,
         longitude: 50.0,
         now: fixedTime.add(const Duration(minutes: 5)),
@@ -348,6 +426,21 @@ void main() {
         dispatchedEvents.map((e) => e.type),
         [AmbientEventType.geofenceEnter, AmbientEventType.geofenceExit],
       );
+      // The check results carry exactly the two executed crossings: one on
+      // enter, one on exit.
+      final enterActions = first
+          .getOrElse(() => AmbientCheckResult.empty())
+          .dispatchedActions;
+      expect(enterActions, hasLength(1));
+      expect(enterActions.first.action, GeofenceAction.notify);
+      expect(enterActions.first.executed, isTrue);
+
+      final exitActions = exitResult
+          .getOrElse(() => AmbientCheckResult.empty())
+          .dispatchedActions;
+      expect(exitActions, hasLength(1));
+      expect(exitActions.first.action, GeofenceAction.notify);
+      expect(exitActions.first.executed, isTrue);
     });
   });
 }

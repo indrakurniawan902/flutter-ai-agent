@@ -182,24 +182,29 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
     }
   }
 
-  /// Executes each fired event's bound region action.
+  /// Executes each fired event's bound region action and reports the outcomes.
   ///
   /// Never throws: the dispatcher is best-effort by contract and a region that
   /// no longer exists is skipped, so the ambient check result is unaffected.
-  Future<void> _dispatchBoundActions(List<AmbientEvent> events) async {
+  /// A dispatch that throws anyway contributes no record.
+  Future<List<GeofenceDispatchResult>> _dispatchBoundActions(
+    List<AmbientEvent> events,
+  ) async {
     final dispatcher = _actionDispatcher;
-    if (dispatcher == null || events.isEmpty) return;
+    if (dispatcher == null || events.isEmpty) return const [];
+    final results = <GeofenceDispatchResult>[];
     for (final event in events) {
       final regionId = event.regionId;
       if (regionId == null) continue;
       final index = _regions.indexWhere((r) => r.id == regionId);
       if (index == -1) continue;
       try {
-        await dispatcher.dispatch(_regions[index], event);
+        results.add(await dispatcher.dispatch(_regions[index], event));
       } catch (_) {
         // Swallow: a failed action must never break the ambient check.
       }
     }
+    return results;
   }
 
   ActionItemModel _toActionItem(AmbientEvent event) {
@@ -362,12 +367,15 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
         _insideState[region.id] = inside;
       }
       await _mirrorEventsToActionCenter(fired);
-      await _dispatchBoundActions(fired);
+      final dispatched = await _dispatchBoundActions(fired);
       return Right(
         AmbientCheckResult(
           triggered: fired.isNotEmpty,
           events: fired,
           checkedAt: current,
+          dispatchedActions: dispatched
+              .where((r) => r.action != GeofenceAction.none)
+              .toList(),
         ),
       );
     } catch (e) {
@@ -394,6 +402,7 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
       final combined = <AmbientEvent>[
         ...batteryResult.getOrElse(() => AmbientCheckResult.empty()).events,
       ];
+      var combinedActions = <GeofenceDispatchResult>[];
       if (latitude != null && longitude != null) {
         final geoResult = await checkGeofence(
           latitude: latitude,
@@ -403,15 +412,17 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
         if (geoResult.isLeft()) {
           return geoResult;
         }
-        combined.addAll(
-          geoResult.getOrElse(() => AmbientCheckResult.empty()).events,
-        );
+        final geoCheck =
+            geoResult.getOrElse(() => AmbientCheckResult.empty());
+        combined.addAll(geoCheck.events);
+        combinedActions = geoCheck.dispatchedActions;
       }
       return Right(
         AmbientCheckResult(
           triggered: combined.isNotEmpty,
           events: combined,
           checkedAt: current,
+          dispatchedActions: combinedActions,
         ),
       );
     } catch (e) {

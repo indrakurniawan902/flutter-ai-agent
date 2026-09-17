@@ -1,4 +1,5 @@
 import 'package:flutter_ai_agent/domain/entities/chat/ambient_event.dart';
+import 'package:flutter_ai_agent/domain/services/geofence/geofence_action_dispatcher.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -654,7 +655,7 @@ void main() {
         checkedAt: fixedTime,
       );
       expect(a, equals(b));
-      expect(a.props.length, 3);
+      expect(a.props.length, 4);
       expect(a.copyWith(), equals(a));
       final copy = a.copyWith(
         triggered: false,
@@ -748,6 +749,154 @@ void main() {
         'checkedAt': fixedTime.toIso8601String(),
       });
       expect(result.events, isEmpty);
+    });
+
+    test('defaults dispatchedActions to empty', () {
+      final result = AmbientCheckResult(
+        triggered: false,
+        events: const [],
+        checkedAt: fixedTime,
+      );
+      expect(result.dispatchedActions, isEmpty);
+      expect(result.props.length, 4);
+    });
+
+    test('toJson omits dispatchedActions when empty', () {
+      final result = AmbientCheckResult(
+        triggered: false,
+        events: const [],
+        checkedAt: fixedTime,
+      );
+      expect(result.toJson().containsKey('dispatchedActions'), isFalse);
+    });
+
+    test('toJson / fromJson roundtrip preserves dispatchedActions', () {
+      final result = AmbientCheckResult(
+        triggered: true,
+        events: const [],
+        checkedAt: fixedTime,
+        dispatchedActions: const [
+          GeofenceDispatchResult(
+            action: GeofenceAction.runPrompt,
+            executed: true,
+            payload: 'Lights on',
+            transportId: 'chat',
+            detail: 'prompt_dispatched',
+          ),
+          GeofenceDispatchResult(
+            action: GeofenceAction.openUrl,
+            executed: false,
+            payload: 'https://example.com',
+            detail: 'Cannot launch URL',
+          ),
+        ],
+      );
+
+      final json = result.toJson();
+      expect(json['dispatchedActions'], hasLength(2));
+      final restored = AmbientCheckResult.fromJson(json);
+      expect(restored, equals(result));
+      expect(restored.dispatchedActions.first.transportId, 'chat');
+      expect(
+        restored.dispatchedActions.first.detail,
+        'prompt_dispatched',
+      );
+    });
+
+    test('legacy JSON without dispatchedActions parses as empty', () {
+      final legacy = AmbientCheckResult.fromJson({
+        'triggered': true,
+        'events': [],
+        'checkedAt': fixedTime.toIso8601String(),
+      });
+      expect(legacy.dispatchedActions, isEmpty);
+    });
+
+    test('fromJson tolerates non-list and non-map dispatchedActions', () {
+      final nonList = AmbientCheckResult.fromJson({
+        'triggered': false,
+        'events': [],
+        'dispatchedActions': 'nope',
+      });
+      expect(nonList.dispatchedActions, isEmpty);
+
+      final mixed = AmbientCheckResult.fromJson({
+        'triggered': false,
+        'events': [],
+        'dispatchedActions': ['bad', 123, null],
+      });
+      expect(mixed.dispatchedActions, isEmpty);
+    });
+  });
+
+  group('GeofenceDispatchResult', () {
+    test('supports value equality and copyWith', () {
+      const a = GeofenceDispatchResult(
+        action: GeofenceAction.notify,
+        executed: true,
+        detail: 'notification',
+      );
+      const b = GeofenceDispatchResult(
+        action: GeofenceAction.notify,
+        executed: true,
+        detail: 'notification',
+      );
+      expect(a, equals(b));
+      expect(a.props.length, 5);
+      expect(a.copyWith(), equals(a));
+
+      final copy = a.copyWith(
+        executed: false,
+        detail: 'error',
+        payload: 'x',
+        transportId: 'chat',
+      );
+      expect(copy.executed, isFalse);
+      expect(copy.detail, 'error');
+      expect(copy.payload, 'x');
+      expect(copy.transportId, 'chat');
+    });
+
+    test('toJson omits null transportId and detail', () {
+      const result = GeofenceDispatchResult(
+        action: GeofenceAction.none,
+        executed: false,
+        detail: 'none',
+      );
+      final json = result.toJson();
+      expect(json['action'], 'none');
+      expect(json['executed'], isFalse);
+      expect(json['payload'], isEmpty);
+      expect(json.containsKey('transportId'), isFalse);
+      expect(json['detail'], 'none');
+
+      const bare = GeofenceDispatchResult(
+        action: GeofenceAction.none,
+        executed: false,
+      );
+      expect(bare.toJson().containsKey('detail'), isFalse);
+      expect(bare.toJson().containsKey('transportId'), isFalse);
+    });
+
+    test('fromJson roundtrips and defaults unknown action to none', () {
+      const result = GeofenceDispatchResult(
+        action: GeofenceAction.runPrompt,
+        executed: true,
+        payload: 'Lights on',
+        transportId: 'chat',
+        detail: 'prompt_dispatched',
+      );
+      expect(GeofenceDispatchResult.fromJson(result.toJson()), equals(result));
+
+      final unknown = GeofenceDispatchResult.fromJson({
+        'action': 'teleport',
+        'executed': true,
+      });
+      expect(unknown.action, GeofenceAction.none);
+      expect(unknown.executed, isTrue);
+      expect(unknown.payload, isEmpty);
+      expect(unknown.transportId, isNull);
+      expect(unknown.detail, isNull);
     });
   });
 }

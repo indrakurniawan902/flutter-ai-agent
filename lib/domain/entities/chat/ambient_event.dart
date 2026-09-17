@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import 'package:flutter_ai_agent/domain/services/geofence/geofence_action_dispatcher.dart';
+
 enum AmbientEventType {
   batteryLow,
   batteryCritical,
@@ -343,10 +345,15 @@ class AmbientCheckResult extends Equatable {
   final List<AmbientEvent> events;
   final DateTime checkedAt;
 
+  /// What each crossed region's bound action actually did, in event order.
+  /// Empty when no region carried an action.
+  final List<GeofenceDispatchResult> dispatchedActions;
+
   const AmbientCheckResult({
     required this.triggered,
     required this.events,
     required this.checkedAt,
+    this.dispatchedActions = const [],
   });
 
   factory AmbientCheckResult.empty({DateTime? checkedAt}) {
@@ -361,11 +368,13 @@ class AmbientCheckResult extends Equatable {
     bool? triggered,
     List<AmbientEvent>? events,
     DateTime? checkedAt,
+    List<GeofenceDispatchResult>? dispatchedActions,
   }) {
     return AmbientCheckResult(
       triggered: triggered ?? this.triggered,
       events: events ?? this.events,
       checkedAt: checkedAt ?? this.checkedAt,
+      dispatchedActions: dispatchedActions ?? this.dispatchedActions,
     );
   }
 
@@ -374,6 +383,9 @@ class AmbientCheckResult extends Equatable {
       'triggered': triggered,
       'events': events.map((e) => e.toJson()).toList(),
       'checkedAt': checkedAt.toIso8601String(),
+      if (dispatchedActions.isNotEmpty)
+        'dispatchedActions':
+            dispatchedActions.map((a) => a.toJson()).toList(),
     };
   }
 
@@ -384,6 +396,16 @@ class AmbientCheckResult extends Equatable {
       events = rawEvents
           .whereType<Map>()
           .map((e) => AmbientEvent.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    }
+    final rawActions = json['dispatchedActions'] ?? json['dispatched_actions'];
+    List<GeofenceDispatchResult> dispatchedActions = const [];
+    if (rawActions is List) {
+      dispatchedActions = rawActions
+          .whereType<Map>()
+          .map((a) => GeofenceDispatchResult.fromJson(
+                Map<String, dynamic>.from(a),
+              ))
           .toList();
     }
     final rawCheckedAt = json['checkedAt'] ?? json['checked_at'];
@@ -404,9 +426,15 @@ class AmbientCheckResult extends Equatable {
       triggered: triggered,
       events: events,
       checkedAt: checkedAt,
+      dispatchedActions: dispatchedActions,
     );
   }
 
   @override
-  List<Object?> get props => [triggered, events, checkedAt];
+  List<Object?> get props => [
+        triggered,
+        events,
+        checkedAt,
+        dispatchedActions,
+      ];
 }
