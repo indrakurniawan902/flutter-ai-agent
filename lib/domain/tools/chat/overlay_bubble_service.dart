@@ -62,6 +62,9 @@ abstract class OverlayBubblePlatformWrapper {
 
   /// Toggles the recording indicator drawn on the bubble.
   Future<bool> setRecording(bool recording);
+
+  /// Brings the app to the front; false when it is already in front or failed.
+  Future<bool> openApp();
 }
 
 /// Contract for the floating overlay bubble shown over other apps.
@@ -92,6 +95,9 @@ abstract class OverlayBubbleServiceBase {
 
   /// Forwards the voice-recording indicator state to the bubble.
   Future<bool> setRecording(bool recording);
+
+  /// Asks the platform to bring the app to the front. Degrades to `false`.
+  Future<bool> openApp();
 
   /// The persisted user preference (defaults to `false` when unset). It records
   /// what the user asked for; [isBubbleVisible] reports what is actually on

@@ -149,6 +149,40 @@ void main() {
     await tester.pump();
   });
 
+  testWidgets('subtitle names both tap and hold behaviours', (tester) async {
+    when(() => mock.isBubbleEnabled()).thenAnswer((_) async => false);
+    when(() => mock.checkPermission())
+        .thenAnswer((_) async => OverlayPermissionState.granted);
+
+    await tester.pumpWidget(buildTile());
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.text('Floating bubble shown over other apps. '
+          'Tap to open Flames, hold to talk.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('tap-to-talk'), findsNothing);
+  });
+
+  testWidgets('subtitle is non-blank ASCII with no emoji', (tester) async {
+    when(() => mock.isBubbleEnabled()).thenAnswer((_) async => false);
+    when(() => mock.checkPermission())
+        .thenAnswer((_) async => OverlayPermissionState.granted);
+
+    await tester.pumpWidget(buildTile());
+    await tester.pump();
+    await tester.pump();
+
+    final tileWidget = tester.widget<SwitchListTile>(
+      find.byKey(const Key('settings_overlay_bubble_toggle')),
+    );
+    final text = (tileWidget.subtitle as Text).data!;
+    expect(text.trim(), isNotEmpty);
+    expect(RegExp(r'^[\x00-\x7F]+$').hasMatch(text), isTrue);
+  });
+
   testWidgets('persisted ON renders ON after the initial load',
       (tester) async {
     when(() => mock.isBubbleEnabled()).thenAnswer((_) async => true);
