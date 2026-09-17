@@ -11,6 +11,7 @@ import 'package:flutter_ai_agent/data/datasources/local/action_center/action_cen
 import 'package:flutter_ai_agent/data/models/action_center/action_item_model.dart';
 import 'package:flutter_ai_agent/domain/entities/action_center/action_item.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/ambient_event.dart';
+import 'package:flutter_ai_agent/domain/services/geofence/geofence_action_dispatcher.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart';
 
 @pragma('vm:entry-point')
@@ -69,16 +70,21 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
     WorkmanagerPlatformWrapper? workmanager,
     List<GeofenceRegion>? initialRegions,
     ActionCenterDatasource? actionCenterDatasource,
+    GeofenceActionDispatcherBase? actionDispatcher,
     this.lowThreshold = defaultLowThreshold,
     this.criticalThreshold = defaultCriticalThreshold,
     this.cooldown = defaultCooldown,
   })  : _battery = battery ?? DefaultBatteryPlatformWrapper(),
         _workmanager = workmanager ?? DefaultWorkmanagerPlatformWrapper(),
         _actionCenterDatasource = actionCenterDatasource,
+        _actionDispatcher = actionDispatcher,
         _regions = List<GeofenceRegion>.from(initialRegions ?? const []);
 
   @factoryMethod
-  factory AmbientTriggerService.create() => AmbientTriggerService();
+  factory AmbientTriggerService.create([
+    GeofenceActionDispatcherBase? actionDispatcher,
+  ]) =>
+      AmbientTriggerService(actionDispatcher: actionDispatcher);
 
   static const String ambientPeriodicUniqueName = 'ambient_trigger_periodic';
   static const String ambientTaskName = 'ambientTriggerCheck';
@@ -94,6 +100,10 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
   /// only mode used by dependency injection) ambient checks behave exactly
   /// as before and nothing is mirrored.
   final ActionCenterDatasource? _actionCenterDatasource;
+
+  /// Optional executor for the action bound to a crossed region. Null (or a
+  /// region bound to [GeofenceAction.none]) keeps the check notification-only.
+  final GeofenceActionDispatcherBase? _actionDispatcher;
 
   final List<GeofenceRegion> _regions;
   final Map<String, bool> _insideState = {};
@@ -168,6 +178,26 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
         await datasource.addItem(_toActionItem(event));
       } catch (_) {
         // Swallow: a failed mirror must never break the ambient check.
+      }
+    }
+  }
+
+  /// Executes each fired event's bound region action.
+  ///
+  /// Never throws: the dispatcher is best-effort by contract and a region that
+  /// no longer exists is skipped, so the ambient check result is unaffected.
+  Future<void> _dispatchBoundActions(List<AmbientEvent> events) async {
+    final dispatcher = _actionDispatcher;
+    if (dispatcher == null || events.isEmpty) return;
+    for (final event in events) {
+      final regionId = event.regionId;
+      if (regionId == null) continue;
+      final index = _regions.indexWhere((r) => r.id == regionId);
+      if (index == -1) continue;
+      try {
+        await dispatcher.dispatch(_regions[index], event);
+      } catch (_) {
+        // Swallow: a failed action must never break the ambient check.
       }
     }
   }
@@ -332,6 +362,7 @@ class AmbientTriggerService implements AmbientTriggerServiceBase {
         _insideState[region.id] = inside;
       }
       await _mirrorEventsToActionCenter(fired);
+      await _dispatchBoundActions(fired);
       return Right(
         AmbientCheckResult(
           triggered: fired.isNotEmpty,
