@@ -989,13 +989,19 @@ void main() {
         containsAll(<String>['notification_listener', 'nfc', 'app_details']),
       );
       expect(
+        settingTypeProperty?['enum'],
+        containsAll(<String>['accessibility', 'overlay']),
+      );
+      expect(
         settingTypeProperty?['description']?.toString(),
         contains('notification_listener'),
       );
-      expect(
-        registry.getTool('launch_system_setting')?.description,
-        contains('app_details'),
-      );
+      final settingDescription =
+          registry.getTool('launch_system_setting')?.description ?? '';
+      expect(settingDescription, contains('app_details'));
+      expect(settingDescription, contains('accessibility'));
+      expect(settingDescription, contains('overlay'));
+      expect(settingDescription, contains('display over other apps'));
     });
 
     test('open_map_navigation delegates typed coordinates', () async {
