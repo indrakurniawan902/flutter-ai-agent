@@ -145,12 +145,19 @@ class _SettingsViewState extends State<_SettingsView> {
 
       try {
         final serverProfileCubit = context.read<ServerProfileCubit>();
-        await serverProfileCubit.updateActiveProfile(
-          gatewayUrl: baseUrl,
-          token: apiKey,
-          model: model,
-          temperature: temp.clamp(0.0, 2.0),
-        );
+        if (_isActiveProfileLlmEndpoint(serverProfileCubit.state)) {
+          await serverProfileCubit.updateActiveProfile(
+            gatewayUrl: baseUrl,
+            token: apiKey,
+            model: model,
+            temperature: temp.clamp(0.0, 2.0),
+          );
+        } else {
+          await serverProfileCubit.updateActiveProfile(
+            gatewayUrl: baseUrl,
+            token: apiKey,
+          );
+        }
       } catch (_) {}
     }
   }
@@ -158,6 +165,10 @@ class _SettingsViewState extends State<_SettingsView> {
   void _onReset() {
     context.read<SettingsCubit>().resetToDefaults();
   }
+
+  /// Whether the active profile is an LLM endpoint (or none is active).
+  bool _isActiveProfileLlmEndpoint(ServerProfileState state) =>
+      state.activeProfile?.kind != ServerProfileKind.hermesAgent;
 
   Future<void> _onScanQr() async {
     String? origin;
@@ -470,48 +481,61 @@ class _SettingsViewState extends State<_SettingsView> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      key: const Key('settings_model_field'),
-                      controller: _modelController,
-                      decoration: const InputDecoration(
-                        labelText: 'Model Name',
-                        hintText: 'gpt-4o',
-                        prefixIcon: Icon(Icons.psychology),
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (value) {
-                        final val = value?.trim() ?? '';
-                        if (val.isEmpty) {
-                          return 'Model name cannot be empty';
+                    BlocBuilder<ServerProfileCubit, ServerProfileState>(
+                      builder: (context, profileState) {
+                        if (!_isActiveProfileLlmEndpoint(profileState)) {
+                          return const SizedBox.shrink();
                         }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      key: const Key('settings_temperature_field'),
-                      controller: _temperatureController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration: const InputDecoration(
-                        labelText: 'Temperature',
-                        hintText: '0.7',
-                        helperText: 'Controls randomness (0.0 to 2.0)',
-                        prefixIcon: Icon(Icons.tune),
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (value) {
-                        final val = value?.trim() ?? '';
-                        if (val.isEmpty) {
-                          return 'Please enter a temperature';
-                        }
-                        final d = double.tryParse(val);
-                        if (d == null || d < 0.0 || d > 2.0) {
-                          return 'Temperature must be between 0.0 and 2.0';
-                        }
-                        return null;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              key: const Key('settings_model_field'),
+                              controller: _modelController,
+                              decoration: const InputDecoration(
+                                labelText: 'Model Name',
+                                hintText: 'gpt-4o',
+                                prefixIcon: Icon(Icons.psychology),
+                                border: OutlineInputBorder(),
+                              ),
+                              validator: (value) {
+                                final val = value?.trim() ?? '';
+                                if (val.isEmpty) {
+                                  return 'Model name cannot be empty';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              key: const Key('settings_temperature_field'),
+                              controller: _temperatureController,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                decimal: true,
+                              ),
+                              decoration: const InputDecoration(
+                                labelText: 'Temperature',
+                                hintText: '0.7',
+                                helperText: 'Controls randomness (0.0 to 2.0)',
+                                prefixIcon: Icon(Icons.tune),
+                                border: OutlineInputBorder(),
+                              ),
+                              validator: (value) {
+                                final val = value?.trim() ?? '';
+                                if (val.isEmpty) {
+                                  return 'Please enter a temperature';
+                                }
+                                final d = double.tryParse(val);
+                                if (d == null || d < 0.0 || d > 2.0) {
+                                  return 'Temperature must be between 0.0 and 2.0';
+                                }
+                                return null;
+                              },
+                            ),
+                          ],
+                        );
                       },
                     ),
                     const SizedBox(height: 16),
@@ -664,7 +688,7 @@ class _SettingsViewState extends State<_SettingsView> {
                     style: TextStyle(color: Colors.white60, fontSize: 13),
                   ),
                 )
-              else
+              else ...[
                 Row(
                   children: [
                     Expanded(
@@ -689,10 +713,28 @@ class _SettingsViewState extends State<_SettingsView> {
                               : p.name;
                           return DropdownMenuItem<String>(
                             value: p.id,
-                            child: Text(
-                              label,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: Colors.white),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    label,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _profileKindLabel(p.kind),
+                                  key: const Key('settings_profile_kind_label'),
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.white54,
+                                  ),
+                                ),
+                              ],
                             ),
                           );
                         }).toList(),
@@ -725,12 +767,27 @@ class _SettingsViewState extends State<_SettingsView> {
                     ],
                   ],
                 ),
+                if (activeProfile != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Active: ${_profileKindLabel(activeProfile.kind)}',
+                    key: const Key('settings_active_profile_kind'),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Colors.white54,
+                    ),
+                  ),
+                ],
+              ],
             ],
           ),
         );
       },
     );
   }
+
+  String _profileKindLabel(ServerProfileKind kind) =>
+      kind == ServerProfileKind.llmEndpoint ? 'LLM Endpoint' : 'Hermes Agent';
 
   Widget _buildVoiceSection(BuildContext context, SettingsLoaded state) {
     const tealAccent = Color(0xFF008080);
