@@ -128,6 +128,14 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Home'), findsOneWidget);
+
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('geofence_tile_gf2')),
+        120,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+
       expect(find.text('Work'), findsOneWidget);
       expect(find.text('37.77490, -122.41940 • 100 m'), findsOneWidget);
       expect(find.text('34.05220, -118.24370 • 200 m'), findsOneWidget);
@@ -307,6 +315,14 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('From Storage'), findsOneWidget);
+
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('geofence_tile_gf-tool')),
+        120,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+
       expect(find.text('From LLM'), findsOneWidget);
 
       verifyNever(() => mockAmbient.clearGeofences());
@@ -479,6 +495,267 @@ void main() {
 
       expect(opener.calls, 1);
       verifyNever(() => mockLocation.getLocation());
+    });
+
+    testWidgets('add form renders the action dropdown', (tester) async {
+      registerMocks();
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('geofence_action_dropdown')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('geofence_action_payload_field')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('geofence_action_on_dropdown')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('payload and trigger fields appear only for prompt/url actions',
+        (tester) async {
+      registerMocks();
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('geofence_action_dropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Send prompt').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('geofence_action_payload_field')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('geofence_action_on_dropdown')),
+        findsOneWidget,
+      );
+      expect(find.text('Prompt'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('geofence_action_dropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Notify').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('geofence_action_payload_field')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('geofence_action_on_dropdown')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('runPrompt with empty payload fails validation and never saves',
+        (tester) async {
+      final mockStorage = MockSecureStorageService();
+      final mockAmbient = MockAmbientTriggerService();
+      final mockLocation = MockLocationService();
+
+      when(() => mockStorage.getGeofences())
+          .thenAnswer((_) async => const <GeofenceRegion>[]);
+      when(() => mockStorage.saveGeofences(any())).thenAnswer((_) async {});
+      when(() => mockAmbient.regions).thenAnswer((_) => const []);
+      when(() => mockLocation.getLocation()).thenAnswer(
+        (_) async => Right(<String, dynamic>{'latitude': 0, 'longitude': 0}),
+      );
+
+      sl.registerSingleton<SecureStorageService>(mockStorage);
+      sl.registerSingleton<AmbientTriggerServiceBase>(mockAmbient);
+      sl.registerSingleton<LocationServiceBase>(mockLocation);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('geofence_action_dropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Send prompt').last);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.byKey(const Key('geofence_label_field')), 'Office');
+      await tester.enterText(
+          find.byKey(const Key('geofence_lat_field')), '40.7128');
+      await tester.enterText(
+          find.byKey(const Key('geofence_lng_field')), '-74.0060');
+
+      await tester.tap(find.byKey(const Key('geofence_submit')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Prompt required'), findsOneWidget);
+      final savedBefore =
+          verify(() => mockStorage.saveGeofences(captureAny())).captured;
+      expect(savedBefore.last as List<GeofenceRegion>, isEmpty);
+    });
+
+    testWidgets('full runPrompt add persists the bound action', (tester) async {
+      final mockStorage = MockSecureStorageService();
+      final mockAmbient = MockAmbientTriggerService();
+      final mockLocation = MockLocationService();
+
+      when(() => mockStorage.getGeofences())
+          .thenAnswer((_) async => const <GeofenceRegion>[]);
+      when(() => mockStorage.saveGeofences(any())).thenAnswer((_) async {});
+      when(() => mockAmbient.regions).thenAnswer((_) => const []);
+      when(() => mockLocation.getLocation()).thenAnswer(
+        (_) async => Right(<String, dynamic>{'latitude': 0, 'longitude': 0}),
+      );
+
+      sl.registerSingleton<SecureStorageService>(mockStorage);
+      sl.registerSingleton<AmbientTriggerServiceBase>(mockAmbient);
+      sl.registerSingleton<LocationServiceBase>(mockLocation);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('geofence_action_dropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Send prompt').last);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.byKey(const Key('geofence_label_field')), 'Office');
+      await tester.enterText(
+          find.byKey(const Key('geofence_lat_field')), '40.7128');
+      await tester.enterText(
+          find.byKey(const Key('geofence_lng_field')), '-74.0060');
+      await tester.enterText(
+        find.byKey(const Key('geofence_action_payload_field')),
+        'Turn on focus mode',
+      );
+
+      await tester.tap(find.byKey(const Key('geofence_action_on_dropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('On enter').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('geofence_submit')));
+      await tester.pumpAndSettle();
+
+      final captured =
+          verify(() => mockStorage.saveGeofences(captureAny())).captured;
+      final saved = captured.last as List<GeofenceRegion>;
+      expect(saved.length, 1);
+      expect(saved.first.action, GeofenceAction.runPrompt);
+      expect(saved.first.actionPayload, 'Turn on focus mode');
+      expect(saved.first.actionOn, GeofenceActionTrigger.enter);
+    });
+
+    testWidgets('openUrl rejects a scheme-less URL and accepts https',
+        (tester) async {
+      final mockStorage = MockSecureStorageService();
+      final mockAmbient = MockAmbientTriggerService();
+      final mockLocation = MockLocationService();
+
+      when(() => mockStorage.getGeofences())
+          .thenAnswer((_) async => const <GeofenceRegion>[]);
+      when(() => mockStorage.saveGeofences(any())).thenAnswer((_) async {});
+      when(() => mockAmbient.regions).thenAnswer((_) => const []);
+      when(() => mockLocation.getLocation()).thenAnswer(
+        (_) async => Right(<String, dynamic>{'latitude': 0, 'longitude': 0}),
+      );
+
+      sl.registerSingleton<SecureStorageService>(mockStorage);
+      sl.registerSingleton<AmbientTriggerServiceBase>(mockAmbient);
+      sl.registerSingleton<LocationServiceBase>(mockLocation);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('geofence_action_dropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open URL').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('URL'), findsOneWidget);
+
+      await tester.enterText(
+          find.byKey(const Key('geofence_label_field')), 'Office');
+      await tester.enterText(
+          find.byKey(const Key('geofence_lat_field')), '40.7128');
+      await tester.enterText(
+          find.byKey(const Key('geofence_lng_field')), '-74.0060');
+      await tester.enterText(
+        find.byKey(const Key('geofence_action_payload_field')),
+        'example.com',
+      );
+
+      await tester.tap(find.byKey(const Key('geofence_submit')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Must start with http:// or https://'), findsOneWidget);
+      final savedBefore =
+          verify(() => mockStorage.saveGeofences(captureAny())).captured;
+      expect(savedBefore.last as List<GeofenceRegion>, isEmpty);
+
+      await tester.enterText(
+        find.byKey(const Key('geofence_action_payload_field')),
+        'https://example.com',
+      );
+      await tester.tap(find.byKey(const Key('geofence_submit')));
+      await tester.pumpAndSettle();
+
+      final captured =
+          verify(() => mockStorage.saveGeofences(captureAny())).captured;
+      final saved = captured.last as List<GeofenceRegion>;
+      expect(saved.length, 1);
+      expect(saved.first.action, GeofenceAction.openUrl);
+      expect(saved.first.actionPayload, 'https://example.com');
+    });
+
+    testWidgets('list row shows the bound action line', (tester) async {
+      final regions = [
+        GeofenceRegion(
+          id: 'gf1',
+          name: 'Home',
+          latitude: 0,
+          longitude: 0,
+          radiusMeters: 100,
+          action: GeofenceAction.notify,
+          actionOn: GeofenceActionTrigger.exit,
+        ),
+      ];
+      registerMocks(initialRegions: regions);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      final line = find.byKey(const Key('geofence_action_gf1'));
+      expect(line, findsOneWidget);
+      final text = tester.widget<Text>(line).data ?? '';
+      expect(text, contains('Notify'));
+      expect(text, contains('On exit'));
+    });
+
+    testWidgets('legacy region row renders the no-action line', (tester) async {
+      final regions = [
+        GeofenceRegion(
+          id: 'gf1',
+          name: 'Home',
+          latitude: 0,
+          longitude: 0,
+          radiusMeters: 100,
+        ),
+      ];
+      registerMocks(initialRegions: regions);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      final line = find.byKey(const Key('geofence_action_gf1'));
+      expect(line, findsOneWidget);
+      expect(
+        tester.widget<Text>(line).data,
+        'Nothing • On enter & exit',
+      );
     });
 
     testWidgets('selected radius is used when saving', (tester) async {

@@ -56,11 +56,17 @@ class GeofenceManagementCubit extends Cubit<GeofenceManagementState> {
   }
 
   /// Adds a new [GeofenceRegion], persists it, and returns its id.
+  ///
+  /// [action], [actionPayload] and [actionOn] bind what crossing the region
+  /// does; they default to no action.
   Future<String?> addGeofence({
     required String label,
     required double latitude,
     required double longitude,
     required double radiusMeters,
+    GeofenceAction action = GeofenceAction.none,
+    String actionPayload = '',
+    GeofenceActionTrigger actionOn = GeofenceActionTrigger.both,
   }) async {
     final id = _generateId();
     final region = GeofenceRegion(
@@ -69,6 +75,9 @@ class GeofenceManagementCubit extends Cubit<GeofenceManagementState> {
       latitude: latitude,
       longitude: longitude,
       radiusMeters: radiusMeters,
+      action: action,
+      actionPayload: actionPayload,
+      actionOn: actionOn,
     );
     final regions = [...state.regions, region];
     final ok = await _persist(regions);

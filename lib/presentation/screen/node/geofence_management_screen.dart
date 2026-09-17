@@ -165,6 +165,27 @@ class _GeofenceTile extends StatelessWidget {
                     color: HermesColors.inkMuted,
                   ),
                 ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.bolt_outlined,
+                      size: 11,
+                      color: HermesColors.inkMuted,
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        _actionSummary(region),
+                        key: Key('geofence_action_${region.id}'),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: HermesColors.inkMuted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -187,6 +208,17 @@ class _GeofenceTile extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _actionSummary(GeofenceRegion region) {
+    final base = '${geofenceActionLabel(region.action)} • '
+        '${geofenceActionTriggerLabel(region.actionOn)}';
+    if (region.action == GeofenceAction.runPrompt ||
+        region.action == GeofenceAction.openUrl) {
+      final payload = region.actionPayload.trim();
+      if (payload.isNotEmpty) return '$base • $payload';
+    }
+    return base;
   }
 
   Future<void> _confirmDelete(
@@ -252,11 +284,17 @@ class _AddGeofenceFormState extends State<_AddGeofenceForm> {
   final _labelController = TextEditingController();
   final _latController = TextEditingController();
   final _lngController = TextEditingController();
+  final _actionPayloadController = TextEditingController();
   double _radius = 100;
+  GeofenceAction _action = GeofenceAction.none;
+  GeofenceActionTrigger _actionOn = GeofenceActionTrigger.both;
   bool _capturing = false;
   bool _submitting = false;
 
   static const List<double> _radiusOptions = [50, 100, 200, 500];
+
+  bool get _needsPayload =>
+      _action == GeofenceAction.runPrompt || _action == GeofenceAction.openUrl;
 
   PermissionGate get _permissionGate => widget.permissionGate ?? PermissionGate();
 
@@ -265,6 +303,7 @@ class _AddGeofenceFormState extends State<_AddGeofenceForm> {
     _labelController.dispose();
     _latController.dispose();
     _lngController.dispose();
+    _actionPayloadController.dispose();
     super.dispose();
   }
 
@@ -305,6 +344,10 @@ class _AddGeofenceFormState extends State<_AddGeofenceForm> {
         latitude: lat,
         longitude: lng,
         radiusMeters: _radius,
+        action: _action,
+        actionPayload:
+            _needsPayload ? _actionPayloadController.text.trim() : '',
+        actionOn: _actionOn,
       );
       if (!mounted) return;
       if (id == null) {
@@ -314,7 +357,12 @@ class _AddGeofenceFormState extends State<_AddGeofenceForm> {
       _labelController.clear();
       _latController.clear();
       _lngController.clear();
-      setState(() => _radius = 100);
+      _actionPayloadController.clear();
+      setState(() {
+        _radius = 100;
+        _action = GeofenceAction.none;
+        _actionOn = GeofenceActionTrigger.both;
+      });
       _showFeedback('Geofence added.');
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -344,6 +392,20 @@ class _AddGeofenceFormState extends State<_AddGeofenceForm> {
   String? _validateCoordinate(String? value) {
     if (value == null || value.trim().isEmpty) return 'Required';
     if (double.tryParse(value.trim()) == null) return 'Invalid number';
+    return null;
+  }
+
+  String? _validateActionPayload(String? value) {
+    if (!_needsPayload) return null;
+    final text = value?.trim() ?? '';
+    if (text.isEmpty) {
+      return _action == GeofenceAction.openUrl ? 'URL required' : 'Prompt required';
+    }
+    if (_action == GeofenceAction.openUrl &&
+        !text.startsWith('http://') &&
+        !text.startsWith('https://')) {
+      return 'Must start with http:// or https://';
+    }
     return null;
   }
 
@@ -451,6 +513,56 @@ class _AddGeofenceFormState extends State<_AddGeofenceForm> {
                 if (val != null) setState(() => _radius = val);
               },
             ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<GeofenceAction>(
+              key: const Key('geofence_action_dropdown'),
+              initialValue: _action,
+              dropdownColor: HermesColors.cardSurface,
+              style: const TextStyle(color: HermesColors.inkPrimary),
+              decoration: _inputDecoration('On crossing'),
+              items: GeofenceAction.values
+                  .map(
+                    (a) => DropdownMenuItem(
+                      value: a,
+                      child: Text(geofenceActionLabel(a)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (val) {
+                if (val != null) setState(() => _action = val);
+              },
+            ),
+            if (_needsPayload) ...[
+              const SizedBox(height: 10),
+              TextFormField(
+                key: const Key('geofence_action_payload_field'),
+                controller: _actionPayloadController,
+                style: const TextStyle(color: HermesColors.inkPrimary),
+                decoration: _inputDecoration(
+                  _action == GeofenceAction.openUrl ? 'URL' : 'Prompt',
+                ),
+                validator: _validateActionPayload,
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<GeofenceActionTrigger>(
+                key: const Key('geofence_action_on_dropdown'),
+                initialValue: _actionOn,
+                dropdownColor: HermesColors.cardSurface,
+                style: const TextStyle(color: HermesColors.inkPrimary),
+                decoration: _inputDecoration('Trigger'),
+                items: GeofenceActionTrigger.values
+                    .map(
+                      (t) => DropdownMenuItem(
+                        value: t,
+                        child: Text(geofenceActionTriggerLabel(t)),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (val) {
+                  if (val != null) setState(() => _actionOn = val);
+                },
+              ),
+            ],
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
