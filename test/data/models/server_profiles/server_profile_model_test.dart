@@ -16,6 +16,7 @@ void main() {
     lastConnected: testDate,
     model: AppConstants.defaultModel,
     temperature: AppConstants.defaultTemperature,
+    kind: ServerProfileKind.hermesAgent,
   );
 
   group('ServerProfile Entity', () {
@@ -217,7 +218,95 @@ void main() {
         'lastConnected': testDate.toIso8601String(),
         'model': 'ag-glm',
         'temperature': 0.7,
+        'kind': 'hermesAgent',
       });
+    });
+
+    test('legacy JSON without kind and default model/temperature resolves to hermesAgent', () {
+      final json = {
+        'id': 'node-1',
+        'name': 'Remote Node',
+        'gatewayUrl': 'https://example.com/v1',
+        'token': 'sk-test-token-123',
+        'model': AppConstants.defaultModel,
+        'temperature': AppConstants.defaultTemperature,
+      };
+
+      final result = ServerProfileModel.fromJson(json);
+
+      expect(result.kind, ServerProfileKind.hermesAgent);
+    });
+
+    test('legacy JSON without kind but custom model and/or temperature resolves to llmEndpoint', () {
+      final customModel = ServerProfileModel.fromJson({
+        'id': 'node-1',
+        'name': 'OpenAI Node',
+        'gatewayUrl': 'https://api.openai.com/v1',
+        'token': 'sk-test',
+        'model': 'gpt-4o',
+        'temperature': AppConstants.defaultTemperature,
+      });
+      expect(customModel.kind, ServerProfileKind.llmEndpoint);
+
+      final customTemperature = ServerProfileModel.fromJson({
+        'id': 'node-1',
+        'name': 'OpenAI Node',
+        'gatewayUrl': 'https://api.openai.com/v1',
+        'token': 'sk-test',
+        'model': AppConstants.defaultModel,
+        'temperature': 0.2,
+      });
+      expect(customTemperature.kind, ServerProfileKind.llmEndpoint);
+    });
+
+    test('toJson round-trips both profile kinds', () {
+      final agent = ServerProfileModel(
+        id: '1',
+        name: 'Agent',
+        gatewayUrl: 'https://agent.example.com',
+        token: 'tok',
+        kind: ServerProfileKind.hermesAgent,
+      );
+      final endpoint = ServerProfileModel(
+        id: '2',
+        name: 'Endpoint',
+        gatewayUrl: 'https://api.openai.com/v1',
+        token: 'tok',
+        model: 'gpt-4o',
+        temperature: 0.2,
+        kind: ServerProfileKind.llmEndpoint,
+      );
+
+      expect(ServerProfileModel.fromJson(agent.toJson()).kind,
+          ServerProfileKind.hermesAgent);
+      expect(ServerProfileModel.fromJson(endpoint.toJson()).kind,
+          ServerProfileKind.llmEndpoint);
+    });
+
+    test('fromJson tolerates snake_case and kebab-case kind spellings', () {
+      expect(
+        ServerProfileModel.fromJson({'name': 'A', 'kind': 'hermes_agent'}).kind,
+        ServerProfileKind.hermesAgent,
+      );
+      expect(
+        ServerProfileModel.fromJson({'name': 'A', 'kind': 'llm-endpoint'}).kind,
+        ServerProfileKind.llmEndpoint,
+      );
+    });
+
+    test('unknown kind value falls back to the heuristic without throwing', () {
+      final defaultRecord = ServerProfileModel.fromJson({
+        'name': 'A',
+        'kind': 'garbage-value',
+      });
+      expect(defaultRecord.kind, ServerProfileKind.hermesAgent);
+
+      final customRecord = ServerProfileModel.fromJson({
+        'name': 'A',
+        'kind': 'garbage-value',
+        'model': 'gpt-4o',
+      });
+      expect(customRecord.kind, ServerProfileKind.llmEndpoint);
     });
 
     test('toJson round-trips custom model and temperature', () {
