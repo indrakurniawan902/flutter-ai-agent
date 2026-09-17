@@ -130,5 +130,127 @@ void main() {
         isTrue,
       );
     });
+
+    test('bubble show wires tap and long-press callbacks', () {
+      if (!ready) return;
+
+      expect(
+        bubbleKt,
+        contains(
+          'fun show(context: Context, onTap: () -> Unit, onLongPress: () -> Unit)',
+        ),
+      );
+      expect(
+        serviceKt,
+        contains(
+          'FlamesOverlayBubble.show(this, { handleBubbleTap() }, { handleBubbleLongPress() })',
+        ),
+      );
+    });
+
+    test('bubble tap opens the app without touching voice state', () {
+      if (!ready) return;
+
+      final anchor = serviceKt.indexOf('private fun handleBubbleTap()');
+      expect(anchor, isNot(-1), reason: 'handleBubbleTap not found');
+      final end = serviceKt.indexOf('\n    }', anchor);
+      expect(end, isNot(-1), reason: 'handleBubbleTap closing brace not found');
+      final body = serviceKt.substring(anchor, end);
+
+      expect(body, contains('launchApp('));
+      expect(body, isNot(contains('setRecording(')));
+      expect(body, isNot(contains('voice_input')));
+      expect(body, isNot(contains('cancel_voice')));
+      expect(body, isNot(contains('bubbleRecording')));
+    });
+
+    test('long-press keeps the voice tokens', () {
+      if (!ready) return;
+
+      final anchor = serviceKt.indexOf('private fun handleBubbleLongPress()');
+      expect(anchor, isNot(-1), reason: 'handleBubbleLongPress not found');
+      final end = serviceKt.indexOf('\n    }', anchor);
+      expect(
+        end,
+        isNot(-1),
+        reason: 'handleBubbleLongPress closing brace not found',
+      );
+      final body = serviceKt.substring(anchor, end);
+
+      expect(body, contains('"voice_input"'));
+      expect(body, contains('"cancel_voice"'));
+      expect(body, contains('setRecording('));
+      expect(body, contains('bubbleRecording'));
+    });
+
+    test('service launches MainActivity with task reuse flags', () {
+      if (!ready) return;
+
+      expect(
+        serviceKt,
+        contains(
+          'const val ACTION_OPEN_APP = "ai.hermes.flames.action.OPEN_APP"',
+        ),
+      );
+      expect(
+        serviceKt,
+        contains('@Volatile\n        var isAppForeground: Boolean = false'),
+      );
+      expect(serviceKt, contains('fun setAppForeground(foreground: Boolean)'));
+
+      final anchor = serviceKt.indexOf('fun launchApp(context: Context)');
+      expect(anchor, isNot(-1), reason: 'launchApp not found');
+      final end = serviceKt.indexOf('\n        }', anchor);
+      expect(end, isNot(-1), reason: 'launchApp closing brace not found');
+      final body = serviceKt.substring(anchor, end);
+
+      expect(body, contains('isAppForeground'));
+      expect(body, contains('MainActivity::class.java'));
+      expect(body, contains('action = ACTION_OPEN_APP'));
+      expect(body, contains('Intent.FLAG_ACTIVITY_NEW_TASK'));
+      expect(body, contains('Intent.FLAG_ACTIVITY_SINGLE_TOP'));
+      expect(body, contains('startActivity('));
+    });
+
+    test('MainActivity exposes openApp mapped to the service launcher', () {
+      if (!ready) return;
+
+      expect(activityKt, contains('"openApp"'));
+      expect(
+        RegExp(
+          r'"openApp"\s*->\s*\{[\s\S]*?FlamesBackgroundService\.launchApp\(',
+        ).hasMatch(activityKt),
+        isTrue,
+      );
+    });
+
+    test('activity tracks app foreground state for the tap guard', () {
+      if (!ready) return;
+
+      final resumeAnchor = activityKt.indexOf('override fun onResume()');
+      expect(resumeAnchor, isNot(-1), reason: 'onResume not found');
+      final resumeEnd = activityKt.indexOf('\n    }', resumeAnchor);
+      expect(resumeEnd, isNot(-1), reason: 'onResume closing brace not found');
+      final resumeBody = activityKt.substring(resumeAnchor, resumeEnd);
+      expect(resumeBody, contains('setAppForeground(true)'));
+
+      final pauseAnchor = activityKt.indexOf('override fun onPause()');
+      expect(pauseAnchor, isNot(-1), reason: 'onPause not found');
+      final pauseEnd = activityKt.indexOf('\n    }', pauseAnchor);
+      expect(pauseEnd, isNot(-1), reason: 'onPause closing brace not found');
+      final pauseBody = activityKt.substring(pauseAnchor, pauseEnd);
+      expect(pauseBody, contains('setAppForeground(false)'));
+    });
+
+    test('manifest keeps MainActivity singleTop for task reuse', () {
+      if (!ready) return;
+
+      expect(
+        RegExp(
+          r'android:name="\.MainActivity"[\s\S]*?android:launchMode="singleTop"',
+        ).hasMatch(manifest),
+        isTrue,
+      );
+    });
   });
 }

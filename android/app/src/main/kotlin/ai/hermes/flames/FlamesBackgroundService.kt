@@ -32,6 +32,7 @@ class FlamesBackgroundService : Service() {
         const val ACTION_QUICK_STATUS = "ai.hermes.flames.action.QUICK_STATUS"
         const val ACTION_SHOW_BUBBLE = "ai.hermes.flames.action.SHOW_BUBBLE"
         const val ACTION_HIDE_BUBBLE = "ai.hermes.flames.action.HIDE_BUBBLE"
+        const val ACTION_OPEN_APP = "ai.hermes.flames.action.OPEN_APP"
 
         const val EXTRA_TITLE = "extra_title"
         const val EXTRA_CONTENT = "extra_content"
@@ -47,7 +48,37 @@ class FlamesBackgroundService : Service() {
         var isServiceRunning: Boolean = false
             private set
 
+        @Volatile
+        var isAppForeground: Boolean = false
+            private set
+
         private var wakeLock: PowerManager.WakeLock? = null
+
+        fun setAppForeground(foreground: Boolean) {
+            isAppForeground = foreground
+        }
+
+        /**
+         * Brings MainActivity to the front, unless it is already there.
+         * singleTop launchMode reuses the existing instance instead of
+         * creating a second task. Never throws.
+         */
+        fun launchApp(context: Context): Boolean {
+            return try {
+                if (isAppForeground) {
+                    false
+                } else {
+                    val intent = Intent(context, MainActivity::class.java).apply {
+                        action = ACTION_OPEN_APP
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    }
+                    context.startActivity(intent)
+                    true
+                }
+            } catch (_: Exception) {
+                false
+            }
+        }
 
         fun startService(context: Context, title: String? = null, content: String? = null) {
             val intent = Intent(context, FlamesBackgroundService::class.java).apply {
@@ -197,7 +228,7 @@ class FlamesBackgroundService : Service() {
                 val notification = buildForegroundNotification(currentTitle, currentContent)
                 startForegroundTyped(notification)
                 isServiceRunning = true
-                FlamesOverlayBubble.show(this) { handleBubbleTap() }
+                FlamesOverlayBubble.show(this, { handleBubbleTap() }, { handleBubbleLongPress() })
                 return START_STICKY
             }
             ACTION_HIDE_BUBBLE -> {
@@ -262,10 +293,10 @@ class FlamesBackgroundService : Service() {
     }
 
     /**
-     * Bubble tap = start/stop a voice turn. With no live Dart engine the flag
-     * and the bubble visual stay untouched and the notification says so.
+     * Bubble long-press = start/stop a voice turn. With no live Dart engine the
+     * flag and the bubble visual stay untouched and the notification says so.
      */
-    private fun handleBubbleTap() {
+    private fun handleBubbleLongPress() {
         val channel = dartChannel
         if (channel != null) {
             bubbleRecording = !bubbleRecording
@@ -283,6 +314,11 @@ class FlamesBackgroundService : Service() {
         }
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
         notificationManager?.notify(NOTIFICATION_ID, buildForegroundNotification(currentTitle, currentContent))
+    }
+
+    /** Bubble tap = open the app, unless it is already in front. */
+    private fun handleBubbleTap() {
+        launchApp(this)
     }
 
     override fun onDestroy() {

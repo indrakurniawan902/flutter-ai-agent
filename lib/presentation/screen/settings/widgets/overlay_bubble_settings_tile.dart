@@ -178,7 +178,8 @@ class _OverlayBubbleSettingsTileState extends State<OverlayBubbleSettingsTile> {
           ),
         ),
         subtitle: const Text(
-          'Draggable tap-to-talk bubble shown on top of other apps',
+          'Floating bubble shown over other apps. '
+          'Tap to open Flames, hold to talk.',
           style: TextStyle(color: Colors.white70, fontSize: 12),
         ),
         value: _enabled,

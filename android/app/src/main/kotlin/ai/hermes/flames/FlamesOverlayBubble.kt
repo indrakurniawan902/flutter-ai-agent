@@ -18,8 +18,9 @@ import kotlin.math.hypot
  *
  * Owned by [FlamesBackgroundService] so it survives the activity being
  * destroyed and dies with the service. No layout or drawable resources:
- * the view is built entirely in code. Every public entry point is
- * exception-safe and never throws.
+ * the view is built entirely in code. Tap opens the app; long-press
+ * starts/stops the voice turn. Every public entry point is exception-safe
+ * and never throws.
  */
 object FlamesOverlayBubble {
     private const val IDLE_FILL = 0xFF008080.toInt()
@@ -33,7 +34,7 @@ object FlamesOverlayBubble {
     private var windowManager: WindowManager? = null
     private var bubbleView: ImageView? = null
 
-    fun show(context: Context, onTap: () -> Unit): Boolean {
+    fun show(context: Context, onTap: () -> Unit, onLongPress: () -> Unit): Boolean {
         return try {
             if (!Settings.canDrawOverlays(context)) {
                 false
@@ -63,7 +64,9 @@ object FlamesOverlayBubble {
                         x = 0
                         y = dp(context, BUBBLE_TOP_DP)
                     }
-                    view.setOnTouchListener(buildTouchListener(context, view, params, onTap))
+                    view.setOnTouchListener(
+                        buildTouchListener(context, view, params, onTap, onLongPress)
+                    )
                     manager.addView(view, params)
                     windowManager = manager
                     bubbleView = view
@@ -106,7 +109,8 @@ object FlamesOverlayBubble {
         context: Context,
         view: View,
         params: WindowManager.LayoutParams,
-        onTap: () -> Unit
+        onTap: () -> Unit,
+        onLongPress: () -> Unit
     ): View.OnTouchListener {
         var downRawX = 0f
         var downRawY = 0f
@@ -144,10 +148,17 @@ object FlamesOverlayBubble {
                     }
                     MotionEvent.ACTION_UP -> {
                         val elapsed = System.currentTimeMillis() - downTime
-                        if (movedDistance < DRAG_SLOP_PX && elapsed < TAP_MAX_DURATION_MS) {
-                            try {
-                                onTap()
-                            } catch (_: Exception) {
+                        if (movedDistance < DRAG_SLOP_PX) {
+                            if (elapsed < TAP_MAX_DURATION_MS) {
+                                try {
+                                    onTap()
+                                } catch (_: Exception) {
+                                }
+                            } else {
+                                try {
+                                    onLongPress()
+                                } catch (_: Exception) {
+                                }
                             }
                         } else {
                             snapToEdge(context, view, params)

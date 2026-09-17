@@ -65,6 +65,16 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        FlamesBackgroundService.setAppForeground(true)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        FlamesBackgroundService.setAppForeground(false)
+    }
+
     override fun onDestroy() {
         FlamesBackgroundService.detachDartChannel()
         super.onDestroy()
@@ -250,6 +260,9 @@ class MainActivity : FlutterActivity() {
                         val recording = call.argument<Boolean>("recording") ?: false
                         FlamesOverlayBubble.setRecording(recording)
                         result.success(true)
+                    }
+                    "openApp" -> {
+                        result.success(FlamesBackgroundService.launchApp(this))
                     }
                     else -> {
                         result.notImplemented()
