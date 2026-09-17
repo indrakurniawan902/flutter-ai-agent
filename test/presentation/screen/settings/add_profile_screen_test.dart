@@ -132,27 +132,59 @@ void main() {
 
       expect(find.byKey(const Key('add_profile_model_field')), findsOneWidget);
       expect(find.byKey(const Key('add_profile_temperature_slider')), findsOneWidget);
-      expect(find.byKey(const Key('add_profile_name_chip_Dev')), findsNothing);
+      expect(find.byKey(const Key('add_profile_name_chip_Local')), findsNothing);
 
       await tester.tap(find.text('Hermes Node'));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('add_profile_model_field')), findsNothing);
       expect(find.byKey(const Key('add_profile_temperature_slider')), findsNothing);
-      expect(find.byKey(const Key('add_profile_name_chip_Dev')), findsOneWidget);
+      expect(find.byKey(const Key('add_profile_name_chip_Local')), findsOneWidget);
     });
 
     testWidgets('name suggestion chip fills the profile name field', (tester) async {
       await tester.pumpWidget(buildTestWidget());
       await tester.pump();
 
-      await tester.tap(find.byKey(const Key('add_profile_name_chip_Dev')));
+      await tester.tap(find.byKey(const Key('add_profile_name_chip_Local')));
       await tester.pump();
 
       final nameField = tester.widget<TextFormField>(
         find.byKey(const Key('add_profile_name_field')),
       );
-      expect(nameField.controller?.text, 'Dev');
+      expect(nameField.controller?.text, 'Local');
+    });
+
+    testWidgets(
+        'Add Profile screen never renders internal bot-team profile names',
+        (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      for (final label in ['Local', 'Home Server', 'Cloud', 'Work']) {
+        expect(
+          find.byKey(Key('add_profile_name_chip_$label')),
+          findsOneWidget,
+        );
+      }
+      expect(find.byKey(const Key('add_profile_name_chip_Dev')), findsNothing);
+      expect(find.byKey(const Key('add_profile_name_chip_Ops')), findsNothing);
+      expect(
+        find.byKey(const Key('add_profile_name_chip_Research')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('add_profile_name_chip_Default')), findsNothing);
+
+      await tester.tap(find.text('OpenAI LLM'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('add_profile_name_chip_Dev')), findsNothing);
+      expect(find.byKey(const Key('add_profile_name_chip_Ops')), findsNothing);
+      expect(
+        find.byKey(const Key('add_profile_name_chip_Research')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('add_profile_name_chip_Default')), findsNothing);
     });
 
     testWidgets(

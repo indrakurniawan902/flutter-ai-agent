@@ -65,10 +65,10 @@ class _AddProfileView extends StatefulWidget {
 
 class _AddProfileViewState extends State<_AddProfileView> {
   static const List<String> _nameSuggestions = [
-    'Default',
-    'Dev',
-    'Ops',
-    'Research',
+    'Local',
+    'Home Server',
+    'Cloud',
+    'Work',
   ];
 
   final _formKey = GlobalKey<FormState>();
