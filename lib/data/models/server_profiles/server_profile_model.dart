@@ -39,10 +39,17 @@ class ServerProfileModel extends ServerProfile {
   ///
   /// Records saved before the kind field existed carry no 'kind' key and
   /// default to [ServerProfileKind.hermesAgent]. The exception is a record
-  /// with an explicitly non-default model or temperature: only the
-  /// OpenAI-LLM creation path ever wrote a user-chosen model/temperature, so
-  /// a deviation from the defaults proves the record came from that mode and
-  /// resolves to [ServerProfileKind.llmEndpoint].
+  /// whose stored model or temperature differs from the defaults: that
+  /// deviation usually means the record came from the OpenAI-LLM creation
+  /// path, so it resolves to [ServerProfileKind.llmEndpoint]. This heuristic
+  /// is best-effort, not authoritative.
+  ///
+  /// Known false positive: the pre-kind Settings save path wrote user-edited
+  /// model/temperature into ANY active profile, so a legacy Hermes profile
+  /// whose model or temperature was edited in Settings also resolves to
+  /// [ServerProfileKind.llmEndpoint]. The consequence is limited to a wrong
+  /// kind label and an editable model/temperature on a Hermes profile; no
+  /// stored value is lost.
   static ServerProfileKind _resolveKind(
     Map<String, dynamic> json, {
     required String model,

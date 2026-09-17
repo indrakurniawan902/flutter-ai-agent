@@ -294,6 +294,26 @@ void main() {
       );
     });
 
+    test(
+        'legacy JSON without kind and an edited model resolves to llmEndpoint even for a Hermes profile',
+        () {
+      // Documented best-effort boundary: the pre-kind Settings save path could
+      // edit the model of any active profile, so a legacy Hermes profile with
+      // an edited model is indistinguishable from an OpenAI-LLM one.
+      final json = {
+        'id': 'hermes-1',
+        'name': 'Hermes Node',
+        'gatewayUrl': 'https://hermes.example.com',
+        'token': 'sk-hermes',
+        'model': 'gpt-4o',
+        'temperature': AppConstants.defaultTemperature,
+      };
+
+      final result = ServerProfileModel.fromJson(json);
+
+      expect(result.kind, ServerProfileKind.llmEndpoint);
+    });
+
     test('unknown kind value falls back to the heuristic without throwing', () {
       final defaultRecord = ServerProfileModel.fromJson({
         'name': 'A',
