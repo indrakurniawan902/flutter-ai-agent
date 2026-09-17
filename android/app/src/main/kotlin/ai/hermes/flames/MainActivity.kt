@@ -133,6 +133,9 @@ class MainActivity : FlutterActivity() {
                     "isListenerConnected" -> {
                         result.success(FlamesNotificationListenerService.isConnected())
                     }
+                    "getListenerState" -> {
+                        result.success(buildListenerState())
+                    }
                     "requestRebind" -> {
                         // On MIUI/HyperOS (Xiaomi) the listener is typically killed by
                         // battery optimisation / autostart; a successful rebind may be
@@ -144,11 +147,12 @@ class MainActivity : FlutterActivity() {
                                     ComponentName(applicationContext, FlamesNotificationListenerService::class.java)
                                 )
                                 Handler(Looper.getMainLooper()).postDelayed({
-                                    try {
-                                        result.success(FlamesNotificationListenerService.isConnected())
-                                    } catch (e: Exception) {
-                                        result.error("REBIND_ERROR", e.message, null)
+                                    val connected = try {
+                                        FlamesNotificationListenerService.isConnected()
+                                    } catch (_: Exception) {
+                                        false
                                     }
+                                    result.success(connected)
                                 }, 2000L)
                             } else {
                                 result.success(false)
@@ -596,24 +600,73 @@ class MainActivity : FlutterActivity() {
     /**
      * PERMISSION fact only: may be true while the listener service is dead.
      * Liveness = isListenerConnected.
+     *
+     * Package-exact by design: a stale enabled entry for a DIFFERENT package id
+     * (e.g. the removed dev flavor) must never satisfy this check.
      */
     private fun isNotificationListenerPermissionGranted(): Boolean {
         if (FlamesNotificationListenerService.isConnected()) {
             return true
         }
         return try {
-            val enabledListeners = NotificationManagerCompat.getEnabledListenerPackages(this)
-            if (enabledListeners.contains(packageName)) {
-                return true
-            }
+            val currentComponentFlat =
+                ComponentName(this, FlamesNotificationListenerService::class.java).flattenToString()
             val flat = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
-            if (flat != null && (flat.contains(packageName) || flat.contains("FlamesNotificationListenerService"))) {
-                return true
+            if (flat != null) {
+                val componentEnabled = flat
+                    .split(':')
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .any { entry ->
+                        ComponentName.unflattenFromString(entry)?.flattenToString() == currentComponentFlat
+                    }
+                if (componentEnabled) return true
             }
-            false
+            NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
         } catch (_: Exception) {
             false
         }
+    }
+
+    /**
+     * RAW FACTS only, no policy: the Dart layer resolves the 3-value status.
+     * Never throws; on failure returns null-safe/empty values.
+     */
+    private fun buildListenerState(): Map<String, Any?> {
+        val currentComponent: String = try {
+            ComponentName(this, FlamesNotificationListenerService::class.java).flattenToString()
+        } catch (_: Exception) {
+            ""
+        }
+        val isConnected: Boolean = try {
+            FlamesNotificationListenerService.isConnected()
+        } catch (_: Exception) {
+            false
+        }
+        val enabledComponents: List<String> = try {
+            Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
+                ?.split(':')
+                ?.map { it.trim() }
+                ?.filter { it.isNotEmpty() }
+                ?.map { entry ->
+                    ComponentName.unflattenFromString(entry)?.flattenToString() ?: entry
+                }
+                ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+        val enabledPackages: List<String> = try {
+            NotificationManagerCompat.getEnabledListenerPackages(this).toList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+        return mapOf(
+            "isConnected" to isConnected,
+            "currentComponent" to currentComponent,
+            "currentPackage" to packageName,
+            "enabledListenerComponents" to enabledComponents,
+            "enabledListenerPackages" to enabledPackages
+        )
     }
 
     private companion object {

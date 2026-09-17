@@ -67,6 +67,46 @@ class DefaultNotificationListenerPlatformWrapper
   @override
   Future<void> clearNotifications() =>
       _channel.invokeMethod<void>('clearNotifications');
+
+  @override
+  Future<NotificationListenerState> getListenerState() async {
+    try {
+      final raw = await _channel.invokeMethod<Map>('getListenerState');
+      if (raw != null) {
+        final map = Map<String, dynamic>.from(raw);
+        return NotificationTriageServiceBase.resolveListenerState(
+          isConnected: map['isConnected'] as bool? ?? false,
+          currentComponent: '${map['currentComponent'] ?? ''}',
+          currentPackage: '${map['currentPackage'] ?? ''}',
+          enabledListenerComponents:
+              (map['enabledListenerComponents'] as List?)
+                      ?.map((e) => '$e')
+                      .toList() ??
+                  const [],
+          enabledListenerPackages:
+              (map['enabledListenerPackages'] as List?)
+                      ?.map((e) => '$e')
+                      .toList() ??
+                  const [],
+        );
+      }
+    } catch (_) {
+      // Fall through to the liveness-only fallback below.
+    }
+    var isConnected = false;
+    try {
+      isConnected = await isListenerConnected();
+    } catch (_) {
+      isConnected = false;
+    }
+    return NotificationTriageServiceBase.resolveListenerState(
+      isConnected: isConnected,
+      currentComponent: '',
+      currentPackage: '',
+      enabledListenerComponents: const [],
+      enabledListenerPackages: const [],
+    );
+  }
 }
 
 @LazySingleton(as: NotificationTriageServiceBase)
@@ -179,6 +219,26 @@ class NotificationTriageService implements NotificationTriageServiceBase {
     return '${collapsed.substring(0, maxLength)}...';
   }
 
+  static const String _listenerNotConnectedSentence =
+      'Notification listener service is not running, so no notifications can be observed (buffer is in-memory and re-seeded only at connect). One-tap fix: open Notification Listener settings via launch_system_setting(notification_listener) and toggle the service off/on, then retry. On MIUI also disable battery optimisation / enable autostart for this app.';
+
+  static ListenerNotConnectedFailure _listenerNotConnectedFailure(
+    NotificationListenerState state,
+  ) {
+    if (state.hasStaleEntry) {
+      return ListenerNotConnectedFailure(
+        '[listener_not_connected] $_listenerNotConnectedSentence '
+        'STALE notification-listener entry detected for package id(s): '
+        '${state.stalePackages.join(', ')}. The app (ai.hermes.flames) cannot '
+        'bind while only a stale entry is enabled: open Notification access '
+        'and toggle that stale entry OFF then ON, or remove it, then retry.',
+      );
+    }
+    return const ListenerNotConnectedFailure(
+      '[listener_not_connected] $_listenerNotConnectedSentence',
+    );
+  }
+
   Future<Failure?> _ensureListenerConnected() async {
     try {
       if (await _platform.isListenerConnected()) return null;
@@ -187,12 +247,11 @@ class NotificationTriageService implements NotificationTriageServiceBase {
         await Future<void>.delayed(_pollInterval);
         if (await _platform.isListenerConnected()) return null;
       }
-      return const ListenerNotConnectedFailure(
-        '[listener_not_connected] Notification listener service is not running, so no notifications can be observed (buffer is in-memory and re-seeded only at connect). One-tap fix: open Notification Listener settings via launch_system_setting(notification_listener) and toggle the service off/on, then retry. On MIUI also disable battery optimisation / enable autostart for this app.',
-      );
+      final state = await getListenerState();
+      return _listenerNotConnectedFailure(state);
     } catch (_) {
       return const ListenerNotConnectedFailure(
-        '[listener_not_connected] Notification listener service is not running, so no notifications can be observed (buffer is in-memory and re-seeded only at connect). One-tap fix: open Notification Listener settings via launch_system_setting(notification_listener) and toggle the service off/on, then retry. On MIUI also disable battery optimisation / enable autostart for this app.',
+        '[listener_not_connected] $_listenerNotConnectedSentence',
       );
     }
   }
@@ -236,6 +295,50 @@ class NotificationTriageService implements NotificationTriageServiceBase {
     } catch (_) {
       return false;
     }
+  }
+
+  @override
+  Future<NotificationListenerState> getListenerState() async {
+    try {
+      return await _platform.getListenerState();
+    } catch (_) {
+      return NotificationTriageServiceBase.resolveListenerState(
+        isConnected: false,
+        currentComponent: '',
+        currentPackage: '',
+        enabledListenerComponents: const [],
+        enabledListenerPackages: const [],
+      );
+    }
+  }
+
+  @override
+  Future<ListenerRecoveryOutcome> recoverListener() async {
+    final state = await getListenerState();
+    if (state.status == NotificationListenerStatus.grantedAndBound) {
+      return ListenerRecoveryOutcome(
+        state: state,
+        rebound: false,
+        permissionRequested: false,
+      );
+    }
+    if (state.status == NotificationListenerStatus.grantedNotBound) {
+      final rebound = await requestRebind();
+      final after = await getListenerState();
+      return ListenerRecoveryOutcome(
+        state: after,
+        rebound:
+            rebound && after.status == NotificationListenerStatus.grantedAndBound,
+        permissionRequested: false,
+      );
+    }
+    await requestPermission();
+    final after = await getListenerState();
+    return ListenerRecoveryOutcome(
+      state: after,
+      rebound: false,
+      permissionRequested: true,
+    );
   }
 
   @override
