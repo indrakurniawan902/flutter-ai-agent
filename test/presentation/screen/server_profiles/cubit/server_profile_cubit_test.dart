@@ -289,6 +289,83 @@ void main() {
         isA<ServerProfileOperationSuccess>(),
       ],
     );
+
+    blocTest<ServerProfileCubit, ServerProfileState>(
+      'addProfile persists kind llmEndpoint when the OpenAI mode is chosen',
+      build: () {
+        when(() => mockStorageService.getServerProfiles())
+            .thenAnswer((_) async => []);
+        when(() => mockStorageService.saveServerProfile(any()))
+            .thenAnswer((_) async {});
+        when(() => mockStorageService.saveBaseUrl(any()))
+            .thenAnswer((_) async {});
+        when(() => mockStorageService.saveApiKey(any()))
+            .thenAnswer((_) async {});
+        when(() => mockStorageService.saveModel(any()))
+            .thenAnswer((_) async {});
+        when(() => mockStorageService.saveTemperature(any()))
+            .thenAnswer((_) async {});
+        return ServerProfileCubit(
+          secureStorageService: mockStorageService,
+          autoLoad: false,
+        );
+      },
+      act: (cubit) => cubit.addProfile(
+        name: 'OpenAI Node',
+        gatewayUrl: 'https://api.openai.com/v1',
+        token: 'sk-openai',
+        model: 'gpt-4o',
+        temperature: 0.2,
+        kind: ServerProfileKind.llmEndpoint,
+      ),
+      verify: (_) {
+        verify(() => mockStorageService.saveServerProfile(any(
+              that: isA<ServerProfile>()
+                  .having((p) => p.kind, 'kind', ServerProfileKind.llmEndpoint),
+            ))).called(1);
+      },
+      expect: () => [
+        const ServerProfileLoading(),
+        isA<ServerProfileOperationSuccess>(),
+      ],
+    );
+
+    blocTest<ServerProfileCubit, ServerProfileState>(
+      'addProfile defaults to kind hermesAgent',
+      build: () {
+        when(() => mockStorageService.getServerProfiles())
+            .thenAnswer((_) async => []);
+        when(() => mockStorageService.saveServerProfile(any()))
+            .thenAnswer((_) async {});
+        when(() => mockStorageService.saveBaseUrl(any()))
+            .thenAnswer((_) async {});
+        when(() => mockStorageService.saveApiKey(any()))
+            .thenAnswer((_) async {});
+        when(() => mockStorageService.saveModel(any()))
+            .thenAnswer((_) async {});
+        when(() => mockStorageService.saveTemperature(any()))
+            .thenAnswer((_) async {});
+        return ServerProfileCubit(
+          secureStorageService: mockStorageService,
+          autoLoad: false,
+        );
+      },
+      act: (cubit) => cubit.addProfile(
+        name: 'Hermes Node',
+        gatewayUrl: 'https://hermes.example.com',
+        token: 'token-123',
+      ),
+      verify: (_) {
+        verify(() => mockStorageService.saveServerProfile(any(
+              that: isA<ServerProfile>()
+                  .having((p) => p.kind, 'kind', ServerProfileKind.hermesAgent),
+            ))).called(1);
+      },
+      expect: () => [
+        const ServerProfileLoading(),
+        isA<ServerProfileOperationSuccess>(),
+      ],
+    );
   });
 
   group('ServerProfileCubit - updateActiveProfile', () {
