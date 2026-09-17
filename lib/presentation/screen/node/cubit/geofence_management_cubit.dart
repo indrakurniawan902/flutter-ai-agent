@@ -56,12 +56,25 @@ class GeofenceManagementCubit extends Cubit<GeofenceManagementState> {
   }
 
   /// Adds a new [GeofenceRegion], persists it, and returns its id.
+  ///
+  /// Invalid input emits an error state and returns `null` without persisting
+  /// or touching the live engine.
   Future<String?> addGeofence({
     required String label,
     required double latitude,
     required double longitude,
     required double radiusMeters,
   }) async {
+    final validationError = _validateGeofence(
+      label: label,
+      latitude: latitude,
+      longitude: longitude,
+      radiusMeters: radiusMeters,
+    );
+    if (validationError != null) {
+      emit(state.copyWith(error: validationError));
+      return null;
+    }
     final id = _generateId();
     final region = GeofenceRegion(
       id: id,
@@ -76,6 +89,47 @@ class GeofenceManagementCubit extends Cubit<GeofenceManagementState> {
     _ambient.addGeofence(region);
     emit(state.copyWith(regions: regions, clearError: true));
     return id;
+  }
+
+  /// Updates the region with [id] in place, preserving its id and enabled flag.
+  ///
+  /// Returns `false` without persisting or touching the live engine when the
+  /// region does not exist, the input is invalid, or persistence fails.
+  Future<bool> updateGeofence(
+    String id, {
+    required String label,
+    required double latitude,
+    required double longitude,
+    required double radiusMeters,
+  }) async {
+    final index = state.regions.indexWhere((r) => r.id == id);
+    if (index < 0) {
+      emit(state.copyWith(error: 'Geofence not found'));
+      return false;
+    }
+    final validationError = _validateGeofence(
+      label: label,
+      latitude: latitude,
+      longitude: longitude,
+      radiusMeters: radiusMeters,
+    );
+    if (validationError != null) {
+      emit(state.copyWith(error: validationError));
+      return false;
+    }
+    final updatedRegion = state.regions[index].copyWith(
+      name: label,
+      latitude: latitude,
+      longitude: longitude,
+      radiusMeters: radiusMeters,
+    );
+    final regions = [...state.regions];
+    regions[index] = updatedRegion;
+    final ok = await _persist(regions);
+    if (!ok) return false;
+    _ambient.addGeofence(updatedRegion);
+    emit(state.copyWith(regions: regions, clearError: true));
+    return true;
   }
 
   /// Toggles the enabled flag of the region with [id].
@@ -113,6 +167,28 @@ class GeofenceManagementCubit extends Cubit<GeofenceManagementState> {
         return (latitude: lat.toDouble(), longitude: lng.toDouble());
       },
     );
+  }
+
+  /// Validates geofence input shared by add and update.
+  ///
+  /// Returns a human-readable message when invalid, otherwise `null`.
+  String? _validateGeofence({
+    required String label,
+    required double latitude,
+    required double longitude,
+    required double radiusMeters,
+  }) {
+    if (label.trim().isEmpty) return 'Name is required';
+    if (!latitude.isFinite || latitude < -90 || latitude > 90) {
+      return 'Latitude must be between -90 and 90';
+    }
+    if (!longitude.isFinite || longitude < -180 || longitude > 180) {
+      return 'Longitude must be between -180 and 180';
+    }
+    if (!radiusMeters.isFinite || radiusMeters <= 0 || radiusMeters > 10000) {
+      return 'Radius must be greater than 0 and at most 10000 meters';
+    }
+    return null;
   }
 
   Future<bool> _persist(List<GeofenceRegion> regions) async {

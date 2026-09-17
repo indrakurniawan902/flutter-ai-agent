@@ -522,5 +522,345 @@ void main() {
       expect(saved.length, 1);
       expect(saved.first.radiusMeters, 200);
     });
+
+    testWidgets('each row shows an edit action', (tester) async {
+      final regions = [
+        GeofenceRegion(
+          id: 'gf1',
+          name: 'Home',
+          latitude: 0,
+          longitude: 0,
+          radiusMeters: 100,
+        ),
+        GeofenceRegion(
+          id: 'gf2',
+          name: 'Work',
+          latitude: 1,
+          longitude: 1,
+          radiusMeters: 200,
+        ),
+      ];
+      registerMocks(initialRegions: regions);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('geofence_edit_gf1')), findsOneWidget);
+      expect(find.byKey(const Key('geofence_edit_gf2')), findsOneWidget);
+    });
+
+    testWidgets('tapping edit opens the sheet prefilled', (tester) async {
+      final regions = [
+        GeofenceRegion(
+          id: 'gf1',
+          name: 'Home',
+          latitude: 37.7749,
+          longitude: -122.4194,
+          radiusMeters: 100,
+        ),
+      ];
+      registerMocks(initialRegions: regions);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('geofence_edit_gf1')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit Geofence'), findsOneWidget);
+      expect(find.text('Save Changes'), findsOneWidget);
+
+      final sheet = find.byType(BottomSheet);
+      final labelField = tester.widget<TextFormField>(
+        find.descendant(
+          of: sheet,
+          matching: find.byKey(const Key('geofence_label_field')),
+        ),
+      );
+      final latField = tester.widget<TextFormField>(
+        find.descendant(
+          of: sheet,
+          matching: find.byKey(const Key('geofence_lat_field')),
+        ),
+      );
+      final lngField = tester.widget<TextFormField>(
+        find.descendant(
+          of: sheet,
+          matching: find.byKey(const Key('geofence_lng_field')),
+        ),
+      );
+
+      expect(labelField.controller?.text, 'Home');
+      expect(latField.controller?.text, '37.774900');
+      expect(lngField.controller?.text, '-122.419400');
+    });
+
+    testWidgets('editing the radius persists with the same id and one region',
+        (tester) async {
+      final regions = [
+        GeofenceRegion(
+          id: 'gf1',
+          name: 'Home',
+          latitude: 12.5,
+          longitude: -45.25,
+          radiusMeters: 100,
+        ),
+      ];
+      final mockStorage = MockSecureStorageService();
+      final mockAmbient = MockAmbientTriggerService();
+      final mockLocation = MockLocationService();
+
+      when(() => mockStorage.getGeofences())
+          .thenAnswer((_) async => regions);
+      when(() => mockStorage.saveGeofences(any())).thenAnswer((_) async {});
+      when(() => mockAmbient.regions).thenAnswer((_) => regions);
+      when(() => mockLocation.getLocation()).thenAnswer(
+        (_) async => Right(<String, dynamic>{'latitude': 0, 'longitude': 0}),
+      );
+
+      sl.registerSingleton<SecureStorageService>(mockStorage);
+      sl.registerSingleton<AmbientTriggerServiceBase>(mockAmbient);
+      sl.registerSingleton<LocationServiceBase>(mockLocation);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('geofence_edit_gf1')));
+      await tester.pumpAndSettle();
+
+      final sheet = find.byType(BottomSheet);
+      await tester.tap(
+        find.descendant(
+          of: sheet,
+          matching: find.byKey(const Key('geofence_radius_dropdown')),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('200 m').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.descendant(
+          of: sheet,
+          matching: find.byKey(const Key('geofence_submit')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final captured =
+          verify(() => mockStorage.saveGeofences(captureAny())).captured;
+      final saved = captured.last as List<GeofenceRegion>;
+      expect(saved.length, 1);
+      expect(saved.single.id, 'gf1');
+      expect(saved.single.radiusMeters, 200);
+      expect(saved.single.latitude, 12.5);
+      expect(saved.single.longitude, -45.25);
+    });
+
+    testWidgets('invalid edit shows a validation message and never persists',
+        (tester) async {
+      final regions = [
+        GeofenceRegion(
+          id: 'gf1',
+          name: 'Home',
+          latitude: 12.5,
+          longitude: -45.25,
+          radiusMeters: 100,
+        ),
+      ];
+      final mockStorage = MockSecureStorageService();
+      final mockAmbient = MockAmbientTriggerService();
+      final mockLocation = MockLocationService();
+
+      when(() => mockStorage.getGeofences())
+          .thenAnswer((_) async => regions);
+      when(() => mockStorage.saveGeofences(any())).thenAnswer((_) async {});
+      when(() => mockAmbient.regions).thenAnswer((_) => regions);
+      when(() => mockLocation.getLocation()).thenAnswer(
+        (_) async => Right(<String, dynamic>{'latitude': 0, 'longitude': 0}),
+      );
+
+      sl.registerSingleton<SecureStorageService>(mockStorage);
+      sl.registerSingleton<AmbientTriggerServiceBase>(mockAmbient);
+      sl.registerSingleton<LocationServiceBase>(mockLocation);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('geofence_edit_gf1')));
+      await tester.pumpAndSettle();
+
+      // `load()` persists the merged list once; only the edit path is under
+      // test here, so reset the recorded interactions before acting.
+      clearInteractions(mockStorage);
+      clearInteractions(mockAmbient);
+
+      final sheet = find.byType(BottomSheet);
+      await tester.enterText(
+        find.descendant(
+          of: sheet,
+          matching: find.byKey(const Key('geofence_lat_field')),
+        ),
+        '91',
+      );
+      await tester.tap(
+        find.descendant(
+          of: sheet,
+          matching: find.byKey(const Key('geofence_submit')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Latitude must be between -90 and 90'), findsOneWidget);
+      verifyNever(() => mockStorage.saveGeofences(any()));
+      verifyNever(() => mockAmbient.addGeofence(any()));
+    });
+
+    testWidgets('saving an edit without touching the radius keeps a stored '
+        'non-standard radius', (tester) async {
+      final regions = [
+        GeofenceRegion(
+          id: 'gf1',
+          name: 'Home',
+          latitude: 12.5,
+          longitude: -45.25,
+          radiusMeters: 300,
+        ),
+      ];
+      final mockStorage = MockSecureStorageService();
+      final mockAmbient = MockAmbientTriggerService();
+      final mockLocation = MockLocationService();
+
+      when(() => mockStorage.getGeofences())
+          .thenAnswer((_) async => regions);
+      when(() => mockStorage.saveGeofences(any())).thenAnswer((_) async {});
+      when(() => mockAmbient.regions).thenAnswer((_) => regions);
+      when(() => mockLocation.getLocation()).thenAnswer(
+        (_) async => Right(<String, dynamic>{'latitude': 0, 'longitude': 0}),
+      );
+
+      sl.registerSingleton<SecureStorageService>(mockStorage);
+      sl.registerSingleton<AmbientTriggerServiceBase>(mockAmbient);
+      sl.registerSingleton<LocationServiceBase>(mockLocation);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('geofence_edit_gf1')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('300 m'), findsWidgets);
+
+      final sheet = find.byType(BottomSheet);
+      await tester.tap(
+        find.descendant(
+          of: sheet,
+          matching: find.byKey(const Key('geofence_submit')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final captured =
+          verify(() => mockStorage.saveGeofences(captureAny())).captured;
+      final saved = captured.last as List<GeofenceRegion>;
+      expect(saved.length, 1);
+      expect(saved.single.id, 'gf1');
+      expect(saved.single.radiusMeters, 300);
+    });
+
+    testWidgets('use current location works inside the edit sheet',
+        (tester) async {
+      final regions = [
+        GeofenceRegion(
+          id: 'gf1',
+          name: 'Home',
+          latitude: 12.5,
+          longitude: -45.25,
+          radiusMeters: 100,
+        ),
+      ];
+      registerMocks(initialRegions: regions);
+      final gate = gateWith(PermissionStatus.granted);
+
+      await tester.pumpWidget(createWidgetUnderTest(gate: gate));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('geofence_edit_gf1')));
+      await tester.pumpAndSettle();
+
+      final sheet = find.byType(BottomSheet);
+      await tester.tap(
+        find.descendant(
+          of: sheet,
+          matching: find.byKey(const Key('geofence_use_current_location')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final latField = tester.widget<TextFormField>(
+        find.descendant(
+          of: sheet,
+          matching: find.byKey(const Key('geofence_lat_field')),
+        ),
+      );
+      final lngField = tester.widget<TextFormField>(
+        find.descendant(
+          of: sheet,
+          matching: find.byKey(const Key('geofence_lng_field')),
+        ),
+      );
+      final labelField = tester.widget<TextFormField>(
+        find.descendant(
+          of: sheet,
+          matching: find.byKey(const Key('geofence_label_field')),
+        ),
+      );
+
+      expect(latField.controller?.text, '37.774900');
+      expect(lngField.controller?.text, '-122.419400');
+      expect(labelField.controller?.text, 'Home');
+    });
+
+    testWidgets('add form still creates a new region after the generalisation',
+        (tester) async {
+      final mockStorage = MockSecureStorageService();
+      final mockAmbient = MockAmbientTriggerService();
+      final mockLocation = MockLocationService();
+
+      when(() => mockStorage.getGeofences())
+          .thenAnswer((_) async => const <GeofenceRegion>[]);
+      when(() => mockStorage.saveGeofences(any())).thenAnswer((_) async {});
+      when(() => mockAmbient.regions).thenAnswer((_) => const []);
+      when(() => mockLocation.getLocation()).thenAnswer(
+        (_) async => Right(<String, dynamic>{'latitude': 0, 'longitude': 0}),
+      );
+
+      sl.registerSingleton<SecureStorageService>(mockStorage);
+      sl.registerSingleton<AmbientTriggerServiceBase>(mockAmbient);
+      sl.registerSingleton<LocationServiceBase>(mockLocation);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Add Geofence'), findsWidgets);
+      expect(find.text('Edit Geofence'), findsNothing);
+
+      await tester.enterText(
+          find.byKey(const Key('geofence_label_field')), 'Cabin');
+      await tester.enterText(
+          find.byKey(const Key('geofence_lat_field')), '10.0');
+      await tester.enterText(
+          find.byKey(const Key('geofence_lng_field')), '20.0');
+
+      await tester.tap(find.byKey(const Key('geofence_submit')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cabin'), findsOneWidget);
+      final captured =
+          verify(() => mockStorage.saveGeofences(captureAny())).captured;
+      final saved = captured.last as List<GeofenceRegion>;
+      expect(saved.length, 1);
+      expect(saved.single.name, 'Cabin');
+    });
   });
 }
