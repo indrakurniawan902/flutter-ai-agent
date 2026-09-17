@@ -12,11 +12,17 @@ import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import kotlinx.coroutines.withTimeout
 import java.time.Duration
 import java.time.Instant
 
 object FlamesHealthConnect {
     const val PROVIDER_PACKAGE = "com.google.android.apps.healthdata"
+
+    // On Android 14 a Health Connect call can suspend forever; every native
+    // read must be bounded so the existing catch blocks return a structured
+    // null/empty result instead of hanging the Dart caller.
+    private const val READ_TIMEOUT_MS = 8_000L
 
     val readPermissions: Set<String> = setOf(
         HealthPermission.getReadPermission(StepsRecord::class),
@@ -61,7 +67,9 @@ object FlamesHealthConnect {
     }
 
     suspend fun grantedPermissions(context: Context): Set<String> = try {
-        HealthConnectClient.getOrCreate(context).permissionController.getGrantedPermissions()
+        withTimeout(READ_TIMEOUT_MS) {
+            HealthConnectClient.getOrCreate(context).permissionController.getGrantedPermissions()
+        }
     } catch (_: Throwable) {
         emptySet()
     }
@@ -102,9 +110,11 @@ object FlamesHealthConnect {
         filter: TimeRangeFilter,
         payload: MutableMap<String, Any>,
     ) {
-        val response = client.readRecords(
-            ReadRecordsRequest(recordType = StepsRecord::class, timeRangeFilter = filter)
-        )
+        val response = withTimeout(READ_TIMEOUT_MS) {
+            client.readRecords(
+                ReadRecordsRequest(recordType = StepsRecord::class, timeRangeFilter = filter)
+            )
+        }
         val records = mutableListOf<Map<String, Any>>()
         var total = 0L
         for (record in response.records) {
@@ -126,9 +136,11 @@ object FlamesHealthConnect {
         filter: TimeRangeFilter,
         payload: MutableMap<String, Any>,
     ) {
-        val response = client.readRecords(
-            ReadRecordsRequest(recordType = HeartRateRecord::class, timeRangeFilter = filter)
-        )
+        val response = withTimeout(READ_TIMEOUT_MS) {
+            client.readRecords(
+                ReadRecordsRequest(recordType = HeartRateRecord::class, timeRangeFilter = filter)
+            )
+        }
         val records = mutableListOf<Map<String, Any>>()
         var min = Long.MAX_VALUE
         var max = Long.MIN_VALUE
@@ -164,9 +176,11 @@ object FlamesHealthConnect {
         filter: TimeRangeFilter,
         payload: MutableMap<String, Any>,
     ) {
-        val response = client.readRecords(
-            ReadRecordsRequest(recordType = TotalCaloriesBurnedRecord::class, timeRangeFilter = filter)
-        )
+        val response = withTimeout(READ_TIMEOUT_MS) {
+            client.readRecords(
+                ReadRecordsRequest(recordType = TotalCaloriesBurnedRecord::class, timeRangeFilter = filter)
+            )
+        }
         val records = mutableListOf<Map<String, Any>>()
         var total = 0.0
         for (record in response.records) {
@@ -189,9 +203,11 @@ object FlamesHealthConnect {
         filter: TimeRangeFilter,
         payload: MutableMap<String, Any>,
     ) {
-        val response = client.readRecords(
-            ReadRecordsRequest(recordType = SleepSessionRecord::class, timeRangeFilter = filter)
-        )
+        val response = withTimeout(READ_TIMEOUT_MS) {
+            client.readRecords(
+                ReadRecordsRequest(recordType = SleepSessionRecord::class, timeRangeFilter = filter)
+            )
+        }
         val records = mutableListOf<Map<String, Any>>()
         var totalMinutes = 0L
         for (record in response.records) {
@@ -228,9 +244,11 @@ object FlamesHealthConnect {
         filter: TimeRangeFilter,
         payload: MutableMap<String, Any>,
     ) {
-        val response = client.readRecords(
-            ReadRecordsRequest(recordType = OxygenSaturationRecord::class, timeRangeFilter = filter)
-        )
+        val response = withTimeout(READ_TIMEOUT_MS) {
+            client.readRecords(
+                ReadRecordsRequest(recordType = OxygenSaturationRecord::class, timeRangeFilter = filter)
+            )
+        }
         val records = mutableListOf<Map<String, Any>>()
         var min = Double.MAX_VALUE
         var max = -Double.MAX_VALUE
@@ -263,9 +281,11 @@ object FlamesHealthConnect {
         filter: TimeRangeFilter,
         payload: MutableMap<String, Any>,
     ) {
-        val response = client.readRecords(
-            ReadRecordsRequest(recordType = WeightRecord::class, timeRangeFilter = filter)
-        )
+        val response = withTimeout(READ_TIMEOUT_MS) {
+            client.readRecords(
+                ReadRecordsRequest(recordType = WeightRecord::class, timeRangeFilter = filter)
+            )
+        }
         val records = mutableListOf<Map<String, Any>>()
         var latestKg = 0.0
         var latestTime: Instant? = null

@@ -123,3 +123,10 @@ class NfcScanTimeoutFailure extends Failure {
 class NfcScanCancelledFailure extends Failure {
   const NfcScanCancelledFailure([super.message = 'NFC scan cancelled']);
 }
+
+/// A tool executor or permission pre-check did not answer inside its bound.
+class ToolTimeoutFailure extends Failure {
+  const ToolTimeoutFailure([
+    super.message = 'tool_timeout: the tool did not answer in time',
+  ]);
+}
