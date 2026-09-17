@@ -1,11 +1,15 @@
 import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/data/datasources/tools/chat/ambient_trigger_service.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/ambient_event.dart';
+import 'package:flutter_ai_agent/domain/services/geofence/geofence_action_dispatcher.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import '../../../../helpers/mocks.dart';
+
+class MockGeofenceActionDispatcher extends Mock
+    implements GeofenceActionDispatcherBase {}
 
 void main() {
   late MockBatteryPlatformWrapper mockBattery;
@@ -32,6 +36,23 @@ void main() {
 
   setUpAll(() {
     registerFallbackValue(const Duration(minutes: 15));
+    registerFallbackValue(
+      const GeofenceRegion(
+        id: 'fallback',
+        latitude: 0.0,
+        longitude: 0.0,
+        radiusMeters: 100.0,
+      ),
+    );
+    registerFallbackValue(
+      AmbientEvent(
+        id: 'fallback',
+        type: AmbientEventType.geofenceEnter,
+        title: 'fallback',
+        body: 'fallback',
+        timestamp: fixedTime,
+      ),
+    );
   });
 
   void stubBattery({required int level, required bool charging}) {
@@ -530,6 +551,86 @@ void main() {
       );
 
       expect(result.isLeft(), isTrue);
+    });
+  });
+
+  group('checkGeofence dispatchedActions', () {
+    const promptRegion = GeofenceRegion(
+      id: 'home',
+      latitude: 1.0,
+      longitude: 2.0,
+      radiusMeters: 200.0,
+      action: GeofenceAction.runPrompt,
+      actionPayload: 'Lights on',
+    );
+
+    test('runPrompt crossing reports one executed result with payload',
+        () async {
+      final mockDispatcher = MockGeofenceActionDispatcher();
+      when(() => mockDispatcher.dispatch(any(), any())).thenAnswer(
+        (_) async => const GeofenceDispatchResult(
+          action: GeofenceAction.runPrompt,
+          executed: true,
+          payload: 'Lights on',
+          transportId: 'chat',
+          detail: 'prompt_dispatched',
+        ),
+      );
+      final promptService = AmbientTriggerService(
+        battery: mockBattery,
+        workmanager: mockWorkmanager,
+        actionDispatcher: mockDispatcher,
+      )..addGeofence(promptRegion);
+
+      final result = await promptService.checkGeofence(
+        latitude: 1.0,
+        longitude: 2.0,
+        now: fixedTime,
+      );
+
+      final data = result.getOrElse(() => AmbientCheckResult.empty());
+      expect(data.dispatchedActions, hasLength(1));
+      expect(data.dispatchedActions.first.action, GeofenceAction.runPrompt);
+      expect(data.dispatchedActions.first.executed, isTrue);
+      expect(data.dispatchedActions.first.payload, 'Lights on');
+      expect(data.dispatchedActions.first.transportId, 'chat');
+      expect(data.dispatchedActions.first.detail, 'prompt_dispatched');
+    });
+
+    test('none region crossing reports no dispatched actions', () async {
+      final mockDispatcher = MockGeofenceActionDispatcher();
+      when(() => mockDispatcher.dispatch(any(), any())).thenAnswer(
+        (_) async => const GeofenceDispatchResult(
+          action: GeofenceAction.none,
+          executed: false,
+          detail: 'none',
+        ),
+      );
+      final noneService = AmbientTriggerService(
+        battery: mockBattery,
+        workmanager: mockWorkmanager,
+        actionDispatcher: mockDispatcher,
+      )..addGeofence(homeRegion);
+
+      final result = await noneService.checkGeofence(
+        latitude: 1.0,
+        longitude: 2.0,
+        now: fixedTime,
+      );
+
+      final data = result.getOrElse(() => AmbientCheckResult.empty());
+      expect(data.triggered, isTrue);
+      expect(data.dispatchedActions, isEmpty);
+    });
+
+    test('battery check reports no dispatched actions', () async {
+      stubBattery(level: 8, charging: false);
+
+      final result = await service.checkBattery(now: fixedTime);
+
+      final data = result.getOrElse(() => AmbientCheckResult.empty());
+      expect(data.triggered, isTrue);
+      expect(data.dispatchedActions, isEmpty);
     });
   });
 

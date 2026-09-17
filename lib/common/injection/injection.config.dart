@@ -82,6 +82,8 @@ import 'package:flutter_ai_agent/data/repositories/chat_local_repository_impl.da
     as _i92;
 import 'package:flutter_ai_agent/data/repositories/chat_repository_impl.dart'
     as _i236;
+import 'package:flutter_ai_agent/data/services/geofence/geofence_action_dispatcher.dart'
+    as _i108;
 import 'package:flutter_ai_agent/data/services/tools/tool_pruning_service_impl.dart'
     as _i641;
 import 'package:flutter_ai_agent/data/services/voice/voice_turn_service.dart'
@@ -98,6 +100,8 @@ import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dar
     as _i27;
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_rpc_receiver.dart'
     as _i806;
+import 'package:flutter_ai_agent/domain/services/geofence/geofence_action_dispatcher.dart'
+    as _i757;
 import 'package:flutter_ai_agent/domain/services/share/share_target_service.dart'
     as _i205;
 import 'package:flutter_ai_agent/domain/services/shortcuts/quick_actions_service.dart'
@@ -319,9 +323,6 @@ extension GetItInjectableX on _i174.GetIt {
         urlLauncherProvider: gh<_i777.UrlLauncherProvider>(),
       ),
     );
-    gh.lazySingleton<_i290.AmbientTriggerServiceBase>(
-      () => _i315.AmbientTriggerService.create(),
-    );
     gh.lazySingleton<_i652.VoiceInputServiceBase>(
       () => _i845.VoiceInputService.create(),
     );
@@ -385,6 +386,13 @@ extension GetItInjectableX on _i174.GetIt {
       _i701.DocBuilderSkill.registerTools(registry);
       return registry;
     });
+    gh.lazySingleton<_i757.GeofenceActionDispatcherBase>(
+      () => _i108.GeofenceActionDispatcher.create(
+        gh<_i919.NotificationServiceBase>(),
+        gh<_i31.VoicePromptDispatcherRegistry>(),
+        gh<_i777.ContactLauncherTools>(),
+      ),
+    );
     gh.factory<_i15.AgentCubit>(
       () => _i15.AgentCubit.create(
         llmRepository: gh<_i192.LlmRepository>(),
@@ -401,6 +409,11 @@ extension GetItInjectableX on _i174.GetIt {
     );
     gh.lazySingleton<_i45.PiperTtsEngineBase>(
       () => _i753.PiperTtsEngine.create(gh<_i45.PiperVoiceStoreBase>()),
+    );
+    gh.lazySingleton<_i290.AmbientTriggerServiceBase>(
+      () => _i315.AmbientTriggerService.create(
+        gh<_i757.GeofenceActionDispatcherBase>(),
+      ),
     );
     gh.factory<_i819.ServerProfileCubit>(
       () => _i819.ServerProfileCubit.create(

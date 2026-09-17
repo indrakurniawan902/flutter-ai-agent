@@ -59,11 +59,17 @@ class GeofenceManagementCubit extends Cubit<GeofenceManagementState> {
   ///
   /// Invalid input emits an error state and returns `null` without persisting
   /// or touching the live engine.
+  ///
+  /// [action], [actionPayload] and [actionOn] bind what crossing the region
+  /// does; they default to no action.
   Future<String?> addGeofence({
     required String label,
     required double latitude,
     required double longitude,
     required double radiusMeters,
+    GeofenceAction action = GeofenceAction.none,
+    String actionPayload = '',
+    GeofenceActionTrigger actionOn = GeofenceActionTrigger.both,
   }) async {
     final validationError = _validateGeofence(
       label: label,
@@ -82,6 +88,9 @@ class GeofenceManagementCubit extends Cubit<GeofenceManagementState> {
       latitude: latitude,
       longitude: longitude,
       radiusMeters: radiusMeters,
+      action: action,
+      actionPayload: actionPayload,
+      actionOn: actionOn,
     );
     final regions = [...state.regions, region];
     final ok = await _persist(regions);
@@ -101,6 +110,9 @@ class GeofenceManagementCubit extends Cubit<GeofenceManagementState> {
     required double latitude,
     required double longitude,
     required double radiusMeters,
+    GeofenceAction? action,
+    String? actionPayload,
+    GeofenceActionTrigger? actionOn,
   }) async {
     final index = state.regions.indexWhere((r) => r.id == id);
     if (index < 0) {
@@ -122,6 +134,9 @@ class GeofenceManagementCubit extends Cubit<GeofenceManagementState> {
       latitude: latitude,
       longitude: longitude,
       radiusMeters: radiusMeters,
+      action: action,
+      actionPayload: actionPayload,
+      actionOn: actionOn,
     );
     final regions = [...state.regions];
     regions[index] = updatedRegion;

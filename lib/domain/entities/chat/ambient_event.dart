@@ -1,11 +1,17 @@
 import 'package:equatable/equatable.dart';
 
+import 'package:flutter_ai_agent/domain/services/geofence/geofence_action_dispatcher.dart';
+
 enum AmbientEventType {
   batteryLow,
   batteryCritical,
   geofenceEnter,
   geofenceExit,
 }
+
+enum GeofenceAction { none, notify, runPrompt, openUrl }
+
+enum GeofenceActionTrigger { enter, exit, both }
 
 String ambientEventTypeToJson(AmbientEventType type) => type.name;
 
@@ -38,6 +44,75 @@ AmbientEventType ambientEventTypeFromJson(dynamic raw) {
   }
 }
 
+String geofenceActionToJson(GeofenceAction action) => action.name;
+
+GeofenceAction geofenceActionFromJson(dynamic raw) {
+  final value = '$raw'.trim();
+  for (final action in GeofenceAction.values) {
+    if (action.name.toLowerCase() == value.toLowerCase()) return action;
+  }
+  final normalized =
+      value.toLowerCase().replaceAll('-', '_').replaceAll(' ', '_');
+  switch (normalized) {
+    case 'notify':
+      return GeofenceAction.notify;
+    case 'run_prompt':
+    case 'runprompt':
+    case 'prompt':
+      return GeofenceAction.runPrompt;
+    case 'open_url':
+    case 'openurl':
+    case 'url':
+      return GeofenceAction.openUrl;
+    default:
+      return GeofenceAction.none;
+  }
+}
+
+String geofenceActionTriggerToJson(GeofenceActionTrigger trigger) =>
+    trigger.name;
+
+GeofenceActionTrigger geofenceActionTriggerFromJson(dynamic raw) {
+  final value = '$raw'.trim();
+  for (final trigger in GeofenceActionTrigger.values) {
+    if (trigger.name.toLowerCase() == value.toLowerCase()) return trigger;
+  }
+  final normalized =
+      value.toLowerCase().replaceAll('-', '_').replaceAll(' ', '_');
+  switch (normalized) {
+    case 'enter':
+      return GeofenceActionTrigger.enter;
+    case 'exit':
+      return GeofenceActionTrigger.exit;
+    default:
+      return GeofenceActionTrigger.both;
+  }
+}
+
+String geofenceActionLabel(GeofenceAction action) {
+  switch (action) {
+    case GeofenceAction.none:
+      return 'Nothing';
+    case GeofenceAction.notify:
+      return 'Notify';
+    case GeofenceAction.runPrompt:
+      return 'Send prompt';
+    case GeofenceAction.openUrl:
+      return 'Open URL';
+  }
+}
+
+String geofenceActionTriggerLabel(GeofenceActionTrigger trigger) {
+  switch (trigger) {
+    case GeofenceActionTrigger.enter:
+      return 'On enter';
+    case GeofenceActionTrigger.exit:
+      return 'On exit';
+    case GeofenceActionTrigger.both:
+      return 'On enter & exit';
+  }
+}
+
 class GeofenceRegion extends Equatable {
   final String id;
   final String _name;
@@ -45,6 +120,9 @@ class GeofenceRegion extends Equatable {
   final double longitude;
   final double radiusMeters;
   final bool isEnabled;
+  final GeofenceAction action;
+  final String actionPayload;
+  final GeofenceActionTrigger actionOn;
 
   const GeofenceRegion({
     required this.id,
@@ -53,11 +131,26 @@ class GeofenceRegion extends Equatable {
     required this.longitude,
     required this.radiusMeters,
     this.isEnabled = true,
+    this.action = GeofenceAction.none,
+    this.actionPayload = '',
+    this.actionOn = GeofenceActionTrigger.both,
   }) : _name = name;
 
   String get name => _name.isNotEmpty ? _name : id;
   String get displayName => name;
   String get rawName => _name;
+
+  bool matchesEvent(AmbientEventType type) {
+    if (type == AmbientEventType.geofenceEnter) {
+      return actionOn == GeofenceActionTrigger.enter ||
+          actionOn == GeofenceActionTrigger.both;
+    }
+    if (type == AmbientEventType.geofenceExit) {
+      return actionOn == GeofenceActionTrigger.exit ||
+          actionOn == GeofenceActionTrigger.both;
+    }
+    return false;
+  }
 
   GeofenceRegion copyWith({
     String? id,
@@ -66,6 +159,9 @@ class GeofenceRegion extends Equatable {
     double? longitude,
     double? radiusMeters,
     bool? isEnabled,
+    GeofenceAction? action,
+    String? actionPayload,
+    GeofenceActionTrigger? actionOn,
   }) {
     return GeofenceRegion(
       id: id ?? this.id,
@@ -74,6 +170,9 @@ class GeofenceRegion extends Equatable {
       longitude: longitude ?? this.longitude,
       radiusMeters: radiusMeters ?? this.radiusMeters,
       isEnabled: isEnabled ?? this.isEnabled,
+      action: action ?? this.action,
+      actionPayload: actionPayload ?? this.actionPayload,
+      actionOn: actionOn ?? this.actionOn,
     );
   }
 
@@ -85,6 +184,9 @@ class GeofenceRegion extends Equatable {
       'longitude': longitude,
       'radiusMeters': radiusMeters,
       'isEnabled': isEnabled,
+      'action': geofenceActionToJson(action),
+      'actionPayload': actionPayload,
+      'actionOn': geofenceActionTriggerToJson(actionOn),
     };
   }
 
@@ -109,6 +211,8 @@ class GeofenceRegion extends Equatable {
     final rawName = json['name'] ?? json['label'];
     final rawEnabled =
         json['isEnabled'] ?? json['is_enabled'] ?? json['active'];
+    final rawPayload =
+        json['actionPayload'] ?? json['action_payload'] ?? json['payload'];
 
     return GeofenceRegion(
       id: json['id']?.toString() ?? '',
@@ -120,6 +224,11 @@ class GeofenceRegion extends Equatable {
         100.0,
       ),
       isEnabled: parseBool(rawEnabled, true),
+      action: geofenceActionFromJson(json['action'] ?? json['action_type']),
+      actionPayload: rawPayload is String ? rawPayload : '',
+      actionOn: geofenceActionTriggerFromJson(
+        json['actionOn'] ?? json['action_on'],
+      ),
     );
   }
 
@@ -131,6 +240,9 @@ class GeofenceRegion extends Equatable {
         longitude,
         radiusMeters,
         isEnabled,
+        action,
+        actionPayload,
+        actionOn,
       ];
 }
 
@@ -233,10 +345,15 @@ class AmbientCheckResult extends Equatable {
   final List<AmbientEvent> events;
   final DateTime checkedAt;
 
+  /// What each crossed region's bound action actually did, in event order.
+  /// Empty when no region carried an action.
+  final List<GeofenceDispatchResult> dispatchedActions;
+
   const AmbientCheckResult({
     required this.triggered,
     required this.events,
     required this.checkedAt,
+    this.dispatchedActions = const [],
   });
 
   factory AmbientCheckResult.empty({DateTime? checkedAt}) {
@@ -251,11 +368,13 @@ class AmbientCheckResult extends Equatable {
     bool? triggered,
     List<AmbientEvent>? events,
     DateTime? checkedAt,
+    List<GeofenceDispatchResult>? dispatchedActions,
   }) {
     return AmbientCheckResult(
       triggered: triggered ?? this.triggered,
       events: events ?? this.events,
       checkedAt: checkedAt ?? this.checkedAt,
+      dispatchedActions: dispatchedActions ?? this.dispatchedActions,
     );
   }
 
@@ -264,6 +383,9 @@ class AmbientCheckResult extends Equatable {
       'triggered': triggered,
       'events': events.map((e) => e.toJson()).toList(),
       'checkedAt': checkedAt.toIso8601String(),
+      if (dispatchedActions.isNotEmpty)
+        'dispatchedActions':
+            dispatchedActions.map((a) => a.toJson()).toList(),
     };
   }
 
@@ -274,6 +396,16 @@ class AmbientCheckResult extends Equatable {
       events = rawEvents
           .whereType<Map>()
           .map((e) => AmbientEvent.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    }
+    final rawActions = json['dispatchedActions'] ?? json['dispatched_actions'];
+    List<GeofenceDispatchResult> dispatchedActions = const [];
+    if (rawActions is List) {
+      dispatchedActions = rawActions
+          .whereType<Map>()
+          .map((a) => GeofenceDispatchResult.fromJson(
+                Map<String, dynamic>.from(a),
+              ))
           .toList();
     }
     final rawCheckedAt = json['checkedAt'] ?? json['checked_at'];
@@ -294,9 +426,15 @@ class AmbientCheckResult extends Equatable {
       triggered: triggered,
       events: events,
       checkedAt: checkedAt,
+      dispatchedActions: dispatchedActions,
     );
   }
 
   @override
-  List<Object?> get props => [triggered, events, checkedAt];
+  List<Object?> get props => [
+        triggered,
+        events,
+        checkedAt,
+        dispatchedActions,
+      ];
 }

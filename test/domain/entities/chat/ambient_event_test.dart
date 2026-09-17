@@ -1,4 +1,5 @@
 import 'package:flutter_ai_agent/domain/entities/chat/ambient_event.dart';
+import 'package:flutter_ai_agent/domain/services/geofence/geofence_action_dispatcher.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -81,7 +82,17 @@ void main() {
         radiusMeters: 100.0,
       );
       expect(a, equals(b));
-      expect(a.props, ['home', 'home', 1.0, 2.0, 100.0, true]);
+      expect(a.props, [
+        'home',
+        'home',
+        1.0,
+        2.0,
+        100.0,
+        true,
+        GeofenceAction.none,
+        '',
+        GeofenceActionTrigger.both,
+      ]);
       expect(a.name, 'home');
       expect(a.displayName, 'home');
       expect(a.isEnabled, isTrue);
@@ -98,7 +109,17 @@ void main() {
       expect(custom.name, 'Workplace');
       expect(custom.displayName, 'Workplace');
       expect(custom.isEnabled, isFalse);
-      expect(custom.props, ['work', 'Workplace', 1.0, 2.0, 100.0, false]);
+      expect(custom.props, [
+        'work',
+        'Workplace',
+        1.0,
+        2.0,
+        100.0,
+        false,
+        GeofenceAction.none,
+        '',
+        GeofenceActionTrigger.both,
+      ]);
     });
 
     test('copyWith updates specified fields', () {
@@ -225,6 +246,218 @@ void main() {
       expect(invalid.longitude, 0.0);
       expect(invalid.radiusMeters, 100.0);
       expect(invalid.isEnabled, isTrue);
+    });
+  });
+
+  group('GeofenceRegion action binding', () {
+    test('defaults to no action, empty payload, both triggers', () {
+      const region = GeofenceRegion(
+        id: 'home',
+        latitude: 1.0,
+        longitude: 2.0,
+        radiusMeters: 100.0,
+      );
+      expect(region.action, GeofenceAction.none);
+      expect(region.actionPayload, isEmpty);
+      expect(region.actionOn, GeofenceActionTrigger.both);
+    });
+
+    test('toJson / fromJson roundtrip preserves action binding', () {
+      const runPrompt = GeofenceRegion(
+        id: 'work',
+        latitude: 1.0,
+        longitude: 2.0,
+        radiusMeters: 100.0,
+        action: GeofenceAction.runPrompt,
+        actionPayload: 'Start focus mode',
+        actionOn: GeofenceActionTrigger.enter,
+      );
+      final restoredRun = GeofenceRegion.fromJson(runPrompt.toJson());
+      expect(restoredRun, equals(runPrompt));
+      expect(restoredRun.action, GeofenceAction.runPrompt);
+      expect(restoredRun.actionPayload, 'Start focus mode');
+      expect(restoredRun.actionOn, GeofenceActionTrigger.enter);
+
+      const openUrl = GeofenceRegion(
+        id: 'gym',
+        latitude: 3.0,
+        longitude: 4.0,
+        radiusMeters: 50.0,
+        action: GeofenceAction.openUrl,
+        actionPayload: 'https://example.com',
+        actionOn: GeofenceActionTrigger.exit,
+      );
+      final restoredUrl = GeofenceRegion.fromJson(openUrl.toJson());
+      expect(restoredUrl, equals(openUrl));
+      expect(restoredUrl.action, GeofenceAction.openUrl);
+      expect(restoredUrl.actionPayload, 'https://example.com');
+      expect(restoredUrl.actionOn, GeofenceActionTrigger.exit);
+    });
+
+    test('toJson emits action keys', () {
+      const region = GeofenceRegion(
+        id: 'home',
+        latitude: 1.0,
+        longitude: 2.0,
+        radiusMeters: 100.0,
+        action: GeofenceAction.notify,
+        actionPayload: 'Hello',
+        actionOn: GeofenceActionTrigger.exit,
+      );
+      final json = region.toJson();
+      expect(json['action'], 'notify');
+      expect(json['actionPayload'], 'Hello');
+      expect(json['actionOn'], 'exit');
+    });
+
+    test('legacy JSON without action fields loads safe defaults', () {
+      final legacy = GeofenceRegion.fromJson({
+        'id': 'legacy',
+        'name': 'Home',
+        'latitude': 1.0,
+        'longitude': 2.0,
+        'radiusMeters': 100.0,
+        'isEnabled': true,
+      });
+      expect(legacy.action, GeofenceAction.none);
+      expect(legacy.actionPayload, isEmpty);
+      expect(legacy.actionOn, GeofenceActionTrigger.both);
+      expect(legacy.name, 'Home');
+      expect(legacy.isEnabled, isTrue);
+    });
+
+    test('fromJson tolerates unknown and non-string action values', () {
+      final unknownAction = GeofenceRegion.fromJson({
+        'id': 'r1',
+        'action': 'teleport',
+      });
+      expect(unknownAction.action, GeofenceAction.none);
+
+      final unknownTrigger = GeofenceRegion.fromJson({
+        'id': 'r2',
+        'actionOn': 'whenever',
+      });
+      expect(unknownTrigger.actionOn, GeofenceActionTrigger.both);
+
+      final badPayload = GeofenceRegion.fromJson({
+        'id': 'r3',
+        'action': 'openUrl',
+        'actionPayload': 42,
+      });
+      expect(badPayload.action, GeofenceAction.openUrl);
+      expect(badPayload.actionPayload, isEmpty);
+    });
+
+    test('fromJson supports action_type / action_payload / action_on keys', () {
+      final region = GeofenceRegion.fromJson({
+        'id': 'r1',
+        'action_type': 'run_prompt',
+        'action_payload': 'Turn on lights',
+        'action_on': 'enter',
+      });
+      expect(region.action, GeofenceAction.runPrompt);
+      expect(region.actionPayload, 'Turn on lights');
+      expect(region.actionOn, GeofenceActionTrigger.enter);
+    });
+
+    test('copyWith updates action binding and preserves it when omitted', () {
+      const region = GeofenceRegion(
+        id: 'home',
+        latitude: 1.0,
+        longitude: 2.0,
+        radiusMeters: 100.0,
+        action: GeofenceAction.notify,
+        actionPayload: 'old',
+        actionOn: GeofenceActionTrigger.enter,
+      );
+      final copy = region.copyWith(
+        action: GeofenceAction.openUrl,
+        actionPayload: 'https://example.com',
+        actionOn: GeofenceActionTrigger.exit,
+      );
+      expect(copy.action, GeofenceAction.openUrl);
+      expect(copy.actionPayload, 'https://example.com');
+      expect(copy.actionOn, GeofenceActionTrigger.exit);
+      expect(copy.id, 'home');
+
+      final untouched = region.copyWith(name: 'House');
+      expect(untouched.action, GeofenceAction.notify);
+      expect(untouched.actionPayload, 'old');
+      expect(untouched.actionOn, GeofenceActionTrigger.enter);
+    });
+
+    test('matchesEvent respects enter/exit/both triggers', () {
+      const enterOnly = GeofenceRegion(
+        id: 'a',
+        latitude: 0.0,
+        longitude: 0.0,
+        radiusMeters: 100.0,
+        actionOn: GeofenceActionTrigger.enter,
+      );
+      expect(enterOnly.matchesEvent(AmbientEventType.geofenceEnter), isTrue);
+      expect(enterOnly.matchesEvent(AmbientEventType.geofenceExit), isFalse);
+
+      const exitOnly = GeofenceRegion(
+        id: 'b',
+        latitude: 0.0,
+        longitude: 0.0,
+        radiusMeters: 100.0,
+        actionOn: GeofenceActionTrigger.exit,
+      );
+      expect(exitOnly.matchesEvent(AmbientEventType.geofenceExit), isTrue);
+      expect(exitOnly.matchesEvent(AmbientEventType.geofenceEnter), isFalse);
+
+      const both = GeofenceRegion(
+        id: 'c',
+        latitude: 0.0,
+        longitude: 0.0,
+        radiusMeters: 100.0,
+      );
+      expect(both.matchesEvent(AmbientEventType.geofenceEnter), isTrue);
+      expect(both.matchesEvent(AmbientEventType.geofenceExit), isTrue);
+
+      expect(both.matchesEvent(AmbientEventType.batteryLow), isFalse);
+      expect(both.matchesEvent(AmbientEventType.batteryCritical), isFalse);
+    });
+
+    test('geofenceActionFromJson accepts aliases case-insensitively', () {
+      expect(geofenceActionFromJson('none'), GeofenceAction.none);
+      expect(geofenceActionFromJson('notify'), GeofenceAction.notify);
+      expect(geofenceActionFromJson('run_prompt'), GeofenceAction.runPrompt);
+      expect(geofenceActionFromJson('RUNPROMPT'), GeofenceAction.runPrompt);
+      expect(geofenceActionFromJson('prompt'), GeofenceAction.runPrompt);
+      expect(geofenceActionFromJson('open_url'), GeofenceAction.openUrl);
+      expect(geofenceActionFromJson('OpenURL'), GeofenceAction.openUrl);
+      expect(geofenceActionFromJson('url'), GeofenceAction.openUrl);
+      expect(geofenceActionFromJson(null), GeofenceAction.none);
+      expect(geofenceActionFromJson(123), GeofenceAction.none);
+    });
+
+    test('geofenceActionTriggerFromJson accepts aliases case-insensitively', () {
+      expect(geofenceActionTriggerFromJson('enter'), GeofenceActionTrigger.enter);
+      expect(geofenceActionTriggerFromJson('EXIT'), GeofenceActionTrigger.exit);
+      expect(geofenceActionTriggerFromJson('both'), GeofenceActionTrigger.both);
+      expect(geofenceActionTriggerFromJson(null), GeofenceActionTrigger.both);
+      expect(geofenceActionTriggerFromJson('nope'), GeofenceActionTrigger.both);
+      expect(geofenceActionTriggerToJson(GeofenceActionTrigger.enter), 'enter');
+      expect(geofenceActionTriggerToJson(GeofenceActionTrigger.exit), 'exit');
+      expect(geofenceActionTriggerToJson(GeofenceActionTrigger.both), 'both');
+    });
+
+    test('label helpers return product vocabulary', () {
+      expect(geofenceActionLabel(GeofenceAction.none), 'Nothing');
+      expect(geofenceActionLabel(GeofenceAction.notify), 'Notify');
+      expect(geofenceActionLabel(GeofenceAction.runPrompt), 'Send prompt');
+      expect(geofenceActionLabel(GeofenceAction.openUrl), 'Open URL');
+      expect(
+        geofenceActionTriggerLabel(GeofenceActionTrigger.enter),
+        'On enter',
+      );
+      expect(geofenceActionTriggerLabel(GeofenceActionTrigger.exit), 'On exit');
+      expect(
+        geofenceActionTriggerLabel(GeofenceActionTrigger.both),
+        'On enter & exit',
+      );
     });
   });
 
@@ -422,7 +655,7 @@ void main() {
         checkedAt: fixedTime,
       );
       expect(a, equals(b));
-      expect(a.props.length, 3);
+      expect(a.props.length, 4);
       expect(a.copyWith(), equals(a));
       final copy = a.copyWith(
         triggered: false,
@@ -516,6 +749,154 @@ void main() {
         'checkedAt': fixedTime.toIso8601String(),
       });
       expect(result.events, isEmpty);
+    });
+
+    test('defaults dispatchedActions to empty', () {
+      final result = AmbientCheckResult(
+        triggered: false,
+        events: const [],
+        checkedAt: fixedTime,
+      );
+      expect(result.dispatchedActions, isEmpty);
+      expect(result.props.length, 4);
+    });
+
+    test('toJson omits dispatchedActions when empty', () {
+      final result = AmbientCheckResult(
+        triggered: false,
+        events: const [],
+        checkedAt: fixedTime,
+      );
+      expect(result.toJson().containsKey('dispatchedActions'), isFalse);
+    });
+
+    test('toJson / fromJson roundtrip preserves dispatchedActions', () {
+      final result = AmbientCheckResult(
+        triggered: true,
+        events: const [],
+        checkedAt: fixedTime,
+        dispatchedActions: const [
+          GeofenceDispatchResult(
+            action: GeofenceAction.runPrompt,
+            executed: true,
+            payload: 'Lights on',
+            transportId: 'chat',
+            detail: 'prompt_dispatched',
+          ),
+          GeofenceDispatchResult(
+            action: GeofenceAction.openUrl,
+            executed: false,
+            payload: 'https://example.com',
+            detail: 'Cannot launch URL',
+          ),
+        ],
+      );
+
+      final json = result.toJson();
+      expect(json['dispatchedActions'], hasLength(2));
+      final restored = AmbientCheckResult.fromJson(json);
+      expect(restored, equals(result));
+      expect(restored.dispatchedActions.first.transportId, 'chat');
+      expect(
+        restored.dispatchedActions.first.detail,
+        'prompt_dispatched',
+      );
+    });
+
+    test('legacy JSON without dispatchedActions parses as empty', () {
+      final legacy = AmbientCheckResult.fromJson({
+        'triggered': true,
+        'events': [],
+        'checkedAt': fixedTime.toIso8601String(),
+      });
+      expect(legacy.dispatchedActions, isEmpty);
+    });
+
+    test('fromJson tolerates non-list and non-map dispatchedActions', () {
+      final nonList = AmbientCheckResult.fromJson({
+        'triggered': false,
+        'events': [],
+        'dispatchedActions': 'nope',
+      });
+      expect(nonList.dispatchedActions, isEmpty);
+
+      final mixed = AmbientCheckResult.fromJson({
+        'triggered': false,
+        'events': [],
+        'dispatchedActions': ['bad', 123, null],
+      });
+      expect(mixed.dispatchedActions, isEmpty);
+    });
+  });
+
+  group('GeofenceDispatchResult', () {
+    test('supports value equality and copyWith', () {
+      const a = GeofenceDispatchResult(
+        action: GeofenceAction.notify,
+        executed: true,
+        detail: 'notification',
+      );
+      const b = GeofenceDispatchResult(
+        action: GeofenceAction.notify,
+        executed: true,
+        detail: 'notification',
+      );
+      expect(a, equals(b));
+      expect(a.props.length, 5);
+      expect(a.copyWith(), equals(a));
+
+      final copy = a.copyWith(
+        executed: false,
+        detail: 'error',
+        payload: 'x',
+        transportId: 'chat',
+      );
+      expect(copy.executed, isFalse);
+      expect(copy.detail, 'error');
+      expect(copy.payload, 'x');
+      expect(copy.transportId, 'chat');
+    });
+
+    test('toJson omits null transportId and detail', () {
+      const result = GeofenceDispatchResult(
+        action: GeofenceAction.none,
+        executed: false,
+        detail: 'none',
+      );
+      final json = result.toJson();
+      expect(json['action'], 'none');
+      expect(json['executed'], isFalse);
+      expect(json['payload'], isEmpty);
+      expect(json.containsKey('transportId'), isFalse);
+      expect(json['detail'], 'none');
+
+      const bare = GeofenceDispatchResult(
+        action: GeofenceAction.none,
+        executed: false,
+      );
+      expect(bare.toJson().containsKey('detail'), isFalse);
+      expect(bare.toJson().containsKey('transportId'), isFalse);
+    });
+
+    test('fromJson roundtrips and defaults unknown action to none', () {
+      const result = GeofenceDispatchResult(
+        action: GeofenceAction.runPrompt,
+        executed: true,
+        payload: 'Lights on',
+        transportId: 'chat',
+        detail: 'prompt_dispatched',
+      );
+      expect(GeofenceDispatchResult.fromJson(result.toJson()), equals(result));
+
+      final unknown = GeofenceDispatchResult.fromJson({
+        'action': 'teleport',
+        'executed': true,
+      });
+      expect(unknown.action, GeofenceAction.none);
+      expect(unknown.executed, isTrue);
+      expect(unknown.payload, isEmpty);
+      expect(unknown.transportId, isNull);
+      expect(unknown.detail, isNull);
     });
   });
 }

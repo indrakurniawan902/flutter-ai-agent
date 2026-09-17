@@ -508,6 +508,54 @@ void main() {
       );
       expect(triggerResult.isRight(), isTrue);
     });
+
+    test('register_geofence binds an action when provided', () async {
+      // Arrange
+      registry.registerAmbientTriggerTools(mockAmbient);
+
+      // Act
+      final result = await registry.executeTool('register_geofence', {
+        'id': 'g1',
+        'latitude': 1.0,
+        'longitude': 2.0,
+        'action': 'runPrompt',
+        'actionPayload': 'Lights on',
+        'actionOn': 'enter',
+      });
+
+      // Assert
+      expect(result.isRight(), isTrue);
+      final captured = verify(
+        () => mockAmbient.addGeofence(captureAny()),
+      ).captured;
+      final region = captured.single as GeofenceRegion;
+      expect(region.id, 'g1');
+      expect(region.action, GeofenceAction.runPrompt);
+      expect(region.actionPayload, 'Lights on');
+      expect(region.actionOn, GeofenceActionTrigger.enter);
+    });
+
+    test('register_geofence defaults to no action when omitted', () async {
+      // Arrange
+      registry.registerAmbientTriggerTools(mockAmbient);
+
+      // Act
+      final result = await registry.executeTool('register_geofence', {
+        'id': 'g2',
+        'latitude': 1.0,
+        'longitude': 2.0,
+      });
+
+      // Assert
+      expect(result.isRight(), isTrue);
+      final captured = verify(
+        () => mockAmbient.addGeofence(captureAny()),
+      ).captured;
+      final region = captured.single as GeofenceRegion;
+      expect(region.action, GeofenceAction.none);
+      expect(region.actionPayload, isEmpty);
+      expect(region.actionOn, GeofenceActionTrigger.both);
+    });
   });
 
   group('registerVoiceTools', () {

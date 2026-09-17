@@ -800,6 +800,19 @@ class ToolRegistry {
               'type': 'number',
               'description': 'Radius in meters',
             },
+            'action': {
+              'type': 'string',
+              'description':
+                  'Action on crossing: none | notify | runPrompt | openUrl',
+            },
+            'actionPayload': {
+              'type': 'string',
+              'description': 'Prompt text (runPrompt) or URL (openUrl)',
+            },
+            'actionOn': {
+              'type': 'string',
+              'description': 'When to run it: enter | exit | both',
+            },
           },
           'required': ['id', 'latitude', 'longitude'],
         },
@@ -811,6 +824,9 @@ class ToolRegistry {
             'longitude': (args['longitude'] as num?)?.toDouble() ?? 0.0,
             'radiusMeters':
                 (args['radiusMeters'] as num?)?.toDouble() ?? 100.0,
+            'action': args['action'],
+            'actionPayload': args['actionPayload'],
+            'actionOn': args['actionOn'],
           });
           service.addGeofence(region);
           return Right<Failure, String>(
