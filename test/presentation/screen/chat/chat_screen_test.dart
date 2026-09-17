@@ -673,6 +673,25 @@ void main() {
       late MockNotificationTriageService mockTriageService;
       late MockBatteryOptimizationService mockBatteryService;
 
+      const currentComponent =
+          'ai.hermes.flames/ai.hermes.flames.FlamesNotificationListenerService';
+
+      const grantedNotBoundState = NotificationListenerState(
+        status: NotificationListenerStatus.grantedNotBound,
+        isConnected: false,
+        currentComponent: currentComponent,
+        currentPackage: 'ai.hermes.flames',
+        stalePackages: [],
+      );
+
+      const grantedAndBoundState = NotificationListenerState(
+        status: NotificationListenerStatus.grantedAndBound,
+        isConnected: true,
+        currentComponent: currentComponent,
+        currentPackage: 'ai.hermes.flames',
+        stalePackages: [],
+      );
+
       setUp(() {
         mockTriageService = MockNotificationTriageService();
         mockBatteryService = MockBatteryOptimizationService();
@@ -685,6 +704,15 @@ void main() {
             .thenAnswer((_) async => true);
         when(() => mockTriageService.requestPermission())
             .thenAnswer((_) async => true);
+        when(() => mockTriageService.getListenerState())
+            .thenAnswer((_) async => grantedNotBoundState);
+        when(() => mockTriageService.recoverListener()).thenAnswer(
+          (_) async => const ListenerRecoveryOutcome(
+            state: grantedAndBoundState,
+            rebound: true,
+            permissionRequested: false,
+          ),
+        );
 
         when(() => mockBatteryService.isBatteryOptimizationDisabled())
             .thenAnswer((_) async => const Right(true));
@@ -704,7 +732,7 @@ void main() {
       });
 
       testWidgets(
-          'renders tool_result_rebind_button and tapping it calls requestRebind when content contains [listener_not_connected]',
+          'renders tool_result_rebind_button and tapping it recovers the listener when content contains [listener_not_connected]',
           (tester) async {
         when(() => mockAgentCubit.state).thenReturn(
           const AgentSuccess(
@@ -739,7 +767,7 @@ void main() {
         await tester.tap(rebindBtnFinder);
         await tester.pumpAndSettle();
 
-        verify(() => mockTriageService.requestRebind()).called(1);
+        verify(() => mockTriageService.recoverListener()).called(1);
         expect(
           find.text('Listener berhasil terhubung kembali.'),
           findsOneWidget,
@@ -747,14 +775,12 @@ void main() {
       });
 
       testWidgets(
-          'renders notification_listener_warning_banner and tapping rebind button calls requestRebind when listener is not connected',
+          'renders notification_listener_warning_banner and tapping rebind button recovers the listener',
           (tester) async {
         when(() => mockTriageService.checkPermission())
             .thenAnswer((_) async => true);
         when(() => mockTriageService.isListenerConnected())
             .thenAnswer((_) async => false);
-        when(() => mockTriageService.requestRebind())
-            .thenAnswer((_) async => true);
 
         await tester.pumpWidget(createWidgetUnderTest());
         await tester.pumpAndSettle();
@@ -775,7 +801,7 @@ void main() {
         await tester.tap(bannerRebindBtn);
         await tester.pumpAndSettle();
 
-        verify(() => mockTriageService.requestRebind()).called(1);
+        verify(() => mockTriageService.recoverListener()).called(1);
         expect(
           find.text('Listener berhasil terhubung kembali.'),
           findsOneWidget,
@@ -872,8 +898,102 @@ void main() {
         tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
         await tester.pumpAndSettle();
 
-        verify(() => mockTriageService.checkPermission()).called(1);
+        verify(() => mockTriageService.getListenerState()).called(1);
         verify(() => mockBatteryService.isBatteryOptimizationDisabled()).called(1);
+      });
+
+      testWidgets(
+          'notification_listener_warning_banner names the stale package id when a stale entry is detected',
+          (tester) async {
+        when(() => mockTriageService.getListenerState()).thenAnswer(
+          (_) async => const NotificationListenerState(
+            status: NotificationListenerStatus.grantedNotBound,
+            isConnected: false,
+            currentComponent: currentComponent,
+            currentPackage: 'ai.hermes.flames',
+            stalePackages: ['ai.hermes.flames.dev'],
+          ),
+        );
+
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('notification_listener_warning_banner')),
+          findsOneWidget,
+        );
+        expect(find.textContaining('ai.hermes.flames.dev'), findsOneWidget);
+      });
+
+      testWidgets(
+          'tapping rebind with a stale entry never opens the notification settings page',
+          (tester) async {
+        const staleState = NotificationListenerState(
+          status: NotificationListenerStatus.grantedNotBound,
+          isConnected: false,
+          currentComponent: currentComponent,
+          currentPackage: 'ai.hermes.flames',
+          stalePackages: ['ai.hermes.flames.dev'],
+        );
+        when(() => mockTriageService.getListenerState())
+            .thenAnswer((_) async => staleState);
+        when(() => mockTriageService.recoverListener()).thenAnswer(
+          (_) async => const ListenerRecoveryOutcome(
+            state: staleState,
+            rebound: false,
+            permissionRequested: false,
+          ),
+        );
+
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pumpAndSettle();
+
+        await tester.tap(
+          find.byKey(const Key('notification_listener_banner_rebind_button')),
+        );
+        await tester.pumpAndSettle();
+
+        verifyNever(() => mockTriageService.requestPermission());
+        expect(find.textContaining('ai.hermes.flames.dev'), findsWidgets);
+      });
+
+      testWidgets('banner is hidden when the listener is granted and bound',
+          (tester) async {
+        when(() => mockTriageService.getListenerState())
+            .thenAnswer((_) async => grantedAndBoundState);
+
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('notification_listener_warning_banner')),
+          findsNothing,
+        );
+      });
+
+      testWidgets('not_granted state shows the permission subtitle',
+          (tester) async {
+        when(() => mockTriageService.getListenerState()).thenAnswer(
+          (_) async => const NotificationListenerState(
+            status: NotificationListenerStatus.notGranted,
+            isConnected: false,
+            currentComponent: '',
+            currentPackage: '',
+            stalePackages: [],
+          ),
+        );
+
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('notification_listener_warning_banner')),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Akses notifikasi belum diberikan'),
+          findsOneWidget,
+        );
       });
 
       testWidgets(

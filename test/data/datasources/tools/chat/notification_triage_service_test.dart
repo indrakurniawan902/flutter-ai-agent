@@ -638,4 +638,173 @@ void main() {
       );
     });
   });
+
+  group('listener state resolution', () {
+    const currentComponent =
+        'ai.hermes.flames/ai.hermes.flames.FlamesNotificationListenerService';
+    const staleComponent =
+        'ai.hermes.flames.dev/ai.hermes.flames.FlamesNotificationListenerService';
+    const foreignComponent =
+        'ai.hermes.flames.dev/ai.hermes.flames.SomeOtherService';
+
+    NotificationListenerState resolve({
+      bool isConnected = false,
+      List<String> components = const [],
+      List<String> packages = const [],
+    }) {
+      return NotificationTriageServiceBase.resolveListenerState(
+        isConnected: isConnected,
+        currentComponent: currentComponent,
+        currentPackage: 'ai.hermes.flames',
+        enabledListenerComponents: components,
+        enabledListenerPackages: packages,
+      );
+    }
+
+    test('granted_and_bound: connected yields Right entries and bound status',
+        () async {
+      // Arrange
+      final boundState = resolve(isConnected: true, components: const [
+        currentComponent,
+      ]);
+      when(() => mockPlatform.isListenerConnected())
+          .thenAnswer((_) async => true);
+      when(() => mockPlatform.getListenerState())
+          .thenAnswer((_) async => boundState);
+      when(() => mockPlatform.getRecentNotifications(limit: 20)).thenAnswer(
+        (_) async => [rawNotification(id: 'bound')],
+      );
+
+      // Act
+      final result = await service.getRecentNotifications();
+      final state = await service.getListenerState();
+
+      // Assert
+      expect(state.status, NotificationListenerStatus.grantedAndBound);
+      expect(result.isRight(), isTrue);
+      result.fold(
+        (_) => fail('expected Right'),
+        (entries) => expect(entries.first.id, 'bound'),
+      );
+    });
+
+    test(
+        'granted_not_bound with exact component: Left ListenerNotConnectedFailure, not PermissionFailure',
+        () async {
+      // Arrange
+      final notBoundState = resolve(components: const [currentComponent]);
+      when(() => mockPlatform.isListenerConnected())
+          .thenAnswer((_) async => false);
+      when(() => mockPlatform.requestRebind()).thenAnswer((_) async => false);
+      when(() => mockPlatform.getListenerState())
+          .thenAnswer((_) async => notBoundState);
+
+      // Act
+      final result = await service.getRecentNotifications();
+
+      // Assert
+      expect(result.isLeft(), isTrue);
+      result.fold(
+        (failure) {
+          expect(failure, isA<ListenerNotConnectedFailure>());
+          expect(failure, isNot(isA<PermissionFailure>()));
+          expect(
+            failure.message.startsWith('[listener_not_connected]'),
+            isTrue,
+          );
+        },
+        (_) => fail('expected Left'),
+      );
+    });
+
+    test('stale device entry resolves grantedNotBound and names the package',
+        () async {
+      // Arrange
+      final staleState = resolve(components: const [staleComponent]);
+      when(() => mockPlatform.isListenerConnected())
+          .thenAnswer((_) async => false);
+      when(() => mockPlatform.requestRebind()).thenAnswer((_) async => false);
+      when(() => mockPlatform.getListenerState())
+          .thenAnswer((_) async => staleState);
+
+      // Act
+      final state = await service.getListenerState();
+      final result = await service.getRecentNotifications();
+
+      // Assert
+      expect(state.status, NotificationListenerStatus.grantedNotBound);
+      expect(state.stalePackages, ['ai.hermes.flames.dev']);
+      expect(state.hasStaleEntry, isTrue);
+      expect(result.isLeft(), isTrue);
+      result.fold(
+        (failure) {
+          expect(failure, isA<ListenerNotConnectedFailure>());
+          expect(failure.message, contains('ai.hermes.flames.dev'));
+        },
+        (_) => fail('expected Left'),
+      );
+    });
+
+    test(
+        'REGRESSION: stale entry for a different package id never yields grantedAndBound',
+        () {
+      // Arrange
+      final staleOnly = resolve(components: const [staleComponent]);
+      final foreign = resolve(components: const [foreignComponent]);
+
+      // Act + Assert
+      expect(staleOnly.status, isNot(NotificationListenerStatus.grantedAndBound));
+      expect(staleOnly.status, NotificationListenerStatus.grantedNotBound);
+      expect(foreign.status, NotificationListenerStatus.notGranted);
+      expect(foreign.hasStaleEntry, isFalse);
+    });
+
+    test('not_granted: empty signals and throwing wrapper stay notGranted',
+        () async {
+      // Arrange
+      final emptyState = resolve();
+      expect(emptyState.status, NotificationListenerStatus.notGranted);
+      when(() => mockPlatform.getListenerState()).thenThrow(Exception('boom'));
+
+      // Act
+      final state = await service.getListenerState();
+
+      // Assert
+      expect(state.status, NotificationListenerStatus.notGranted);
+    });
+
+    test('recoverListener requests permission only when notGranted', () async {
+      // Arrange
+      final notGrantedState = resolve();
+      when(() => mockPlatform.getListenerState())
+          .thenAnswer((_) async => notGrantedState);
+      when(() => mockPlatform.requestPermission()).thenAnswer((_) async => true);
+
+      // Act
+      final outcome = await service.recoverListener();
+
+      // Assert
+      expect(outcome.permissionRequested, isTrue);
+      expect(outcome.rebound, isFalse);
+      verify(() => mockPlatform.requestPermission()).called(1);
+    });
+
+    test('recoverListener on grantedNotBound never calls requestPermission',
+        () async {
+      // Arrange
+      final notBoundState = resolve(components: const [staleComponent]);
+      when(() => mockPlatform.getListenerState())
+          .thenAnswer((_) async => notBoundState);
+      when(() => mockPlatform.requestRebind()).thenAnswer((_) async => false);
+
+      // Act
+      final outcome = await service.recoverListener();
+
+      // Assert
+      expect(outcome.permissionRequested, isFalse);
+      expect(outcome.rebound, isFalse);
+      expect(outcome.state.status, NotificationListenerStatus.grantedNotBound);
+      verifyNever(() => mockPlatform.requestPermission());
+    });
+  });
 }

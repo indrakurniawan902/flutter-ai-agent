@@ -110,6 +110,53 @@ class OtpExtractionResult extends Equatable {
       [found, otp, sender, packageName, timestamp, snippet];
 }
 
+enum NotificationListenerStatus { grantedAndBound, grantedNotBound, notGranted }
+
+class NotificationListenerState extends Equatable {
+  final NotificationListenerStatus status;
+  final bool isConnected;
+  final String currentComponent;
+  final String currentPackage;
+
+  /// Enabled listener components belonging to a DIFFERENT package id but the
+  /// SAME service class as [currentComponent].
+  final List<String> stalePackages;
+
+  const NotificationListenerState({
+    required this.status,
+    required this.isConnected,
+    required this.currentComponent,
+    required this.currentPackage,
+    required this.stalePackages,
+  });
+
+  bool get hasStaleEntry => stalePackages.isNotEmpty;
+
+  @override
+  List<Object?> get props =>
+      [status, isConnected, currentComponent, currentPackage, stalePackages];
+}
+
+class ListenerRecoveryOutcome extends Equatable {
+  /// State AFTER the recovery attempt.
+  final NotificationListenerState state;
+
+  /// requestRebind reported connected.
+  final bool rebound;
+
+  /// True only when status was notGranted and settings were opened.
+  final bool permissionRequested;
+
+  const ListenerRecoveryOutcome({
+    required this.state,
+    required this.rebound,
+    required this.permissionRequested,
+  });
+
+  @override
+  List<Object?> get props => [state, rebound, permissionRequested];
+}
+
 abstract class NotificationListenerPlatformWrapper {
   Future<bool> isPermissionGranted();
   Future<bool> requestPermission();
@@ -117,6 +164,7 @@ abstract class NotificationListenerPlatformWrapper {
   Future<bool> requestRebind();
   Future<List<Map<String, dynamic>>> getRecentNotifications({int limit = 20});
   Future<void> clearNotifications();
+  Future<NotificationListenerState> getListenerState();
 }
 
 abstract class NotificationTriageServiceBase {
@@ -131,6 +179,59 @@ abstract class NotificationTriageServiceBase {
 
   /// Attempts programmatic rebind and returns the re-checked connection state.
   Future<bool> requestRebind();
+
+  Future<NotificationListenerState> getListenerState();
+
+  Future<ListenerRecoveryOutcome> recoverListener();
+
+  /// Single source of truth for the 3-value listener status. Pure: no
+  /// MethodChannel, no platform access, no async.
+  static NotificationListenerState resolveListenerState({
+    required bool isConnected,
+    required String currentComponent,
+    required String currentPackage,
+    required List<String> enabledListenerComponents,
+    required List<String> enabledListenerPackages,
+  }) {
+    final currentSlash = currentComponent.indexOf('/');
+    final currentClass = currentSlash >= 0
+        ? currentComponent.substring(currentSlash + 1)
+        : currentComponent;
+
+    var exactEnabled = false;
+    final stalePackages = <String>[];
+    for (final entry in enabledListenerComponents) {
+      if (entry.trim().isEmpty) continue;
+      final slash = entry.indexOf('/');
+      final packagePart = slash >= 0 ? entry.substring(0, slash) : entry;
+      final classPart = slash >= 0 ? entry.substring(slash + 1) : entry;
+      if (classPart != currentClass) continue;
+      if (packagePart == currentPackage) {
+        exactEnabled = true;
+      } else if (!stalePackages.contains(packagePart)) {
+        stalePackages.add(packagePart);
+      }
+    }
+
+    final NotificationListenerStatus status;
+    if (isConnected) {
+      status = NotificationListenerStatus.grantedAndBound;
+    } else if (exactEnabled ||
+        enabledListenerPackages.contains(currentPackage) ||
+        stalePackages.isNotEmpty) {
+      status = NotificationListenerStatus.grantedNotBound;
+    } else {
+      status = NotificationListenerStatus.notGranted;
+    }
+
+    return NotificationListenerState(
+      status: status,
+      isConnected: isConnected,
+      currentComponent: currentComponent,
+      currentPackage: currentPackage,
+      stalePackages: List.unmodifiable(stalePackages),
+    );
+  }
 
   Future<Either<Failure, List<NotificationEntry>>> getRecentNotifications({
     String? appFilter,

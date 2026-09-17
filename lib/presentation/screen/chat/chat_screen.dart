@@ -99,7 +99,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _isComposing = false;
 
   bool _notificationListenerPermissionGranted = false;
-  bool _notificationListenerConnected = true;
+  NotificationListenerState? _notificationListenerState;
   bool _batteryOptimizationExempt = true;
   bool _notificationListenerWarningDismissed = false;
 
@@ -463,14 +463,31 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   Future<void> _checkNotificationListenerAndBatteryState() async {
     bool granted = _notificationListenerPermissionGranted;
-    bool connected = _notificationListenerConnected;
+    bool connected = _notificationListenerState?.isConnected ?? false;
     bool batteryExempt = _batteryOptimizationExempt;
+    NotificationListenerState? listenerState = _notificationListenerState;
 
     if (sl.isRegistered<NotificationTriageServiceBase>()) {
       final triage = sl<NotificationTriageServiceBase>();
-      granted = await triage.checkPermission();
-      if (granted) {
-        connected = await triage.isListenerConnected();
+      try {
+        final state = await triage.getListenerState();
+        listenerState = state;
+        granted = state.status != NotificationListenerStatus.notGranted;
+        connected = state.status == NotificationListenerStatus.grantedAndBound;
+      } catch (_) {
+        granted = await triage.checkPermission();
+        connected = granted ? await triage.isListenerConnected() : false;
+        listenerState = NotificationListenerState(
+          status: !granted
+              ? NotificationListenerStatus.notGranted
+              : connected
+                  ? NotificationListenerStatus.grantedAndBound
+                  : NotificationListenerStatus.grantedNotBound,
+          isConnected: connected,
+          currentComponent: '',
+          currentPackage: '',
+          stalePackages: const [],
+        );
       }
     }
     if (sl.isRegistered<BatteryOptimizationServiceBase>()) {
@@ -481,7 +498,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (mounted) {
       setState(() {
         _notificationListenerPermissionGranted = granted;
-        _notificationListenerConnected = connected;
+        _notificationListenerState = listenerState;
         _batteryOptimizationExempt = batteryExempt;
       });
     }
@@ -1710,9 +1727,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 connectionColor: _indicatorColor,
                 onTapConnection: () => _showConnectionDetailsDialog(context),
               ),
-              if (_notificationListenerPermissionGranted &&
-                  !_notificationListenerConnected &&
-                  !_notificationListenerWarningDismissed)
+              if (_showNotificationListenerBanner)
                 _buildNotificationListenerWarningBanner(context),
               Expanded(
                 child: messages.isEmpty &&
@@ -2435,10 +2450,42 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildNotificationListenerWarningBanner(BuildContext context) {
-    final subtitleText = !_batteryOptimizationExempt
+  bool get _showNotificationListenerBanner {
+    if (_notificationListenerWarningDismissed) return false;
+    final listenerState = _notificationListenerState;
+    if (listenerState == null) return _notificationListenerPermissionGranted;
+    return listenerState.status != NotificationListenerStatus.grantedAndBound;
+  }
+
+  String _listenerBannerSubtitle(NotificationListenerState? state) {
+    if (state == null) {
+      return !_batteryOptimizationExempt
+          ? 'Layanan listener dihentikan oleh sistem/optimasi baterai Android (MIUI).'
+          : 'Layanan listener tidak aktif di background.';
+    }
+    if (state.status == NotificationListenerStatus.grantedNotBound) {
+      if (state.hasStaleEntry) {
+        return 'Izin notifikasi aktif, tetapi listener tidak terikat. '
+            'Terdeteksi entri LAMA untuk package id lain: '
+            '${state.stalePackages.join(', ')}. Buka Notification access dan '
+            'matikan lalu nyalakan kembali entri lama itu (atau hapus), karena '
+            'aplikasi ai.hermes.flames tidak bisa terikat selama hanya entri '
+            'lama yang aktif.';
+      }
+      return !_batteryOptimizationExempt
+          ? 'Layanan listener dihentikan oleh sistem/optimasi baterai Android (MIUI).'
+          : 'Layanan listener tidak aktif di background.';
+    }
+    if (state.status == NotificationListenerStatus.notGranted) {
+      return 'Akses notifikasi belum diberikan. Aktifkan di Pengaturan.';
+    }
+    return !_batteryOptimizationExempt
         ? 'Layanan listener dihentikan oleh sistem/optimasi baterai Android (MIUI).'
         : 'Layanan listener tidak aktif di background.';
+  }
+
+  Widget _buildNotificationListenerWarningBanner(BuildContext context) {
+    final subtitleText = _listenerBannerSubtitle(_notificationListenerState);
 
     return Container(
       key: const Key('notification_listener_warning_banner'),
@@ -2524,18 +2571,50 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       onPressed: () async {
                         if (sl.isRegistered<NotificationTriageServiceBase>()) {
                           final triage = sl<NotificationTriageServiceBase>();
-                          final success = await triage.requestRebind();
+                          final outcome = await triage.recoverListener();
                           if (!context.mounted) return;
-                          if (success) {
-                            ScaffoldMessenger.of(context).showSnackBar(
+                          final messenger = ScaffoldMessenger.of(context);
+                          if (outcome.rebound ||
+                              outcome.state.status ==
+                                  NotificationListenerStatus.grantedAndBound) {
+                            messenger.showSnackBar(
                               const SnackBar(
                                 content:
                                     Text('Listener berhasil terhubung kembali.'),
                               ),
                             );
                             await _checkNotificationListenerAndBatteryState();
+                          } else if (outcome.state.hasStaleEntry) {
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Listener belum terikat. Ada entri LAMA untuk '
+                                  'package id: '
+                                  '${outcome.state.stalePackages.join(', ')}. '
+                                  'Matikan lalu nyalakan kembali entri itu di '
+                                  'Notification access.',
+                                ),
+                              ),
+                            );
+                            await _checkNotificationListenerAndBatteryState();
+                          } else if (outcome.permissionRequested) {
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Membuka pengaturan akses notifikasi...',
+                                ),
+                              ),
+                            );
                           } else {
-                            await triage.requestPermission();
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Listener belum terhubung. Coba lagi, atau '
+                                  'matikan lalu nyalakan akses notifikasi '
+                                  'untuk aplikasi ini.',
+                                ),
+                              ),
+                            );
                           }
                         }
                       },
@@ -2681,10 +2760,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     onPressed: () async {
                       if (sl.isRegistered<NotificationTriageServiceBase>()) {
                         final triage = sl<NotificationTriageServiceBase>();
-                        final success = await triage.requestRebind();
+                        final outcome = await triage.recoverListener();
                         if (!context.mounted) return;
                         final messenger = ScaffoldMessenger.of(context);
-                        if (success) {
+                        if (outcome.rebound ||
+                            outcome.state.status ==
+                                NotificationListenerStatus.grantedAndBound) {
                           messenger.showSnackBar(
                             const SnackBar(
                               content:
@@ -2692,7 +2773,20 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             ),
                           );
                           await _checkNotificationListenerAndBatteryState();
-                        } else {
+                        } else if (outcome.state.hasStaleEntry) {
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Listener belum terikat. Ada entri LAMA untuk '
+                                'package id: '
+                                '${outcome.state.stalePackages.join(', ')}. '
+                                'Matikan lalu nyalakan kembali entri itu di '
+                                'Notification access.',
+                              ),
+                            ),
+                          );
+                          await _checkNotificationListenerAndBatteryState();
+                        } else if (outcome.permissionRequested) {
                           messenger.showSnackBar(
                             const SnackBar(
                               content: Text(
@@ -2700,7 +2794,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                               ),
                             ),
                           );
-                          await triage.requestPermission();
+                        } else {
+                          messenger.showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Listener belum terhubung. Coba lagi, atau '
+                                'matikan lalu nyalakan akses notifikasi '
+                                'untuk aplikasi ini.',
+                              ),
+                            ),
+                          );
                         }
                       }
                     },
