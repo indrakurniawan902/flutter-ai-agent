@@ -68,6 +68,15 @@ class DefaultOverlayBubblePlatformWrapper
       return false;
     }
   }
+
+  @override
+  Future<bool> openApp() async {
+    try {
+      return await _channel.invokeMethod<bool>('openApp') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
 }
 
 /// Coordinates the overlay bubble: permission state, visibility and the
@@ -165,6 +174,15 @@ class OverlayBubbleService implements OverlayBubbleServiceBase {
   Future<bool> setRecording(bool recording) async {
     try {
       return await _platform.setRecording(recording);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> openApp() async {
+    try {
+      return await _platform.openApp();
     } catch (_) {
       return false;
     }

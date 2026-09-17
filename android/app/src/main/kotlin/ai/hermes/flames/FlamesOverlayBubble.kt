@@ -29,7 +29,11 @@ object FlamesOverlayBubble {
     private const val BUBBLE_SIZE_DP = 56
     private const val BUBBLE_TOP_DP = 120
     private const val DRAG_SLOP_PX = 10f
-    private const val TAP_MAX_DURATION_MS = 250L
+
+    // 500 ms is Android's conventional long-press threshold, so a normal
+    // deliberate tap (well under it) opens the app and only a real
+    // press-and-hold starts voice.
+    private const val LONG_PRESS_MIN_DURATION_MS = 500L
 
     private var windowManager: WindowManager? = null
     private var bubbleView: ImageView? = null
@@ -149,7 +153,7 @@ object FlamesOverlayBubble {
                     MotionEvent.ACTION_UP -> {
                         val elapsed = System.currentTimeMillis() - downTime
                         if (movedDistance < DRAG_SLOP_PX) {
-                            if (elapsed < TAP_MAX_DURATION_MS) {
+                            if (elapsed < LONG_PRESS_MIN_DURATION_MS) {
                                 try {
                                     onTap()
                                 } catch (_: Exception) {

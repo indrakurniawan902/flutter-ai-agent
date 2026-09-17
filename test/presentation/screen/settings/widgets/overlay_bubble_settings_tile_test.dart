@@ -175,11 +175,10 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    final subtitle = tester.widget<Text>(
-      find.text('Floating bubble shown over other apps. '
-          'Tap to open Flames, hold to talk.'),
+    final tileWidget = tester.widget<SwitchListTile>(
+      find.byKey(const Key('settings_overlay_bubble_toggle')),
     );
-    final text = subtitle.data!;
+    final text = (tileWidget.subtitle as Text).data!;
     expect(text.trim(), isNotEmpty);
     expect(RegExp(r'^[\x00-\x7F]+$').hasMatch(text), isTrue);
   });

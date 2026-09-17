@@ -31,6 +31,7 @@ void main() {
     when(() => mockPlatform.showBubble()).thenAnswer((_) async => false);
     when(() => mockPlatform.hideBubble()).thenAnswer((_) async => true);
     when(() => mockPlatform.setRecording(any())).thenAnswer((_) async => true);
+    when(() => mockPlatform.openApp()).thenAnswer((_) async => false);
     when(() => mockStorage.saveOverlayBubbleEnabled(any()))
         .thenAnswer((_) async {});
     when(() => mockStorage.getOverlayBubbleEnabled())
@@ -162,6 +163,32 @@ void main() {
     });
   });
 
+  group('openApp', () {
+    test('returns true and forwards to the platform once', () async {
+      // Arrange
+      when(() => mockPlatform.openApp()).thenAnswer((_) async => true);
+
+      // Act
+      final result = await service.openApp();
+
+      // Assert
+      expect(result, isTrue);
+      verify(() => mockPlatform.openApp()).called(1);
+    });
+
+    test('returns false and does not rethrow when the platform throws',
+        () async {
+      // Arrange
+      when(() => mockPlatform.openApp()).thenThrow(Exception('boom'));
+
+      // Act
+      final result = await service.openApp();
+
+      // Assert
+      expect(result, isFalse);
+    });
+  });
+
   group('platform failures degrade instead of throwing', () {
     test('setBubbleEnabled(true) returns false when the grant check throws',
         () async {
@@ -264,6 +291,7 @@ void main() {
       expect(await wrapper.isBubbleVisible(), isTrue);
       expect(await wrapper.showBubble(), isTrue);
       expect(await wrapper.hideBubble(), isTrue);
+      expect(await wrapper.openApp(), isTrue);
 
       messenger.setMockMethodCallHandler(channel, (call) async => null);
       expect(await wrapper.isPermissionGranted(), isFalse);
@@ -271,6 +299,7 @@ void main() {
       expect(await wrapper.isBubbleVisible(), isFalse);
       expect(await wrapper.showBubble(), isFalse);
       expect(await wrapper.hideBubble(), isFalse);
+      expect(await wrapper.openApp(), isFalse);
 
       messenger.setMockMethodCallHandler(channel, (call) async {
         throw PlatformException(code: 'boom', message: 'kaboom');
@@ -280,6 +309,22 @@ void main() {
       expect(await wrapper.isBubbleVisible(), isFalse);
       expect(await wrapper.showBubble(), isFalse);
       expect(await wrapper.hideBubble(), isFalse);
+      expect(await wrapper.openApp(), isFalse);
+    });
+
+    test('openApp invokes the openApp channel method', () async {
+      // Arrange
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        captured.add(call);
+        return true;
+      });
+
+      // Act
+      final result = await wrapper.openApp();
+
+      // Assert
+      expect(result, isTrue);
+      expect(captured.single.method, 'openApp');
     });
 
     test('setRecording sends the recording flag and returns the reply',

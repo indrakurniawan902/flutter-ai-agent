@@ -146,6 +146,25 @@ void main() {
           'FlamesOverlayBubble.show(this, { handleBubbleTap() }, { handleBubbleLongPress() })',
         ),
       );
+
+      final anchor = bubbleKt.indexOf('MotionEvent.ACTION_UP ->');
+      expect(anchor, isNot(-1), reason: 'ACTION_UP branch not found');
+      final end = bubbleKt.indexOf('\n                    }', anchor);
+      expect(end, isNot(-1), reason: 'ACTION_UP closing brace not found');
+      final body = bubbleKt.substring(anchor, end);
+
+      expect(body, contains('LONG_PRESS_MIN_DURATION_MS'));
+      expect(body, isNot(contains('TAP_MAX_DURATION_MS')));
+      expect(
+        body.indexOf('onTap()'),
+        lessThan(body.indexOf('onLongPress()')),
+        reason: 'tap must be the below-threshold branch',
+      );
+      expect(body, contains('snapToEdge('));
+      expect(
+        bubbleKt,
+        contains('private const val LONG_PRESS_MIN_DURATION_MS = 500L'),
+      );
     });
 
     test('bubble tap opens the app without touching voice state', () {
