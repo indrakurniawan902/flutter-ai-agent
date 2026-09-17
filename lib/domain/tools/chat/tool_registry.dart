@@ -1322,7 +1322,11 @@ class ToolRegistry {
             'Use notification_listener for the notification-access (listener) page, '
             'nfc for the NFC page, and app_details for this app\'s own application '
             'details page (per-app permissions / notifications, e.g. after the user '
-            'chose "don\'t ask again").',
+            'chose "don\'t ask again"). Use accessibility for the accessibility-services '
+            'list page where the user enables this app\'s screen-reading service (the '
+            'only way to grant accessibility, since no runtime dialog exists), and '
+            'overlay for the "display over other apps" page, since Android has no '
+            'runtime dialog for SYSTEM_ALERT_WINDOW.',
         parameters: {
           'type': 'object',
           'properties': {

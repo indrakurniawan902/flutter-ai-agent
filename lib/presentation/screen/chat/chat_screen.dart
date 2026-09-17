@@ -15,6 +15,7 @@ import 'package:flutter_ai_agent/domain/entities/chat/chat_attachment.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_message.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/chat_mode.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/tool_call_delta.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/accessibility_inspector_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/battery_optimization_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/file_workspace_service.dart';
@@ -103,6 +104,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _batteryOptimizationExempt = true;
   bool _notificationListenerWarningDismissed = false;
 
+  AccessibilityStatus? _screenReaderStatus;
+  bool _screenReaderWarningDismissed = false;
+
   VoiceInputServiceBase? _voiceService;
   VoiceOutputServiceBase? _voiceOutputService;
   VoicePromptDispatcherRegistry? _dispatcherRegistry;
@@ -180,6 +184,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkNotificationListenerAndBatteryState();
+      _checkScreenReaderState();
     });
     _mode = widget.initialMode;
     _textController.addListener(_onTextChanged);
@@ -455,9 +460,55 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
       _checkNotificationListenerAndBatteryState();
+      _checkScreenReaderState();
       if (_permissionGateCanRun) {
         unawaited(_refreshPermissionStatuses());
       }
+    }
+  }
+
+  bool get _screenReaderNeedsSetup =>
+      _screenReaderStatus != null &&
+      _screenReaderStatus != AccessibilityStatus.active;
+
+  /// Reads the screen-reader status only when the service is registered, so a
+  /// test host (or a build without the inspector) never clears the last known
+  /// value. A platform error is swallowed: the banner must never throw into
+  /// build.
+  Future<void> _checkScreenReaderState() async {
+    if (!sl.isRegistered<AccessibilityInspectorServiceBase>()) return;
+    AccessibilityStatus? status;
+    try {
+      status = await sl<AccessibilityInspectorServiceBase>().checkStatus();
+    } catch (_) {
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _screenReaderStatus = status;
+        if (status == AccessibilityStatus.active) {
+          _screenReaderWarningDismissed = false;
+        }
+      });
+    }
+  }
+
+  /// Opens the accessibility-services list page. Falls back to the raw platform
+  /// channel when the launcher service is not registered (tests / headless),
+  /// so the CTA is never a no-op.
+  Future<void> _openAccessibilitySystemSettings() async {
+    if (sl.isRegistered<IntentLauncherServiceBase>()) {
+      await sl<IntentLauncherServiceBase>()
+          .launchSystemSetting(SystemSettingsAllowList.accessibility);
+      return;
+    }
+    try {
+      await const MethodChannel('ai.hermes.flames/intent_settings').invokeMethod(
+        'openSystemSettings',
+        {'type': SystemSettingsAllowList.accessibility},
+      );
+    } catch (_) {
+      // Nothing else to try: the settings page is unreachable without a host.
     }
   }
 
@@ -1727,6 +1778,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 connectionColor: _indicatorColor,
                 onTapConnection: () => _showConnectionDetailsDialog(context),
               ),
+              if (_screenReaderNeedsSetup && !_screenReaderWarningDismissed)
+                _buildScreenReaderWarningBanner(context),
               if (_showNotificationListenerBanner)
                 _buildNotificationListenerWarningBanner(context),
               Expanded(
@@ -2484,6 +2537,84 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         : 'Layanan listener tidak aktif di background.';
   }
 
+  Widget _buildScreenReaderWarningBanner(BuildContext context) {
+    return Container(
+      key: const Key('screen_reader_warning_banner'),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: HermesColors.cardSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: HermesColors.electricTeal, width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.accessibility_new_outlined,
+                color: HermesColors.electricTeal,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Screen Reader Belum Aktif',
+                      style: TextStyle(
+                        color: HermesColors.inkPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Agen tidak bisa membaca layar tanpa layanan Flames Screen Reader.',
+                      style: TextStyle(
+                        color: HermesColors.inkSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                key: const Key('screen_reader_banner_dismiss_button'),
+                icon: const Icon(Icons.close, size: 16),
+                color: HermesColors.inkSecondary,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () {
+                  setState(() {
+                    _screenReaderWarningDismissed = true;
+                  });
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            key: const Key('screen_reader_banner_enable_button'),
+            icon: const Icon(Icons.accessibility_new_outlined, size: 14),
+            label: const Text('Aktifkan Screen Reader'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: HermesColors.electricTeal,
+              side: const BorderSide(color: HermesColors.electricTeal),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              visualDensity: VisualDensity.compact,
+            ),
+            onPressed: _openAccessibilitySystemSettings,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildNotificationListenerWarningBanner(BuildContext context) {
     final subtitleText = _listenerBannerSubtitle(_notificationListenerState);
 
@@ -2659,6 +2790,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             (message.content ?? '').contains('permission was denied');
     final isListenerDisconnected =
         (message.content ?? '').contains('listener_not_connected');
+    final isScreenReaderIssue =
+        (message.content ?? '').contains('[accessibility_');
     final rationaleType = isPermissionIssue
         ? _resolvePermissionRationaleType(message.content ?? '')
         : null;
@@ -2669,7 +2802,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: BorderSide(
-          color: isPermissionIssue
+          color: isPermissionIssue || isScreenReaderIssue
               ? const Color(0xFF00E5FF)
               : const Color(0xFF334155),
         ),
@@ -2682,16 +2815,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           dense: true,
           initiallyExpanded: isListenerDisconnected,
           leading: Icon(
-            isPermissionIssue
+            isPermissionIssue || isScreenReaderIssue
                 ? Icons.security_outlined
                 : Icons.check_circle_outline,
             size: 20,
-            color: isPermissionIssue
+            color: isPermissionIssue || isScreenReaderIssue
                 ? const Color(0xFF00E5FF)
                 : theme.colorScheme.primary,
           ),
           title: Text(
-            isPermissionIssue ? 'Permission Required: $name' : 'Result: $name',
+            isPermissionIssue || isScreenReaderIssue
+                ? 'Permission Required: $name'
+                : 'Result: $name',
             style: theme.textTheme.bodyMedium?.copyWith(
               fontWeight: FontWeight.w500,
               color: const Color(0xFFF8FAFC),
@@ -2742,6 +2877,38 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Color(0xFF00E5FF)),
                       foregroundColor: const Color(0xFF00E5FF),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            if (isScreenReaderIssue)
+              Padding(
+                padding: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    key: const Key('tool_result_accessibility_button'),
+                    onPressed: _openAccessibilitySystemSettings,
+                    icon: const Icon(
+                      Icons.accessibility_new_outlined,
+                      color: HermesColors.electricTeal,
+                      size: 16,
+                    ),
+                    label: const Text(
+                      'Aktifkan Screen Reader',
+                      style: TextStyle(
+                        color: HermesColors.electricTeal,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: HermesColors.electricTeal),
+                      foregroundColor: HermesColors.electricTeal,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),

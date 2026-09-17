@@ -43,6 +43,24 @@ void main() {
       expect((call.arguments as Map)['type'], 'bluetooth');
     });
 
+    test('sends the accessibility page as a {type: accessibility} payload',
+        () async {
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        captured.add(call);
+        return true;
+      });
+
+      final result = await wrapper.openSystemSettings('accessibility');
+
+      expect(result, isTrue);
+      expect(captured, hasLength(1));
+
+      final call = captured.single;
+      expect(call.method, 'openSystemSettings');
+      expect(call.arguments, isA<Map>());
+      expect((call.arguments as Map)['type'], 'accessibility');
+    });
+
     test('returns false when native handler replies false', () async {
       messenger.setMockMethodCallHandler(channel, (call) async {
         captured.add(call);
