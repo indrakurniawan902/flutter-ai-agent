@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dartz/dartz.dart';
@@ -6,6 +7,45 @@ import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/data/datasources/tools/chat/health_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/health_metrics.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+class HangingHealthPlatform implements HealthPlatformWrapper {
+  bool hangAvailability = false;
+  bool hangGranted = false;
+  bool hangRead = false;
+
+  @override
+  Future<Map<String, dynamic>?> availability() {
+    if (hangAvailability) return Completer<Map<String, dynamic>?>().future;
+    return Future<Map<String, dynamic>?>.value(<String, dynamic>{
+      'status': 'available',
+      'sdk_int': 34,
+      'provider_installed': true,
+    });
+  }
+
+  @override
+  Future<List<String>> grantedPermissions() {
+    if (hangGranted) return Completer<List<String>>().future;
+    return Future<List<String>>.value(_allPermissions());
+  }
+
+  @override
+  Future<bool> requestPermission() async => true;
+
+  @override
+  Future<Map<String, dynamic>?> readMetric({
+    required String metric,
+    required int startTimeMs,
+    required int endTimeMs,
+  }) {
+    if (hangRead) return Completer<Map<String, dynamic>?>().future;
+    return Future<Map<String, dynamic>?>.value(<String, dynamic>{
+      'metric': metric,
+      'records': <dynamic>[],
+      'summary': <String, dynamic>{},
+    });
+  }
+}
 
 class FakeHealthPlatform implements HealthPlatformWrapper {
   Map<String, dynamic>? availabilityResult = <String, dynamic>{
@@ -365,6 +405,66 @@ void main() {
       platform.throwOnGranted = true;
 
       expect(await service.checkPermission(), isFalse);
+    });
+  });
+
+  group('silent platform calls settle as structured failures', () {
+    test('never-completing readMetric returns Left, does not hang', () async {
+      final hanging = HangingHealthPlatform()..hangRead = true;
+      final hangingService = HealthService(platform: hanging);
+
+      final stopwatch = Stopwatch()..start();
+      final result = await hangingService.getHealthDataFormattedJson(
+        metric: HealthMetrics.steps,
+      );
+      stopwatch.stop();
+
+      expect(result.isLeft(), isTrue);
+      expect(_failure(result).message, contains('health_read_failed'));
+      expect(stopwatch.elapsed, lessThan(const Duration(seconds: 30)));
+    });
+
+    test('never-completing availability returns Left, does not hang', () async {
+      final hanging = HangingHealthPlatform()..hangAvailability = true;
+      final hangingService = HealthService(platform: hanging);
+
+      final stopwatch = Stopwatch()..start();
+      final result = await hangingService.getHealthDataFormattedJson(
+        metric: HealthMetrics.steps,
+      );
+      stopwatch.stop();
+
+      expect(result.isLeft(), isTrue);
+      expect(_failure(result).message, contains('health_unavailable'));
+      expect(stopwatch.elapsed, lessThan(const Duration(seconds: 30)));
+    });
+
+    test('never-completing availability returns Left from healthStatus', () async {
+      final hanging = HangingHealthPlatform()..hangAvailability = true;
+      final hangingService = HealthService(platform: hanging);
+
+      final result = await hangingService.healthStatusFormattedJson();
+
+      expect(result.isLeft(), isTrue);
+      expect(_failure(result).message, contains('health_unavailable'));
+    });
+
+    test('never-completing grantedPermissions returns Left from healthStatus',
+        () async {
+      final hanging = HangingHealthPlatform()..hangGranted = true;
+      final hangingService = HealthService(platform: hanging);
+
+      final result = await hangingService.healthStatusFormattedJson();
+
+      expect(result.isLeft(), isTrue);
+    });
+
+    test('never-completing availability returns checkPermission false',
+        () async {
+      final hanging = HangingHealthPlatform()..hangAvailability = true;
+      final hangingService = HealthService(platform: hanging);
+
+      expect(await hangingService.checkPermission(), isFalse);
     });
   });
 

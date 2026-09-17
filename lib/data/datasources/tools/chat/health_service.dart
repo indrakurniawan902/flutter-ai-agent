@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dartz/dartz.dart';
@@ -24,10 +25,17 @@ class DefaultHealthPlatformWrapper implements HealthPlatformWrapper {
     'ai.hermes.flames/health',
   );
 
+  /// A silent platform call (Health Connect readRecords that never replies)
+  /// must not suspend the caller forever; the timeout throws into the existing
+  /// catch, which maps it to null / empty / false.
+  static const Duration _platformCallTimeout = Duration(seconds: 8);
+
   @override
   Future<Map<String, dynamic>?> availability() async {
     try {
-      final raw = await _channel.invokeMethod<Map>('availability');
+      final raw = await _channel
+          .invokeMethod<Map>('availability')
+          .timeout(_platformCallTimeout);
       return raw?.cast<String, dynamic>();
     } catch (_) {
       return null;
@@ -37,7 +45,9 @@ class DefaultHealthPlatformWrapper implements HealthPlatformWrapper {
   @override
   Future<List<String>> grantedPermissions() async {
     try {
-      final result = await _channel.invokeMethod<List>('grantedPermissions');
+      final result = await _channel
+          .invokeMethod<List>('grantedPermissions')
+          .timeout(_platformCallTimeout);
       return result?.cast<String>() ?? <String>[];
     } catch (_) {
       return <String>[];
@@ -47,7 +57,10 @@ class DefaultHealthPlatformWrapper implements HealthPlatformWrapper {
   @override
   Future<bool> requestPermission() async {
     try {
-      return await _channel.invokeMethod<bool>('requestPermission') ?? false;
+      return await _channel
+              .invokeMethod<bool>('requestPermission')
+              .timeout(_platformCallTimeout) ??
+          false;
     } catch (_) {
       return false;
     }
@@ -60,14 +73,16 @@ class DefaultHealthPlatformWrapper implements HealthPlatformWrapper {
     required int endTimeMs,
   }) async {
     try {
-      final raw = await _channel.invokeMethod<Map>(
-        'readMetric',
-        <String, dynamic>{
-          'metric': metric,
-          'startTimeMs': startTimeMs,
-          'endTimeMs': endTimeMs,
-        },
-      );
+      final raw = await _channel
+          .invokeMethod<Map>(
+            'readMetric',
+            <String, dynamic>{
+              'metric': metric,
+              'startTimeMs': startTimeMs,
+              'endTimeMs': endTimeMs,
+            },
+          )
+          .timeout(_platformCallTimeout);
       return raw?.cast<String, dynamic>();
     } catch (_) {
       return null;
@@ -77,6 +92,13 @@ class DefaultHealthPlatformWrapper implements HealthPlatformWrapper {
 
 @LazySingleton(as: HealthServiceBase)
 class HealthService implements HealthServiceBase {
+  /// Upper bound for every platform call this service makes. Any
+  /// [HealthPlatformWrapper] implementation can silently never complete, so the
+  /// bound lives here where every call routes through - not inside one concrete
+  /// wrapper. Deliberately below `ToolRegistry.toolExecutionTimeout` (10s) and
+  /// the bridge's 30s budget so callers see a structured failure, not a hang.
+  static const Duration platformCallTimeout = Duration(seconds: 8);
+
   final HealthPlatformWrapper _platform;
 
   HealthService({HealthPlatformWrapper? platform})
@@ -85,10 +107,22 @@ class HealthService implements HealthServiceBase {
   @factoryMethod
   factory HealthService.create() => HealthService();
 
+  /// Returns `null` when [future] did not answer inside [platformCallTimeout]
+  /// ("silent"), which is NOT the same as an empty answer. Errors the platform
+  /// itself raises still propagate to the caller's existing catch so the
+  /// failure mapping stays unchanged.
+  Future<T?> _bounded<T>(Future<T> future) async {
+    try {
+      return await future.timeout(platformCallTimeout);
+    } on TimeoutException {
+      return null;
+    }
+  }
+
   @override
   Future<Either<Failure, String>> healthStatusFormattedJson() async {
     try {
-      final availability = await _platform.availability();
+      final availability = await _bounded(_platform.availability());
       if (availability == null) {
         return const Left(
           ServerFailure(
@@ -98,7 +132,16 @@ class HealthService implements HealthServiceBase {
       }
       final status = availability['status'] as String? ?? 'unavailable';
       final sdkInt = (availability['sdk_int'] as num?)?.toInt() ?? 0;
-      final grantedPermissions = await _platform.grantedPermissions();
+      final grantedPermissions = await _bounded(
+        _platform.grantedPermissions(),
+      );
+      if (grantedPermissions == null) {
+        return const Left(
+          ServerFailure(
+            'health_status_failed: no response from Health Connect for granted permissions',
+          ),
+        );
+      }
 
       final grantedMetrics = <String>[];
       final missingMetrics = <String>[];
@@ -183,7 +226,7 @@ class HealthService implements HealthServiceBase {
         );
       }
 
-      final availability = await _platform.availability();
+      final availability = await _bounded(_platform.availability());
       if (availability == null || availability['status'] != 'available') {
         return const Left(
           ServerFailure(
@@ -193,7 +236,16 @@ class HealthService implements HealthServiceBase {
       }
 
       final permission = HealthMetrics.permissionByMetric[metric];
-      final grantedPermissions = await _platform.grantedPermissions();
+      final grantedPermissions = await _bounded(
+        _platform.grantedPermissions(),
+      );
+      if (grantedPermissions == null) {
+        return const Left(
+          ServerFailure(
+            'health_permission_denied: no response from Health Connect for granted permissions',
+          ),
+        );
+      }
       if (permission == null || !grantedPermissions.contains(permission)) {
         return Left(
           ServerFailure(
@@ -202,10 +254,12 @@ class HealthService implements HealthServiceBase {
         );
       }
 
-      final result = await _platform.readMetric(
-        metric: metric,
-        startTimeMs: start.millisecondsSinceEpoch,
-        endTimeMs: end.millisecondsSinceEpoch,
+      final result = await _bounded(
+        _platform.readMetric(
+          metric: metric,
+          startTimeMs: start.millisecondsSinceEpoch,
+          endTimeMs: end.millisecondsSinceEpoch,
+        ),
       );
       if (result == null) {
         return Left(
@@ -242,11 +296,16 @@ class HealthService implements HealthServiceBase {
   @override
   Future<bool> checkPermission() async {
     try {
-      final availability = await _platform.availability();
+      final availability = await _bounded(_platform.availability());
       if (availability == null || availability['status'] != 'available') {
         return false;
       }
-      final grantedPermissions = await _platform.grantedPermissions();
+      final grantedPermissions = await _bounded(
+        _platform.grantedPermissions(),
+      );
+      if (grantedPermissions == null) {
+        return false;
+      }
       for (final metric in HealthMetrics.supported) {
         final permission = HealthMetrics.permissionByMetric[metric];
         if (permission != null && grantedPermissions.contains(permission)) {

@@ -72,6 +72,11 @@ class RegisteredTool {
 
 @lazySingleton
 class ToolRegistry {
+  /// Upper bound for one tool execution or permission pre-check. Must stay well
+  /// under the device bridge's 30s call budget so a hang surfaces as a tool
+  /// error, not a dropped socket.
+  static const Duration toolExecutionTimeout = Duration(seconds: 10);
+
   final Map<String, RegisteredTool> _tools = {};
   final Map<String, bool> _toolEnabledStates = {};
 
@@ -244,12 +249,31 @@ class ToolRegistry {
       }
       if (SecurityPolicy.requiresPermission(tool.securityTier) &&
           tool.checkPermission != null) {
-        final granted = await tool.checkPermission!();
+        final bool granted;
+        try {
+          granted = await tool.checkPermission!().timeout(toolExecutionTimeout);
+        } on TimeoutException {
+          return Left(
+            ToolTimeoutFailure(
+              'tool_timeout: permission check for $name did not answer '
+              'within ${toolExecutionTimeout.inSeconds}s',
+            ),
+          );
+        }
         if (!granted) {
           return Left(PermissionFailure('Permission denied for tool: $name'));
         }
       }
-      return await tool.execute(arguments);
+      try {
+        return await tool.execute(arguments).timeout(toolExecutionTimeout);
+      } on TimeoutException {
+        return Left(
+          ToolTimeoutFailure(
+            'tool_timeout: $name did not answer within '
+            '${toolExecutionTimeout.inSeconds}s',
+          ),
+        );
+      }
     } catch (e) {
       return Left(ServerFailure(
           FailureMessage.humanize(e, context: 'Tool execution error')));

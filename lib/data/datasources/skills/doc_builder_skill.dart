@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dartz/dartz.dart';
@@ -70,6 +71,16 @@ class DocBuilderSkill {
     );
   }
 
+  /// Upper bound for one render + write cycle. A pathological renderer or a
+  /// silent filesystem call must settle as a CacheFailure, never hang the
+  /// caller.
+  ///
+  /// INVARIANT: this inner bound MUST stay strictly below
+  /// `ToolRegistry.toolExecutionTimeout` (10s). The registry is the outer bound
+  /// and fires first if this value is larger, replacing the human-readable
+  /// CacheFailure below with a generic `tool_timeout`, making this path dead.
+  static const Duration exportTimeout = Duration(seconds: 8);
+
   /// Renders [markdownContent] and writes the PDF into
   /// `<documents dir>/documents/`, returning the absolute written path.
   static Future<Either<Failure, String>> exportDocument({
@@ -80,24 +91,20 @@ class DocBuilderSkill {
     DateTime? now,
   }) async {
     try {
-      final resolvedTitle = title.trim().isEmpty ? 'Untitled document' : title.trim();
-      final bytes = await _render(resolvedTitle, markdownContent);
-
-      final baseDir = await fileSystem.getDocumentsDirectory();
-      if (baseDir.trim().isEmpty) {
-        return const Left(CacheFailure('Documents directory unavailable'));
-      }
-
-      final slugSource = (outputFileName == null || outputFileName.trim().isEmpty)
-          ? resolvedTitle
-          : outputFileName.trim();
-      final slug = _slugify(slugSource);
-      final stamp = _timestamp(now ?? DateTime.now());
-      final separator = baseDir.endsWith('/') ? '' : '/';
-      final path = '$baseDir${separator}documents/doc_${slug}_$stamp.pdf';
-
-      await fileSystem.writeFileAsBytes(path, bytes);
-      return Right('Document exported successfully to $path');
+      return await _exportDocument(
+        fileSystem: fileSystem,
+        title: title,
+        markdownContent: markdownContent,
+        outputFileName: outputFileName,
+        now: now,
+      ).timeout(exportTimeout);
+    } on TimeoutException {
+      return Left(
+        CacheFailure(
+          'Failed to export PDF document: the renderer did not finish within '
+          '${exportTimeout.inSeconds}s',
+        ),
+      );
     } catch (e) {
       return Left(
         CacheFailure(
@@ -105,6 +112,33 @@ class DocBuilderSkill {
         ),
       );
     }
+  }
+
+  static Future<Either<Failure, String>> _exportDocument({
+    required FileSystemWrapper fileSystem,
+    required String title,
+    required String markdownContent,
+    String? outputFileName,
+    DateTime? now,
+  }) async {
+    final resolvedTitle = title.trim().isEmpty ? 'Untitled document' : title.trim();
+    final bytes = await _render(resolvedTitle, markdownContent);
+
+    final baseDir = await fileSystem.getDocumentsDirectory();
+    if (baseDir.trim().isEmpty) {
+      return const Left(CacheFailure('Documents directory unavailable'));
+    }
+
+    final slugSource = (outputFileName == null || outputFileName.trim().isEmpty)
+        ? resolvedTitle
+        : outputFileName.trim();
+    final slug = _slugify(slugSource);
+    final stamp = _timestamp(now ?? DateTime.now());
+    final separator = baseDir.endsWith('/') ? '' : '/';
+    final path = '$baseDir${separator}documents/doc_${slug}_$stamp.pdf';
+
+    await fileSystem.writeFileAsBytes(path, bytes);
+    return Right('Document exported successfully to $path');
   }
 
   static Future<Uint8List> _render(String title, String markdownContent) async {

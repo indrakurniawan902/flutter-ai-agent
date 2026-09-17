@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -68,6 +69,12 @@ class _FakeFileSystemWrapper implements FileSystemWrapper {
 
   @override
   Future<bool> requestPermission() async => true;
+}
+
+class _HangingFileSystemWrapper extends _FakeFileSystemWrapper {
+  @override
+  Future<String> getDocumentsDirectory() =>
+      Completer<String>().future;
 }
 
 const _markdown = '''
@@ -191,6 +198,31 @@ void main() {
       });
 
       expect(result.isRight(), isTrue);
+    });
+  });
+
+  group('DocBuilderSkill export timeout', () {
+    test('never-completing documents directory settles as Left', () async {
+      final hangingFs = _HangingFileSystemWrapper();
+      final hangingRegistry = ToolRegistry();
+      DocBuilderSkill.registerTools(hangingRegistry, fileSystem: hangingFs);
+
+      final stopwatch = Stopwatch()..start();
+      final result = await hangingRegistry.executeTool('export_document_pdf', {
+        'title': 'Stuck Report',
+        'markdownContent': _markdown,
+      });
+      stopwatch.stop();
+
+      expect(result.isLeft(), isTrue);
+      final message = result.fold((failure) => failure.message, (_) => '');
+      expect(message, isNotEmpty);
+      expect(message, contains('Failed to export PDF document'));
+      expect(hangingFs.written, isEmpty);
+      expect(
+        stopwatch.elapsed,
+        lessThan(const Duration(seconds: 30)),
+      );
     });
   });
 
