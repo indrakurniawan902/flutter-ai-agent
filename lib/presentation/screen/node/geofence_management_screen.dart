@@ -97,7 +97,10 @@ class _GeofenceScaffold extends StatelessWidget {
                 else
                   ...state.regions.map((region) => Padding(
                         padding: const EdgeInsets.only(bottom: 8),
-                        child: _GeofenceTile(region: region),
+                        child: _GeofenceTile(
+                          region: region,
+                          permissionGate: permissionGate,
+                        ),
                       )),
               ],
             );
@@ -127,8 +130,9 @@ class _GeofenceScaffold extends StatelessWidget {
 
 class _GeofenceTile extends StatelessWidget {
   final GeofenceRegion region;
+  final PermissionGate? permissionGate;
 
-  const _GeofenceTile({required this.region});
+  const _GeofenceTile({required this.region, this.permissionGate});
 
   @override
   Widget build(BuildContext context) {
@@ -178,6 +182,13 @@ class _GeofenceTile extends StatelessWidget {
             onChanged: (_) => cubit.toggleGeofence(region.id),
           ),
           IconButton(
+            key: Key('geofence_edit_${region.id}'),
+            tooltip: 'Edit',
+            onPressed: () => _openEditSheet(context, cubit),
+            icon: const Icon(Icons.edit_outlined,
+                size: 20, color: HermesColors.inkSecondary),
+          ),
+          IconButton(
             key: Key('geofence_delete_${region.id}'),
             tooltip: 'Delete',
             onPressed: () => _confirmDelete(context, cubit),
@@ -186,6 +197,37 @@ class _GeofenceTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _openEditSheet(
+    BuildContext context,
+    GeofenceManagementCubit cubit,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: HermesColors.deepObsidian,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        final bottomInset = MediaQuery.of(ctx).viewInsets.bottom;
+        return BlocProvider<GeofenceManagementCubit>.value(
+          value: cubit,
+          child: SafeArea(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomInset),
+              child: SingleChildScrollView(
+                child: _AddGeofenceForm(
+                  permissionGate: permissionGate,
+                  editingRegion: region,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -241,7 +283,10 @@ class _GeofenceTile extends StatelessWidget {
 class _AddGeofenceForm extends StatefulWidget {
   final PermissionGate? permissionGate;
 
-  const _AddGeofenceForm({this.permissionGate});
+  /// When non-null the form edits this region instead of adding a new one.
+  final GeofenceRegion? editingRegion;
+
+  const _AddGeofenceForm({this.permissionGate, this.editingRegion});
 
   @override
   State<_AddGeofenceForm> createState() => _AddGeofenceFormState();
@@ -258,7 +303,34 @@ class _AddGeofenceFormState extends State<_AddGeofenceForm> {
 
   static const List<double> _radiusOptions = [50, 100, 200, 500];
 
+  bool get _isEditing => widget.editingRegion != null;
+
   PermissionGate get _permissionGate => widget.permissionGate ?? PermissionGate();
+
+  @override
+  void initState() {
+    super.initState();
+    final region = widget.editingRegion;
+    if (region != null) {
+      _labelController.text = region.rawName;
+      _latController.text = region.latitude.toStringAsFixed(6);
+      _lngController.text = region.longitude.toStringAsFixed(6);
+      _radius = _closestRadiusOption(region.radiusMeters);
+    }
+  }
+
+  static double _closestRadiusOption(double radius) {
+    var closest = _radiusOptions.first;
+    var smallestDiff = (radius - closest).abs();
+    for (final option in _radiusOptions.skip(1)) {
+      final diff = (radius - option).abs();
+      if (diff < smallestDiff) {
+        closest = option;
+        smallestDiff = diff;
+      }
+    }
+    return closest;
+  }
 
   @override
   void dispose() {
@@ -298,8 +370,26 @@ class _AddGeofenceFormState extends State<_AddGeofenceForm> {
     final cubit = context.read<GeofenceManagementCubit>();
     final lat = double.parse(_latController.text.trim());
     final lng = double.parse(_lngController.text.trim());
+    final region = widget.editingRegion;
     setState(() => _submitting = true);
     try {
+      if (region != null) {
+        final ok = await cubit.updateGeofence(
+          region.id,
+          label: _labelController.text.trim(),
+          latitude: lat,
+          longitude: lng,
+          radiusMeters: _radius,
+        );
+        if (!mounted) return;
+        if (!ok) {
+          _showFeedback('Failed to update geofence.');
+          return;
+        }
+        _showFeedback('Geofence updated.');
+        Navigator.of(context).pop();
+        return;
+      }
       final id = await cubit.addGeofence(
         label: _labelController.text.trim(),
         latitude: lat,
@@ -341,9 +431,25 @@ class _AddGeofenceFormState extends State<_AddGeofenceForm> {
     return null;
   }
 
-  String? _validateCoordinate(String? value) {
+  String? _validateLatitude(String? value) =>
+      _validateCoordinate(value, -90, 90, 'Latitude');
+
+  String? _validateLongitude(String? value) =>
+      _validateCoordinate(value, -180, 180, 'Longitude');
+
+  String? _validateCoordinate(
+    String? value,
+    double min,
+    double max,
+    String label,
+  ) {
     if (value == null || value.trim().isEmpty) return 'Required';
-    if (double.tryParse(value.trim()) == null) return 'Invalid number';
+    final parsed = double.tryParse(value.trim());
+    if (parsed == null || !parsed.isFinite) return 'Invalid number';
+    if (parsed < min || parsed > max) {
+      return '$label must be between ${min.toStringAsFixed(0)} '
+          'and ${max.toStringAsFixed(0)}';
+    }
     return null;
   }
 
@@ -362,7 +468,7 @@ class _AddGeofenceFormState extends State<_AddGeofenceForm> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Add Geofence',
+              _isEditing ? 'Edit Geofence' : 'Add Geofence',
               style: HermesTypography.monospace(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -388,7 +494,7 @@ class _AddGeofenceFormState extends State<_AddGeofenceForm> {
                         decimal: true, signed: true),
                     style: const TextStyle(color: HermesColors.inkPrimary),
                     decoration: _inputDecoration('Latitude'),
-                    validator: _validateCoordinate,
+                    validator: _validateLatitude,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -400,7 +506,7 @@ class _AddGeofenceFormState extends State<_AddGeofenceForm> {
                         decimal: true, signed: true),
                     style: const TextStyle(color: HermesColors.inkPrimary),
                     decoration: _inputDecoration('Longitude'),
-                    validator: _validateCoordinate,
+                    validator: _validateLongitude,
                   ),
                 ),
               ],
@@ -465,8 +571,9 @@ class _AddGeofenceFormState extends State<_AddGeofenceForm> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('Add Geofence'),
+                icon: Icon(_isEditing ? Icons.save_outlined : Icons.add,
+                    size: 16),
+                label: Text(_isEditing ? 'Save Changes' : 'Add Geofence'),
                 onPressed: _submit,
               ),
             ),
