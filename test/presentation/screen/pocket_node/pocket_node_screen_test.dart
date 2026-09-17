@@ -1,8 +1,14 @@
+import 'dart:async';
+
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/ambient_trigger_settings.dart';
+import 'package:flutter_ai_agent/domain/entities/gateway/gateway_connection_state.dart';
+import 'package:flutter_ai_agent/domain/entities/gateway/gateway_message.dart';
+import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
+import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/battery_optimization_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/pocket_node/pocket_node_screen.dart';
@@ -15,6 +21,7 @@ import '../../../helpers/mocks.dart';
 void main() {
   setUpAll(() {
     registerFallbackValue(const AmbientTriggerSettings());
+    registerFallbackValue(GatewayPingMessage());
   });
 
   setUp(() async {
@@ -32,16 +39,211 @@ void main() {
     );
   }
 
+  const activeProfile = ServerProfile(
+    id: 'p1',
+    name: 'Home Server',
+    gatewayUrl: 'wss://hermes.example.com/device/ws',
+    token: 'tok',
+    isActive: true,
+  );
+
+  MockSecureStorageService registerStorage(ServerProfile? profile) {
+    final mockStorage = MockSecureStorageService();
+    when(() => mockStorage.getActiveServerProfile())
+        .thenAnswer((_) async => profile);
+    sl.registerSingleton<SecureStorageService>(mockStorage);
+    return mockStorage;
+  }
+
+  String renderedText(WidgetTester tester) => tester
+      .widgetList<Text>(find.byType(Text))
+      .map((t) => t.data ?? t.textSpan?.toPlainText() ?? '')
+      .join(' ');
+
+  void expectNoFabricatedEndpointClaims(WidgetTester tester) {
+    final joined = renderedText(tester);
+    expect(joined.contains('127.0.0.1'), isFalse);
+    expect(joined.contains('8644'), isFalse);
+    expect(joined.contains('v2.1'), isFalse);
+  }
+
   group('PocketNodeScreen', () {
-    testWidgets('renders header with node status and RPC telemetry',
+    testWidgets('renders header with node status and active profile telemetry',
         (tester) async {
+      registerStorage(activeProfile);
+
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();
 
       expect(find.text('Pocket Node'), findsOneWidget);
       expect(find.byKey(const Key('node_status_chip')), findsOneWidget);
       expect(find.byKey(const Key('node_rpc_telemetry_card')), findsOneWidget);
-      expect(find.text('ws://127.0.0.1:8644/rpc'), findsOneWidget);
+      expect(
+        find.text('wss://hermes.example.com/device/ws'),
+        findsOneWidget,
+      );
+      expect(find.text('Home Server'), findsOneWidget);
+      expectNoFabricatedEndpointClaims(tester);
+    });
+
+    testWidgets('never renders the Hermes gateway loopback endpoint',
+        (tester) async {
+      registerStorage(activeProfile);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      expectNoFabricatedEndpointClaims(tester);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await sl.reset();
+      registerStorage(null);
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      expectNoFabricatedEndpointClaims(tester);
+    });
+
+    testWidgets('renders honest empty state when no active profile exists',
+        (tester) async {
+      registerStorage(null);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('node_no_profile_empty_state')),
+        findsOneWidget,
+      );
+      expect(find.text('No server profile configured'), findsOneWidget);
+      expect(
+        find.text('Add a server profile to connect this node.'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('action_add_profile')), findsOneWidget);
+      expect(find.text('Endpoint'), findsNothing);
+      expectNoFabricatedEndpointClaims(tester);
+    });
+
+    testWidgets('treats a profile with a blank gateway url as no endpoint',
+        (tester) async {
+      const blankProfile = ServerProfile(
+        id: 'p2',
+        name: 'Broken',
+        gatewayUrl: '',
+        token: 'tok',
+        isActive: true,
+      );
+      registerStorage(blankProfile);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('node_no_profile_empty_state')),
+        findsOneWidget,
+      );
+      expect(find.text('Endpoint'), findsNothing);
+      expectNoFabricatedEndpointClaims(tester);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await sl.reset();
+
+      const whitespaceProfile = ServerProfile(
+        id: 'p3',
+        name: 'Broken',
+        gatewayUrl: '   ',
+        token: 'tok',
+        isActive: true,
+      );
+      registerStorage(whitespaceProfile);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('node_no_profile_empty_state')),
+        findsOneWidget,
+      );
+      expect(find.text('Endpoint'), findsNothing);
+      expectNoFabricatedEndpointClaims(tester);
+    });
+
+    testWidgets(
+        're-reads the active profile on resume after one is added elsewhere',
+        (tester) async {
+      ServerProfile? storedProfile;
+      final mockStorage = MockSecureStorageService();
+      when(() => mockStorage.getActiveServerProfile())
+          .thenAnswer((_) async => storedProfile);
+      sl.registerSingleton<SecureStorageService>(mockStorage);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('node_no_profile_empty_state')),
+        findsOneWidget,
+      );
+
+      storedProfile = activeProfile;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('node_no_profile_empty_state')),
+        findsNothing,
+      );
+      expect(
+        find.text('wss://hermes.example.com/device/ws'),
+        findsOneWidget,
+      );
+      expectNoFabricatedEndpointClaims(tester);
+    });
+
+    testWidgets('status chip shows Standby when gateway is disconnected',
+        (tester) async {
+      final mockGateway = MockGatewayClient();
+      when(() => mockGateway.state)
+          .thenReturn(GatewayConnectionState.disconnected);
+      when(() => mockGateway.stateStream)
+          .thenAnswer((_) => const Stream<GatewayConnectionState>.empty());
+      sl.registerSingleton<GatewayClientBase>(mockGateway);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('node_status_chip')),
+          matching: find.text('Standby'),
+        ),
+        findsOneWidget,
+      );
+      expectNoFabricatedEndpointClaims(tester);
+    });
+
+    testWidgets('status chip shows Online when gateway is connected',
+        (tester) async {
+      final mockGateway = MockGatewayClient();
+      when(() => mockGateway.state)
+          .thenReturn(GatewayConnectionState.connected);
+      when(() => mockGateway.stateStream)
+          .thenAnswer((_) => const Stream<GatewayConnectionState>.empty());
+      sl.registerSingleton<GatewayClientBase>(mockGateway);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('node_status_chip')),
+          matching: find.text('Online'),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('renders ambient trigger switches and toggles state',
@@ -63,8 +265,15 @@ void main() {
     });
 
     testWidgets(
-        'renders quick action buttons and tapping triggers action feedback',
+        'renders quick action buttons and broadcast ping sends a real heartbeat frame',
         (tester) async {
+      final mockGateway = MockGatewayClient();
+      when(() => mockGateway.state)
+          .thenReturn(GatewayConnectionState.connected);
+      when(() => mockGateway.stateStream)
+          .thenAnswer((_) => const Stream<GatewayConnectionState>.empty());
+      sl.registerSingleton<GatewayClientBase>(mockGateway);
+
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();
 
@@ -79,7 +288,27 @@ void main() {
       await tester.tap(broadcastButton);
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('Broadcast ping sent'), findsOneWidget);
+      verify(() => mockGateway.send(any(that: isA<GatewayPingMessage>())))
+          .called(1);
+      expect(
+        find.text('Heartbeat ping sent to the active gateway.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('broadcast ping reports no active gateway when disconnected',
+        (tester) async {
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      final broadcastButton = find.byKey(const Key('action_broadcast_ping'));
+      await tester.scrollUntilVisible(broadcastButton, 100.0);
+      await tester.pumpAndSettle();
+
+      await tester.tap(broadcastButton);
+      await tester.pumpAndSettle();
+
+      expect(find.text('No active gateway connection.'), findsOneWidget);
     });
 
     testWidgets(
@@ -260,8 +489,11 @@ void main() {
           .thenAnswer((_) async => const Right(false));
       when(() => mockAmbient.regions).thenAnswer((_) => const []);
 
+      var expectedOperationalServices = 0;
       sl.registerSingleton<BatteryOptimizationServiceBase>(mockBattery);
+      expectedOperationalServices++;
       sl.registerSingleton<AmbientTriggerServiceBase>(mockAmbient);
+      expectedOperationalServices++;
 
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();
@@ -275,7 +507,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.textContaining('Self diagnostics complete: 6 services operational.'),
+        find.textContaining(
+          'Self diagnostics complete: $expectedOperationalServices services operational.',
+        ),
         findsOneWidget,
       );
     });
