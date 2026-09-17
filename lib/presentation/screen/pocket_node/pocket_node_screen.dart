@@ -7,6 +7,8 @@ import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_
 import 'package:flutter_ai_agent/domain/entities/chat/ambient_event.dart';
 import 'package:flutter_ai_agent/domain/entities/chat/ambient_trigger_settings.dart';
 import 'package:flutter_ai_agent/domain/entities/gateway/gateway_connection_state.dart';
+import 'package:flutter_ai_agent/domain/entities/gateway/gateway_message.dart';
+import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_client_base.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/ambient_trigger_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/battery_optimization_service.dart';
@@ -16,11 +18,14 @@ import 'package:flutter_ai_agent/domain/tools/chat/local_memory_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/notification_triage_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
+import 'package:flutter_ai_agent/presentation/navigation/app_routes.dart';
 import 'package:flutter_ai_agent/presentation/screen/action_center/action_center_screen.dart';
 import 'package:flutter_ai_agent/presentation/screen/chat/widgets/permission_rationale_modal.dart';
 import 'package:flutter_ai_agent/presentation/screen/node/geofence_management_screen.dart';
+import 'package:flutter_ai_agent/presentation/screen/settings/settings_params.dart';
 import 'package:flutter_ai_agent/utils/hermes_theme.dart';
 import 'package:flutter_ai_agent/utils/permission_gate.dart';
+import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class PocketNodeScreen extends StatefulWidget {
@@ -53,14 +58,35 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
       sl.isRegistered<PermissionGate>() ||
       !Platform.environment.containsKey('FLUTTER_TEST');
 
-  String _endpoint = 'ws://127.0.0.1:8644/rpc';
-  String _statusText = 'Node 8644 • Online';
-  Color _statusColor = HermesColors.emerald;
-  String _peersText = '1 Connected (Primary Gateway)';
-  String _latencyText = '12 ms';
-  final String _uptimeText = '99.98% • 4d 12h 30m';
+  ServerProfile? _activeProfile;
+  GatewayConnectionState _connectionState = GatewayConnectionState.disconnected;
 
   StreamSubscription<GatewayConnectionState>? _gatewayStateSub;
+
+  String get _statusLabel {
+    switch (_connectionState) {
+      case GatewayConnectionState.connected:
+        return 'Online';
+      case GatewayConnectionState.connecting:
+        return 'Connecting';
+      case GatewayConnectionState.reconnecting:
+        return 'Reconnecting';
+      case GatewayConnectionState.disconnected:
+        return 'Standby';
+    }
+  }
+
+  Color get _statusColor {
+    switch (_connectionState) {
+      case GatewayConnectionState.connected:
+        return HermesColors.emerald;
+      case GatewayConnectionState.connecting:
+      case GatewayConnectionState.reconnecting:
+        return HermesColors.amber;
+      case GatewayConnectionState.disconnected:
+        return HermesColors.inkSecondary;
+    }
+  }
 
   @override
   void initState() {
@@ -85,6 +111,7 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _refreshPermissionState();
+      unawaited(_refreshActiveProfile());
     }
   }
 
@@ -327,24 +354,14 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
   }
 
   Future<void> _initNodeTelemetry() async {
-    if (sl.isRegistered<SecureStorageService>()) {
-      try {
-        final storage = sl<SecureStorageService>();
-        final active = await storage.getActiveServerProfile();
-        if (active != null && active.gatewayUrl.trim().isNotEmpty) {
-          if (mounted) {
-            setState(() {
-              _endpoint = active.gatewayUrl.trim();
-            });
-          }
-        }
-      } catch (_) {}
-    }
+    await _refreshActiveProfile();
 
     if (sl.isRegistered<GatewayClientBase>()) {
       try {
         final gateway = sl<GatewayClientBase>();
-        _updateGatewayConnectionState(gateway.state);
+        if (mounted) {
+          _updateGatewayConnectionState(gateway.state);
+        }
         _gatewayStateSub = gateway.stateStream.listen((state) {
           if (mounted) {
             _updateGatewayConnectionState(state);
@@ -354,26 +371,32 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
     }
   }
 
+  Future<void> _refreshActiveProfile() async {
+    ServerProfile? profile;
+    if (sl.isRegistered<SecureStorageService>()) {
+      try {
+        profile = await sl<SecureStorageService>().getActiveServerProfile();
+      } catch (_) {
+        profile = null;
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _activeProfile = profile;
+    });
+  }
+
+  Future<void> _openAddProfile() async {
+    await context.pushNamed(
+      AppRoutes.nrAddProfile,
+      extra: const SettingsParams(),
+    );
+    await _refreshActiveProfile();
+  }
+
   void _updateGatewayConnectionState(GatewayConnectionState state) {
     setState(() {
-      switch (state) {
-        case GatewayConnectionState.connected:
-          _statusText = 'Node 8644 • Online';
-          _statusColor = HermesColors.emerald;
-          _peersText = '1 Connected (Primary Gateway)';
-          break;
-        case GatewayConnectionState.connecting:
-        case GatewayConnectionState.reconnecting:
-          _statusText = 'Node 8644 • Connecting';
-          _statusColor = HermesColors.amber;
-          _peersText = 'Connecting...';
-          break;
-        case GatewayConnectionState.disconnected:
-          _statusText = 'Node 8644 • Standby';
-          _statusColor = HermesColors.inkSecondary;
-          _peersText = '0 Connected (Standby)';
-          break;
-      }
+      _connectionState = state;
     });
   }
 
@@ -386,13 +409,13 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
   }
 
   void _handleBroadcastPing() {
-    final latency = 12 + (DateTime.now().millisecond % 5);
-    setState(() {
-      _latencyText = '$latency ms';
-    });
-    _showFeedback(
-      'Broadcast ping sent to connected gateway (${latency}ms RTT).',
-    );
+    if (_connectionState.isConnected &&
+        sl.isRegistered<GatewayClientBase>()) {
+      sl<GatewayClientBase>().send(GatewayPingMessage());
+      _showFeedback('Heartbeat ping sent to the active gateway.');
+      return;
+    }
+    _showFeedback('No active gateway connection.');
   }
 
   void _handleSelfDiagnostics() {
@@ -408,7 +431,6 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
       operationalServices++;
     }
     if (sl.isRegistered<AmbientTriggerServiceBase>()) operationalServices++;
-    if (operationalServices < 6) operationalServices = 6;
     _showFeedback(
       'Self diagnostics complete: $operationalServices services operational.',
     );
@@ -471,7 +493,7 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  _statusText,
+                  _statusLabel,
                   style: HermesTypography.statusPill(
                     color: _statusColor,
                     fontSize: 11,
@@ -764,6 +786,9 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
   }
 
   Widget _buildTelemetryCard() {
+    final profile = _activeProfile;
+    final endpoint = profile?.gatewayUrl.trim() ?? '';
+
     return Container(
       key: const Key('node_rpc_telemetry_card'),
       padding: const EdgeInsets.all(16),
@@ -791,34 +816,50 @@ class _PocketNodeScreenState extends State<PocketNodeScreen>
                   color: HermesColors.inkPrimary,
                 ),
               ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: HermesColors.deepObsidian,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: HermesColors.hairline),
-                ),
-                child: Text(
-                  'v2.1 RPC',
-                  style: HermesTypography.monospace(
-                    fontSize: 10,
-                    color: HermesColors.emerald,
-                  ),
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 12),
-          _buildTelemetryRow('Endpoint', _endpoint),
-          const SizedBox(height: 6),
-          _buildTelemetryRow('Peers', _peersText),
-          const SizedBox(height: 6),
-          _buildTelemetryRow('Latency', _latencyText),
-          const SizedBox(height: 6),
-          _buildTelemetryRow('Uptime', _uptimeText),
+          if (endpoint.isEmpty)
+            _buildNoProfileEmptyState()
+          else ...[
+            _buildTelemetryRow('Endpoint', endpoint),
+            const SizedBox(height: 6),
+            _buildTelemetryRow('Profile', profile!.name),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _buildNoProfileEmptyState() {
+    return Column(
+      key: const Key('node_no_profile_empty_state'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'No server profile configured',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: HermesColors.inkPrimary,
+          ),
+        ),
+        const SizedBox(height: 2),
+        const Text(
+          'Add a server profile to connect this node.',
+          style: TextStyle(fontSize: 11, color: HermesColors.inkMuted),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: _buildActionButton(
+            key: const Key('action_add_profile'),
+            label: 'Add Profile',
+            icon: Icons.add_circle_outline,
+            onTap: () => unawaited(_openAddProfile()),
+          ),
+        ),
+      ],
     );
   }
 
