@@ -539,6 +539,7 @@ void main() {
         isActive: true,
         model: 'custom-model-x',
         temperature: 1.2,
+        kind: ServerProfileKind.llmEndpoint,
       );
 
       whenListen(
@@ -578,6 +579,134 @@ void main() {
       expect(apiKeyField.controller?.text, 'sk-custom-token');
 
       verify(() => mockSettingsCubit.updateFromProfile(customProfile)).called(1);
+    });
+
+    testWidgets(
+        'hides model and temperature fields when the active profile is a Hermes Agent profile',
+        (tester) async {
+      when(() => mockSettingsCubit.state).thenReturn(
+        const SettingsLoaded(
+          baseUrl: 'https://example.com/v1',
+          apiKey: 'sk-key',
+          model: 'ag-glm',
+          temperature: 0.7,
+        ),
+      );
+
+      final hermesProfile = ServerProfile(
+        id: 'p-hermes',
+        name: 'Hermes Node',
+        gatewayUrl: 'https://hermes.example.com',
+        token: 'sk-hermes',
+        isActive: true,
+        kind: ServerProfileKind.hermesAgent,
+      );
+
+      when(() => mockServerProfileCubit.state).thenReturn(
+        ServerProfileLoaded(
+          profiles: [hermesProfile],
+          activeProfile: hermesProfile,
+        ),
+      );
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      expect(find.byKey(const Key('settings_model_field')), findsNothing);
+      expect(find.byKey(const Key('settings_temperature_field')), findsNothing);
+      expect(find.byKey(const Key('settings_base_url_field')), findsOneWidget);
+      expect(find.byKey(const Key('settings_api_key_field')), findsOneWidget);
+    });
+
+    testWidgets(
+        'shows model and temperature fields when the active profile is an LLM endpoint',
+        (tester) async {
+      when(() => mockSettingsCubit.state).thenReturn(
+        const SettingsLoaded(
+          baseUrl: 'https://example.com/v1',
+          apiKey: 'sk-key',
+          model: 'ag-glm',
+          temperature: 0.7,
+        ),
+      );
+
+      final llmProfile = ServerProfile(
+        id: 'p-llm',
+        name: 'OpenAI Node',
+        gatewayUrl: 'https://api.openai.com/v1',
+        token: 'sk-openai',
+        isActive: true,
+        kind: ServerProfileKind.llmEndpoint,
+      );
+
+      when(() => mockServerProfileCubit.state).thenReturn(
+        ServerProfileLoaded(
+          profiles: [llmProfile],
+          activeProfile: llmProfile,
+        ),
+      );
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      expect(find.byKey(const Key('settings_model_field')), findsOneWidget);
+      expect(find.byKey(const Key('settings_temperature_field')), findsOneWidget);
+    });
+
+    testWidgets('profile dropdown labels the profile kind', (tester) async {
+      when(() => mockSettingsCubit.state).thenReturn(
+        const SettingsLoaded(
+          baseUrl: 'https://example.com/v1',
+          apiKey: 'sk-key',
+          model: 'ag-glm',
+          temperature: 0.7,
+        ),
+      );
+
+      final hermesProfile = ServerProfile(
+        id: 'p-hermes',
+        name: 'Hermes Node',
+        gatewayUrl: 'https://hermes.example.com',
+        token: 'sk-hermes',
+        kind: ServerProfileKind.hermesAgent,
+      );
+
+      final llmProfile = ServerProfile(
+        id: 'p-llm',
+        name: 'OpenAI Node',
+        gatewayUrl: 'https://api.openai.com/v1',
+        token: 'sk-openai',
+        isActive: true,
+        kind: ServerProfileKind.llmEndpoint,
+      );
+
+      when(() => mockServerProfileCubit.state).thenReturn(
+        ServerProfileLoaded(
+          profiles: [hermesProfile, llmProfile],
+          activeProfile: llmProfile,
+        ),
+      );
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      expect(
+        find.byKey(const Key('settings_profile_kind_label')),
+        findsWidgets,
+      );
+
+      final activeKind = tester.widget<Text>(
+        find.byKey(const Key('settings_active_profile_kind')),
+      );
+      expect(activeKind.data, contains('LLM Endpoint'));
+
+      await tester.tap(
+        find.byKey(const Key('settings_server_profile_dropdown')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Hermes Agent'), findsWidgets);
+      expect(find.text('LLM Endpoint'), findsWidgets);
     });
   });
 

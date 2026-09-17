@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_ai_agent/common/failure_message.dart';
 import 'package:flutter_ai_agent/common/injection/injection.dart';
 import 'package:flutter_ai_agent/data/datasources/local/settings/secure_storage_service.dart';
+import 'package:flutter_ai_agent/domain/entities/server_profiles/server_profile.dart';
 import 'package:flutter_ai_agent/domain/services/gateway/gateway_url.dart';
 import 'package:flutter_ai_agent/domain/services/settings/server_profile_probe_service.dart';
 import 'package:flutter_ai_agent/presentation/screen/server_profiles/cubit/server_profile_cubit.dart';
@@ -472,6 +473,9 @@ class _AddProfileViewState extends State<_AddProfileView> {
               ? _modelController.text.trim()
               : null,
           temperature: _mode == AddProfileMode.openai ? _temperature : null,
+          kind: _mode == AddProfileMode.hermesNode
+              ? ServerProfileKind.hermesAgent
+              : ServerProfileKind.llmEndpoint,
         );
   }
 

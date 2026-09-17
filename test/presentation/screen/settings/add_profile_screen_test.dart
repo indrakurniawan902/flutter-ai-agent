@@ -20,6 +20,7 @@ void main() {
   late MockProbeService probe;
 
   setUpAll(() {
+    registerFallbackValue(ServerProfileKind.hermesAgent);
     registerFallbackValue(
       const ServerProfile(
         id: 'fallback',
@@ -358,6 +359,7 @@ void main() {
             makeActive: any(named: 'makeActive'),
             model: any(named: 'model'),
             temperature: any(named: 'temperature'),
+            kind: any(named: 'kind'),
           )).thenAnswer((_) async {});
       await tester.pumpWidget(buildTestWidget());
       await tester.pump();
@@ -387,6 +389,7 @@ void main() {
             makeActive: false,
             model: any(named: 'model'),
             temperature: any(named: 'temperature'),
+            kind: any(named: 'kind'),
           )).called(1);
     });
 
@@ -428,6 +431,7 @@ void main() {
             makeActive: any(named: 'makeActive'),
             model: any(named: 'model'),
             temperature: any(named: 'temperature'),
+            kind: any(named: 'kind'),
           ));
     });
 
@@ -440,6 +444,7 @@ void main() {
             makeActive: any(named: 'makeActive'),
             model: any(named: 'model'),
             temperature: any(named: 'temperature'),
+            kind: any(named: 'kind'),
           )).thenAnswer((_) async {});
       await tester.pumpWidget(buildTestWidget());
       await tester.pump();
@@ -469,6 +474,7 @@ void main() {
             makeActive: false,
             model: any(named: 'model'),
             temperature: any(named: 'temperature'),
+            kind: any(named: 'kind'),
           )).called(1);
     });
 
@@ -496,6 +502,7 @@ void main() {
             makeActive: any(named: 'makeActive'),
             model: any(named: 'model'),
             temperature: any(named: 'temperature'),
+            kind: any(named: 'kind'),
           ));
     });
 
@@ -508,6 +515,7 @@ void main() {
             makeActive: any(named: 'makeActive'),
             model: any(named: 'model'),
             temperature: any(named: 'temperature'),
+            kind: any(named: 'kind'),
           )).thenAnswer((_) async {});
       await tester.pumpWidget(buildTestWidget());
       await tester.pump();
@@ -543,9 +551,83 @@ void main() {
             makeActive: false,
             model: 'gpt-4o-mini',
             temperature: captureAny(named: 'temperature'),
+            kind: any(named: 'kind'),
           )).captured;
       expect(captured.single, isA<double>());
       expect(captured.single as double, inInclusiveRange(0.0, 1.0));
+    });
+
+    testWidgets('Save Profile in OpenAI mode forwards kind llmEndpoint',
+        (tester) async {
+      when(() => cubit.addProfile(
+            name: any(named: 'name'),
+            gatewayUrl: any(named: 'gatewayUrl'),
+            token: any(named: 'token'),
+            makeActive: any(named: 'makeActive'),
+            model: any(named: 'model'),
+            temperature: any(named: 'temperature'),
+            kind: any(named: 'kind'),
+          )).thenAnswer((_) async {});
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      await tester.enterText(
+        find.byKey(const Key('add_profile_url_field')),
+        'https://hermes.example.com',
+      );
+      await tester.enterText(
+        find.byKey(const Key('add_profile_token_field')),
+        'secret-token',
+      );
+      await tester.enterText(
+        find.byKey(const Key('add_profile_name_field')),
+        'Hermes',
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('add_profile_submit_button')),
+      );
+      await tester.tap(find.byKey(const Key('add_profile_submit_button')));
+      await tester.pump();
+
+      verify(() => cubit.addProfile(
+            name: 'Hermes',
+            gatewayUrl: 'https://hermes.example.com',
+            token: 'secret-token',
+            makeActive: false,
+            model: any(named: 'model'),
+            temperature: any(named: 'temperature'),
+            kind: ServerProfileKind.hermesAgent,
+          )).called(1);
+
+      await tester.tap(find.text('OpenAI LLM'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('add_profile_url_field')),
+        'https://api.openai.com/v1',
+      );
+      await tester.enterText(
+        find.byKey(const Key('add_profile_token_field')),
+        'sk-test',
+      );
+      await tester.enterText(
+        find.byKey(const Key('add_profile_name_field')),
+        'OpenAI',
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('add_profile_submit_button')),
+      );
+      await tester.tap(find.byKey(const Key('add_profile_submit_button')));
+      await tester.pump();
+
+      verify(() => cubit.addProfile(
+            name: 'OpenAI',
+            gatewayUrl: 'https://api.openai.com/v1',
+            token: 'sk-test',
+            makeActive: false,
+            model: any(named: 'model'),
+            temperature: any(named: 'temperature'),
+            kind: ServerProfileKind.llmEndpoint,
+          )).called(1);
     });
 
     testWidgets(

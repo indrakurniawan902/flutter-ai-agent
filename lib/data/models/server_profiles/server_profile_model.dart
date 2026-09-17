@@ -12,6 +12,7 @@ class ServerProfileModel extends ServerProfile {
     super.lastConnected,
     super.model = AppConstants.defaultModel,
     super.temperature = AppConstants.defaultTemperature,
+    super.kind = ServerProfileKind.hermesAgent,
   });
 
   /// Factory to construct model from a [ServerProfile] entity.
@@ -25,7 +26,44 @@ class ServerProfileModel extends ServerProfile {
       lastConnected: entity.lastConnected,
       model: entity.model,
       temperature: entity.temperature,
+      kind: entity.kind,
     );
+  }
+
+  /// Resolves the stored profile kind, tolerating legacy records.
+  ///
+  /// Accepts enum names case-insensitively plus snake_case and kebab-case
+  /// spellings ('hermesAgent', 'hermes_agent', 'hermes-agent', 'llmEndpoint',
+  /// 'llm_endpoint', 'llm-endpoint'). Unknown or garbage values never throw
+  /// and fall through to the legacy heuristic.
+  ///
+  /// Records saved before the kind field existed carry no 'kind' key and
+  /// default to [ServerProfileKind.hermesAgent]. The exception is a record
+  /// with an explicitly non-default model or temperature: only the
+  /// OpenAI-LLM creation path ever wrote a user-chosen model/temperature, so
+  /// a deviation from the defaults proves the record came from that mode and
+  /// resolves to [ServerProfileKind.llmEndpoint].
+  static ServerProfileKind _resolveKind(
+    Map<String, dynamic> json, {
+    required String model,
+    required double temperature,
+  }) {
+    final rawKind =
+        json['kind']?.toString().trim().toLowerCase().replaceAll('-', '_');
+    if (rawKind == 'hermesagent' || rawKind == 'hermes_agent') {
+      return ServerProfileKind.hermesAgent;
+    }
+    if (rawKind == 'llmendpoint' || rawKind == 'llm_endpoint') {
+      return ServerProfileKind.llmEndpoint;
+    }
+
+    final hasCustomModel =
+        model.isNotEmpty && model != AppConstants.defaultModel;
+    final hasCustomTemperature =
+        temperature != AppConstants.defaultTemperature;
+    return hasCustomModel || hasCustomTemperature
+        ? ServerProfileKind.llmEndpoint
+        : ServerProfileKind.hermesAgent;
   }
 
   /// Parses JSON into [ServerProfileModel].
@@ -75,6 +113,7 @@ class ServerProfileModel extends ServerProfile {
       lastConnected: lastConnected,
       model: model,
       temperature: temperature,
+      kind: _resolveKind(json, model: model, temperature: temperature),
     );
   }
 
@@ -89,6 +128,7 @@ class ServerProfileModel extends ServerProfile {
       'lastConnected': lastConnected?.toIso8601String(),
       'model': model,
       'temperature': temperature,
+      'kind': kind.name,
     };
   }
 }

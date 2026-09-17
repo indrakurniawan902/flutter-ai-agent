@@ -71,6 +71,7 @@ class ServerProfileCubit extends Cubit<ServerProfileState> {
     String? id,
     String? model,
     double? temperature,
+    ServerProfileKind kind = ServerProfileKind.hermesAgent,
   }) async {
     final trimmedName = name.trim();
     final trimmedUrl = gatewayUrl.trim();
@@ -132,6 +133,7 @@ class ServerProfileCubit extends Cubit<ServerProfileState> {
         isActive: shouldBeActive,
         model: model ?? AppConstants.defaultModel,
         temperature: temperature ?? AppConstants.defaultTemperature,
+        kind: kind,
       );
 
       await _secureStorageService.saveServerProfile(newProfile);
