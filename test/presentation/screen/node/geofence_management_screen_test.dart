@@ -716,6 +716,111 @@ void main() {
       verifyNever(() => mockAmbient.addGeofence(any()));
     });
 
+    testWidgets('saving an edit without touching the radius keeps a stored '
+        'non-standard radius', (tester) async {
+      final regions = [
+        GeofenceRegion(
+          id: 'gf1',
+          name: 'Home',
+          latitude: 12.5,
+          longitude: -45.25,
+          radiusMeters: 300,
+        ),
+      ];
+      final mockStorage = MockSecureStorageService();
+      final mockAmbient = MockAmbientTriggerService();
+      final mockLocation = MockLocationService();
+
+      when(() => mockStorage.getGeofences())
+          .thenAnswer((_) async => regions);
+      when(() => mockStorage.saveGeofences(any())).thenAnswer((_) async {});
+      when(() => mockAmbient.regions).thenAnswer((_) => regions);
+      when(() => mockLocation.getLocation()).thenAnswer(
+        (_) async => Right(<String, dynamic>{'latitude': 0, 'longitude': 0}),
+      );
+
+      sl.registerSingleton<SecureStorageService>(mockStorage);
+      sl.registerSingleton<AmbientTriggerServiceBase>(mockAmbient);
+      sl.registerSingleton<LocationServiceBase>(mockLocation);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('geofence_edit_gf1')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('300 m'), findsWidgets);
+
+      final sheet = find.byType(BottomSheet);
+      await tester.tap(
+        find.descendant(
+          of: sheet,
+          matching: find.byKey(const Key('geofence_submit')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final captured =
+          verify(() => mockStorage.saveGeofences(captureAny())).captured;
+      final saved = captured.last as List<GeofenceRegion>;
+      expect(saved.length, 1);
+      expect(saved.single.id, 'gf1');
+      expect(saved.single.radiusMeters, 300);
+    });
+
+    testWidgets('use current location works inside the edit sheet',
+        (tester) async {
+      final regions = [
+        GeofenceRegion(
+          id: 'gf1',
+          name: 'Home',
+          latitude: 12.5,
+          longitude: -45.25,
+          radiusMeters: 100,
+        ),
+      ];
+      registerMocks(initialRegions: regions);
+      final gate = gateWith(PermissionStatus.granted);
+
+      await tester.pumpWidget(createWidgetUnderTest(gate: gate));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('geofence_edit_gf1')));
+      await tester.pumpAndSettle();
+
+      final sheet = find.byType(BottomSheet);
+      await tester.tap(
+        find.descendant(
+          of: sheet,
+          matching: find.byKey(const Key('geofence_use_current_location')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final latField = tester.widget<TextFormField>(
+        find.descendant(
+          of: sheet,
+          matching: find.byKey(const Key('geofence_lat_field')),
+        ),
+      );
+      final lngField = tester.widget<TextFormField>(
+        find.descendant(
+          of: sheet,
+          matching: find.byKey(const Key('geofence_lng_field')),
+        ),
+      );
+      final labelField = tester.widget<TextFormField>(
+        find.descendant(
+          of: sheet,
+          matching: find.byKey(const Key('geofence_label_field')),
+        ),
+      );
+
+      expect(latField.controller?.text, '37.774900');
+      expect(lngField.controller?.text, '-122.419400');
+      expect(labelField.controller?.text, 'Home');
+    });
+
     testWidgets('add form still creates a new region after the generalisation',
         (tester) async {
       final mockStorage = MockSecureStorageService();

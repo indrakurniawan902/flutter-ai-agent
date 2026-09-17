@@ -315,21 +315,18 @@ class _AddGeofenceFormState extends State<_AddGeofenceForm> {
       _labelController.text = region.rawName;
       _latController.text = region.latitude.toStringAsFixed(6);
       _lngController.text = region.longitude.toStringAsFixed(6);
-      _radius = _closestRadiusOption(region.radiusMeters);
+      _radius = region.radiusMeters;
     }
   }
 
-  static double _closestRadiusOption(double radius) {
-    var closest = _radiusOptions.first;
-    var smallestDiff = (radius - closest).abs();
-    for (final option in _radiusOptions.skip(1)) {
-      final diff = (radius - option).abs();
-      if (diff < smallestDiff) {
-        closest = option;
-        smallestDiff = diff;
-      }
+  /// Standard options plus the stored radius when it is not one of them, so an
+  /// edit can display and keep a value the user never changed.
+  List<double> get _availableRadiusOptions {
+    final region = widget.editingRegion;
+    if (region != null && !_radiusOptions.contains(region.radiusMeters)) {
+      return [..._radiusOptions, region.radiusMeters];
     }
-    return closest;
+    return _radiusOptions;
   }
 
   @override
@@ -545,7 +542,7 @@ class _AddGeofenceFormState extends State<_AddGeofenceForm> {
               dropdownColor: HermesColors.cardSurface,
               style: const TextStyle(color: HermesColors.inkPrimary),
               decoration: _inputDecoration('Radius'),
-              items: _radiusOptions
+              items: _availableRadiusOptions
                   .map(
                     (r) => DropdownMenuItem(
                       value: r,
