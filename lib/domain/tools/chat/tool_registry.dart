@@ -49,6 +49,13 @@ class RegisteredTool {
   final ToolExecutor execute;
   final PermissionChecker? checkPermission;
 
+  /// Per-tool override of [ToolRegistry.toolExecutionTimeout].
+  /// Null means the registry default applies.
+  final Duration? timeout;
+
+  /// The tool's own internal bound, declared so the invariant is checkable.
+  final Duration? innerWindow;
+
   const RegisteredTool({
     required this.name,
     required this.description,
@@ -56,7 +63,16 @@ class RegisteredTool {
     required this.securityTier,
     required this.execute,
     this.checkPermission,
-  });
+    this.timeout,
+    this.innerWindow,
+  }) : assert(
+          innerWindow == null ||
+              (timeout ?? ToolRegistry.toolExecutionTimeout) > innerWindow,
+          'RegisteredTool: the outer bound must be strictly greater than the '
+          'tool inner window',
+        );
+
+  Duration get effectiveTimeout => timeout ?? ToolRegistry.toolExecutionTimeout;
 
   Map<String, dynamic> toOpenAiTool() {
     return {
@@ -72,10 +88,15 @@ class RegisteredTool {
 
 @lazySingleton
 class ToolRegistry {
-  /// Upper bound for one tool execution or permission pre-check. Must stay well
-  /// under the device bridge's 30s call budget so a hang surfaces as a tool
-  /// error, not a dropped socket.
+  /// Default upper bound for one tool execution or permission pre-check.
+  /// The outer bound must be strictly greater than any tool's declared inner
+  /// window, and strictly below the device bridge's 30s call budget so a hang
+  /// surfaces as a tool error, not a dropped socket.
   static const Duration toolExecutionTimeout = Duration(seconds: 10);
+
+  /// Outer bound for tools whose own inner window is legitimately longer than
+  /// the 10s default; still under the device bridge's 30s budget.
+  static const Duration longWindowToolTimeout = Duration(seconds: 25);
 
   final Map<String, RegisteredTool> _tools = {};
   final Map<String, bool> _toolEnabledStates = {};
@@ -251,12 +272,13 @@ class ToolRegistry {
           tool.checkPermission != null) {
         final bool granted;
         try {
-          granted = await tool.checkPermission!().timeout(toolExecutionTimeout);
+          granted =
+              await tool.checkPermission!().timeout(tool.effectiveTimeout);
         } on TimeoutException {
           return Left(
             ToolTimeoutFailure(
               'tool_timeout: permission check for $name did not answer '
-              'within ${toolExecutionTimeout.inSeconds}s',
+              'within ${tool.effectiveTimeout.inSeconds}s',
             ),
           );
         }
@@ -265,12 +287,12 @@ class ToolRegistry {
         }
       }
       try {
-        return await tool.execute(arguments).timeout(toolExecutionTimeout);
+        return await tool.execute(arguments).timeout(tool.effectiveTimeout);
       } on TimeoutException {
         return Left(
           ToolTimeoutFailure(
             'tool_timeout: $name did not answer within '
-            '${toolExecutionTimeout.inSeconds}s',
+            '${tool.effectiveTimeout.inSeconds}s',
           ),
         );
       }
@@ -924,15 +946,18 @@ class ToolRegistry {
             'listenDurationSeconds': {
               'type': 'integer',
               'description':
-                  'Maximum duration in seconds to listen for voice input (default: 10)',
+                  'Maximum duration in seconds to listen for voice input '
+                  '(default: 10, max: $kMaxVoiceListenSeconds)',
             },
           },
         },
         securityTier: SecurityTier.tier2Permission,
+        timeout: ToolRegistry.longWindowToolTimeout,
+        innerWindow: Duration(seconds: kMaxVoiceListenSeconds),
         execute: (args) async {
           final durationSec =
               ((args['listenDurationSeconds'] as num?)?.toInt() ?? 10)
-                  .clamp(1, 60);
+                  .clamp(1, kMaxVoiceListenSeconds);
           final startResult = await service.startListening(
             listenFor: Duration(seconds: durationSec),
           );
@@ -1424,6 +1449,8 @@ class ToolRegistry {
           'required': [],
         },
         securityTier: SecurityTier.tier2Permission,
+        timeout: ToolRegistry.longWindowToolTimeout,
+        innerWindow: kNfcScanTimeout,
         execute: (args) async {
           final available = await service.isAvailable();
           if (available.isLeft()) {
@@ -1477,6 +1504,8 @@ class ToolRegistry {
           'required': [],
         },
         securityTier: SecurityTier.tier2Permission,
+        timeout: ToolRegistry.longWindowToolTimeout,
+        innerWindow: kNfcScanTimeout,
         execute: (args) async {
           final available = await service.isAvailable();
           if (available.isLeft()) {

@@ -4,6 +4,9 @@ import 'package:flutter_ai_agent/common/failure.dart';
 
 enum VoiceInputStatus { idle, listening, done, error }
 
+/// Maximum listen window accepted by the `listen_voice_input` tool.
+const int kMaxVoiceListenSeconds = 20;
+
 abstract class VoiceInputServiceBase {
   bool get isListening;
   bool get isAvailable;
