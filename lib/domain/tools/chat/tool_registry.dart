@@ -1590,11 +1590,22 @@ class ToolRegistry {
         },
         securityTier: SecurityTier.tier2Permission,
         checkPermission: () => service.checkPermission(),
-        execute: (args) => service.getHealthDataFormattedJson(
-          metric: args['metric']?.toString() ?? '',
-          startDate: args['startDate']?.toString(),
-          endDate: args['endDate']?.toString(),
-        ),
+        execute: (args) async {
+          final rawMetric = args['metric'];
+          final metric = rawMetric is String ? rawMetric.trim() : '';
+          if (metric.isEmpty) {
+            return Left(
+              ValidationFailure(
+                "get_health_data requires 'metric' (one of: ${HealthMetrics.description})",
+              ),
+            );
+          }
+          return service.getHealthDataFormattedJson(
+            metric: metric,
+            startDate: args['startDate']?.toString(),
+            endDate: args['endDate']?.toString(),
+          );
+        },
       ),
     );
   }

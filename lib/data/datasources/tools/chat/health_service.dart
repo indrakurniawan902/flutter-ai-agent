@@ -26,9 +26,9 @@ class DefaultHealthPlatformWrapper implements HealthPlatformWrapper {
   );
 
   /// A silent platform call (Health Connect readRecords that never replies)
-  /// must not suspend the caller forever; the timeout throws into the existing
-  /// catch, which maps it to null / empty / false.
-  static const Duration _platformCallTimeout = Duration(seconds: 8);
+  /// must not suspend the caller forever. Bounds nest strictly:
+  /// native 4s < wrapper 5s < service 6s < registry 10s.
+  static const Duration _platformCallTimeout = Duration(seconds: 5);
 
   @override
   Future<Map<String, dynamic>?> availability() async {
@@ -84,8 +84,22 @@ class DefaultHealthPlatformWrapper implements HealthPlatformWrapper {
           )
           .timeout(_platformCallTimeout);
       return raw?.cast<String, dynamic>();
-    } catch (_) {
-      return null;
+    } on TimeoutException {
+      return <String, dynamic>{
+        'error_code': 'health_timeout',
+        'error_message':
+            'no response from the platform within ${_platformCallTimeout.inSeconds}s',
+      };
+    } on PlatformException catch (e) {
+      return <String, dynamic>{
+        'error_code': 'health_platform_error',
+        'error_message': '${e.code}: ${e.message}',
+      };
+    } catch (e) {
+      return <String, dynamic>{
+        'error_code': 'health_platform_error',
+        'error_message': e.toString(),
+      };
     }
   }
 }
@@ -95,9 +109,10 @@ class HealthService implements HealthServiceBase {
   /// Upper bound for every platform call this service makes. Any
   /// [HealthPlatformWrapper] implementation can silently never complete, so the
   /// bound lives here where every call routes through - not inside one concrete
-  /// wrapper. Deliberately below `ToolRegistry.toolExecutionTimeout` (10s) and
-  /// the bridge's 30s budget so callers see a structured failure, not a hang.
-  static const Duration platformCallTimeout = Duration(seconds: 8);
+  /// wrapper. Bounds nest strictly: native 4s < wrapper 5s < service 6s <
+  /// registry 10s (and the bridge's 30s budget) so callers see a structured
+  /// failure, not a hang.
+  static const Duration platformCallTimeout = Duration(seconds: 6);
 
   final HealthPlatformWrapper _platform;
 
@@ -269,6 +284,12 @@ class HealthService implements HealthServiceBase {
         );
       }
 
+      final errorCode = result['error_code'] as String?;
+      if (errorCode != null) {
+        final errorMessage = result['error_message'] as String? ?? '';
+        return Left(ServerFailure('$errorCode: $errorMessage'));
+      }
+
       final rawRecords = (result['records'] as List?) ?? <dynamic>[];
       final truncated = rawRecords.length > 200;
       final records = truncated ? rawRecords.take(200).toList() : rawRecords;
@@ -278,16 +299,20 @@ class HealthService implements HealthServiceBase {
       final startIso = (result['start'] as String?) ?? start.toIso8601String();
       final endIso = (result['end'] as String?) ?? end.toIso8601String();
 
-      return Right(
-        jsonEncode(<String, dynamic>{
-          'metric': metric,
-          'start': startIso,
-          'end': endIso,
-          'summary': summary,
-          'records': records,
-          'truncated': truncated,
-        }),
-      );
+      final response = <String, dynamic>{
+        'metric': metric,
+        'start': startIso,
+        'end': endIso,
+        'summary': summary,
+        'records': records,
+        'truncated': truncated,
+      };
+      if (result['records_unavailable'] == true) {
+        response['records_unavailable'] = true;
+        response['records_error'] = result['records_error'];
+      }
+
+      return Right(jsonEncode(response));
     } catch (e) {
       return Left(ServerFailure('health_read_failed: $e'));
     }

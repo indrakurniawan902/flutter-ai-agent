@@ -95,20 +95,45 @@ void main() {
       expect(args['endTimeMs'], 2000);
     });
 
-    test('swallows PlatformException for every method', () async {
+    test(
+      'availability/granted/request swallow into null/empty/false, '
+      'readMetric surfaces the platform error',
+      () async {
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          captured.add(call);
+          throw PlatformException(code: 'boom', message: 'kaboom');
+        });
+
+        expect(await wrapper.availability(), isNull);
+        expect(await wrapper.grantedPermissions(), isEmpty);
+        expect(await wrapper.requestPermission(), isFalse);
+        final read = await wrapper.readMetric(
+          metric: 'steps',
+          startTimeMs: 0,
+          endTimeMs: 1,
+        );
+        expect(read, isNotNull);
+        expect(read!['error_code'], 'health_platform_error');
+        expect(read['error_message'], contains('boom'));
+        expect(captured, hasLength(4));
+      },
+    );
+
+    test('readMetric PlatformException yields no summary key', () async {
       messenger.setMockMethodCallHandler(channel, (call) async {
         captured.add(call);
         throw PlatformException(code: 'boom', message: 'kaboom');
       });
 
-      expect(await wrapper.availability(), isNull);
-      expect(await wrapper.grantedPermissions(), isEmpty);
-      expect(await wrapper.requestPermission(), isFalse);
-      expect(
-        await wrapper.readMetric(metric: 'steps', startTimeMs: 0, endTimeMs: 1),
-        isNull,
+      final read = await wrapper.readMetric(
+        metric: 'steps',
+        startTimeMs: 0,
+        endTimeMs: 1,
       );
-      expect(captured, hasLength(4));
+
+      expect(read, isNotNull);
+      expect(read!['error_code'], 'health_platform_error');
+      expect(read.containsKey('summary'), isFalse);
     });
   });
 }
