@@ -556,6 +556,92 @@ void main() {
       expect(region.actionPayload, isEmpty);
       expect(region.actionOn, GeofenceActionTrigger.both);
     });
+
+    test('register_geofence rejects an unknown action and never registers it',
+        () async {
+      // Arrange
+      registry.registerAmbientTriggerTools(mockAmbient);
+
+      // Act
+      final result = await registry.executeTool('register_geofence', {
+        'id': 'g3',
+        'latitude': 1.0,
+        'longitude': 2.0,
+        'action': 'speak',
+        'actionPayload': 'hi',
+      });
+
+      // Assert
+      expect(result.isLeft(), isTrue);
+      final message = result.fold((failure) => failure.message, (_) => '');
+      expect(message, contains('speak'));
+      expect(message, contains('runPrompt'));
+      verifyNever(() => mockAmbient.addGeofence(any()));
+    });
+
+    test('register_geofence rejects a payload-taking action with no payload',
+        () async {
+      // Arrange
+      registry.registerAmbientTriggerTools(mockAmbient);
+
+      // Act
+      final runPromptResult = await registry.executeTool('register_geofence', {
+        'id': 'g4',
+        'latitude': 1.0,
+        'longitude': 2.0,
+        'action': 'runPrompt',
+      });
+      final openUrlResult = await registry.executeTool('register_geofence', {
+        'id': 'g5',
+        'latitude': 1.0,
+        'longitude': 2.0,
+        'action': 'openUrl',
+      });
+
+      // Assert
+      expect(runPromptResult.isLeft(), isTrue);
+      expect(
+        runPromptResult.fold((failure) => failure.message, (_) => ''),
+        contains('runPrompt'),
+      );
+      expect(openUrlResult.isLeft(), isTrue);
+      expect(
+        openUrlResult.fold((failure) => failure.message, (_) => ''),
+        contains('openUrl'),
+      );
+      verifyNever(() => mockAmbient.addGeofence(any()));
+    });
+
+    test('register_geofence round-trips every allowed action', () async {
+      // Arrange
+      registry.registerAmbientTriggerTools(mockAmbient);
+      final payloads = <String, String>{
+        'none': '',
+        'notify': '',
+        'runPrompt': 'Lights on',
+        'openUrl': 'https://example.com',
+      };
+
+      // Act & Assert
+      for (final name in geofenceActionNames) {
+        clearInteractions(mockAmbient);
+        final result = await registry.executeTool('register_geofence', {
+          'id': 'g_$name',
+          'latitude': 1.0,
+          'longitude': 2.0,
+          'action': name,
+          'actionPayload': payloads[name],
+        });
+
+        expect(result.isRight(), isTrue, reason: 'action $name rejected');
+        final captured = verify(
+          () => mockAmbient.addGeofence(captureAny()),
+        ).captured;
+        final region = captured.single as GeofenceRegion;
+        expect(geofenceActionToJson(region.action), name);
+        expect(region.actionPayload, payloads[name]);
+      }
+    });
   });
 
   group('registerVoiceTools', () {
