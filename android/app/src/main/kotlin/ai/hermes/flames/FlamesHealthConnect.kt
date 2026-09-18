@@ -24,8 +24,17 @@ object FlamesHealthConnect {
     // On Android 14 a Health Connect call can suspend forever; every native
     // read must be bounded so the catch blocks return a structured error
     // instead of hanging the Dart caller. Timeouts must nest strictly:
-    // native 4s < Dart wrapper 5s < Dart service 6s < registry 10s.
-    private const val READ_TIMEOUT_MS = 4_000L
+    // native 2s < Dart wrapper 5s < Dart service 6s < registry 10s.
+    //
+    // The budget is per CALL, not per tool invocation, so the nesting has to be
+    // reasoned over the SUM of the calls one invocation makes. A read does an
+    // aggregate call then a best-effort record call (2 x 2s = 4s), and one
+    // get_health_data also asks for availability and granted permissions first
+    // (4 native calls, 8s worst case) - which still fits under the registry's
+    // 10s. That is the point of the ordering: the INNERMOST bound must be the
+    // one that fires, because only this layer produces the structured error;
+    // if an outer bound fired first the caller would get a generic "no response".
+    private const val READ_TIMEOUT_MS = 2_000L
 
     val readPermissions: Set<String> = setOf(
         HealthPermission.getReadPermission(StepsRecord::class),

@@ -355,6 +355,89 @@ void main() {
     });
   });
 
+  group('getHealthDataFormattedJson surfaced platform errors', () {
+    test('platform error map surfaces error_code and real message', () async {
+      platform.readResult = <String, dynamic>{
+        'error_code': 'health_platform_error',
+        'error_message': 'IllegalArgumentException: bad record',
+      };
+
+      final result = await service.getHealthDataFormattedJson(
+        metric: HealthMetrics.steps,
+      );
+
+      expect(result.isLeft(), isTrue);
+      final message = _failure(result).message;
+      expect(message, contains('health_platform_error'));
+      expect(message, contains('IllegalArgumentException'));
+      expect(message, isNot(contains('no response from Health Connect')));
+    });
+
+    test('timeout error map surfaces health_timeout, not blanket text',
+        () async {
+      platform.readResult = <String, dynamic>{
+        'error_code': 'health_timeout',
+        'error_message': 'no response from the platform within 5s',
+      };
+
+      final result = await service.getHealthDataFormattedJson(
+        metric: HealthMetrics.steps,
+      );
+
+      expect(result.isLeft(), isTrue);
+      final message = _failure(result).message;
+      expect(message, contains('health_timeout'));
+      expect(message, isNot(contains('no response from Health Connect')));
+    });
+
+    test('summary survives when records are unavailable', () async {
+      platform.readResult = <String, dynamic>{
+        'metric': 'steps',
+        'start': '2026-09-12T00:00:00.000Z',
+        'end': '2026-09-13T00:00:00.000Z',
+        'summary': <String, dynamic>{'total': 1200},
+        'records': <dynamic>[],
+        'records_unavailable': true,
+        'records_error': 'IllegalArgumentException: x',
+      };
+
+      final result = await service.getHealthDataFormattedJson(
+        metric: HealthMetrics.steps,
+      );
+
+      expect(result.isRight(), isTrue);
+      final decoded = _decode(result);
+      expect((decoded['summary'] as Map)['total'], 1200);
+      expect(decoded['records'], isEmpty);
+      expect(decoded['records_unavailable'], isTrue);
+      expect(decoded['records_error'], 'IllegalArgumentException: x');
+    });
+
+    test('a clean success payload keeps its exact shape', () async {
+      platform.readResult = <String, dynamic>{
+        'metric': 'steps',
+        'start': '2026-09-12T00:00:00.000Z',
+        'end': '2026-09-13T00:00:00.000Z',
+        'summary': <String, dynamic>{'total': 1200},
+        'records': <dynamic>[],
+      };
+
+      final result = await service.getHealthDataFormattedJson(
+        metric: HealthMetrics.steps,
+      );
+
+      expect(result.isRight(), isTrue);
+      final decoded = _decode(result);
+      expect(decoded['metric'], 'steps');
+      expect(decoded['start'], '2026-09-12T00:00:00.000Z');
+      expect(decoded['end'], '2026-09-13T00:00:00.000Z');
+      expect(decoded['summary'], <String, dynamic>{'total': 1200});
+      expect(decoded['records'], isEmpty);
+      expect(decoded['truncated'], isFalse);
+      expect(decoded.containsKey('records_unavailable'), isFalse);
+    });
+  });
+
   group('wrapper exceptions never escape', () {
     test('availability throw -> healthStatusFormattedJson Left', () async {
       platform.throwOnAvailability = true;

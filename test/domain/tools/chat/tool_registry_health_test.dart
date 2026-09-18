@@ -139,5 +139,75 @@ void main() {
       expect(registry.hasTool('health_status'), isFalse);
       expect(registry.hasTool('get_health_data'), isFalse);
     });
+
+    group('get_health_data requires a non-blank metric', () {
+      for (final args in <Map<String, dynamic>>[
+        <String, dynamic>{},
+        <String, dynamic>{'metric': ''},
+        <String, dynamic>{'metric': '   '},
+      ]) {
+        test('rejects $args with ValidationFailure before calling service',
+            () async {
+          when(() => mockHealth.checkPermission()).thenAnswer((_) async => true);
+
+          final registry = ToolRegistry(healthService: mockHealth);
+          final result = await registry.executeTool('get_health_data', args);
+
+          expect(result.isLeft(), isTrue);
+          final failure = result.fold((f) => f, (_) => fail('Expected Left'));
+          expect(failure, isA<ValidationFailure>());
+          final message = failure.message;
+          expect(message, isNotEmpty);
+          expect(message, contains('metric'));
+          expect(message, contains('steps'));
+          expect(message, contains('weight'));
+          expect(message, contains(HealthMetrics.description));
+          expect(
+            message,
+            isNot(matches(RegExp(r'unsupported_metric:\s*[\(]'))),
+          );
+          expect(message, isNot(contains('health_unsupported_metric:  ')));
+          expect(message, isNot(contains('  (')));
+          verifyNever(
+            () => mockHealth.getHealthDataFormattedJson(
+              metric: any(named: 'metric'),
+              startDate: any(named: 'startDate'),
+              endDate: any(named: 'endDate'),
+            ),
+          );
+        });
+      }
+    });
+
+    test('a native platform error surfaces as itself through executeTool',
+        () async {
+      when(() => mockHealth.checkPermission()).thenAnswer((_) async => true);
+      when(
+        () => mockHealth.getHealthDataFormattedJson(
+          metric: any(named: 'metric'),
+          startDate: any(named: 'startDate'),
+          endDate: any(named: 'endDate'),
+        ),
+      ).thenAnswer(
+        (_) async => const Left(
+          ServerFailure(
+            'health_platform_error: IllegalArgumentException: bad record',
+          ),
+        ),
+      );
+
+      final registry = ToolRegistry(healthService: mockHealth);
+      final result = await registry.executeTool(
+        'get_health_data',
+        {'metric': 'steps'},
+      );
+
+      expect(result.isLeft(), isTrue);
+      final failure = result.fold((f) => f, (_) => fail('Expected Left'));
+      expect(
+        failure.message,
+        'health_platform_error: IllegalArgumentException: bad record',
+      );
+    });
   });
 }
