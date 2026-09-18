@@ -69,6 +69,57 @@ GeofenceAction geofenceActionFromJson(dynamic raw) {
   }
 }
 
+/// Canonical action names accepted by every geofence entry point (tool
+/// arguments and UI input). Mirrors [GeofenceAction.values]; a unit test pins
+/// the two together.
+const List<String> geofenceActionNames = <String>[
+  'none',
+  'notify',
+  'runPrompt',
+  'openUrl',
+];
+
+/// Strict parse of a caller-supplied action name.
+///
+/// Returns `null` when [raw] is not exactly one of [GeofenceAction.values]
+/// (trimmed, case-insensitive). The aliases accepted by
+/// [geofenceActionFromJson] are deliberately NOT accepted here: that leniency
+/// exists only for data already persisted on disk.
+GeofenceAction? geofenceActionTryParse(dynamic raw) {
+  if (raw == null) return null;
+  final value = '$raw'.trim();
+  if (value.isEmpty) return null;
+  for (final action in GeofenceAction.values) {
+    if (action.name.toLowerCase() == value.toLowerCase()) return action;
+  }
+  return null;
+}
+
+/// Validates an action + payload pair before a region is registered.
+///
+/// Returns a message naming the offending value and the allowed set, or `null`
+/// when the pair is acceptable. A null or empty [rawAction] means "no action".
+String? geofenceActionBindingError({
+  required dynamic rawAction,
+  required String actionPayload,
+}) {
+  final trimmed = rawAction == null ? '' : '$rawAction'.trim();
+  final action = trimmed.isEmpty
+      ? GeofenceAction.none
+      : geofenceActionTryParse(trimmed);
+  if (action == null) {
+    return 'Unknown geofence action "$trimmed": expected one of '
+        '${geofenceActionNames.join(', ')}';
+  }
+  if (action == GeofenceAction.runPrompt || action == GeofenceAction.openUrl) {
+    if (actionPayload.trim().isEmpty) {
+      return 'Invalid geofence actionPayload: action "${action.name}" '
+          'requires a non-empty actionPayload';
+    }
+  }
+  return null;
+}
+
 String geofenceActionTriggerToJson(GeofenceActionTrigger trigger) =>
     trigger.name;
 
