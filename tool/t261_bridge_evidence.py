@@ -11,12 +11,17 @@ Stdlib only. Never prints any token.
 """
 import http.client
 import json
+import os
 import sys
 import time
 
-HOST, PORT, PATH = "127.0.0.1", 8899, "/mcp"
+HOST = os.environ.get("FLAMES_T261_MCP_HOST", "127.0.0.1")
+PORT = int(os.environ.get("FLAMES_T261_MCP_PORT", "8899"))
+PATH = "/mcp"
 CALL_TIMEOUT_S = 60.0
-HEALTH_URL = "http://127.0.0.1:8899/health"
+HEALTH_URL = os.environ.get(
+    "FLAMES_T261_HEALTH_URL", "http://127.0.0.1:8899/health"
+)
 
 
 class McpClient:
@@ -35,7 +40,12 @@ class McpClient:
         try:
             conn.request("POST", PATH, body=json.dumps(payload), headers=headers)
             resp = conn.getresponse()
-            raw = resp.read().decode("utf-8", errors="replace")
+            try:
+                raw = resp.read().decode("utf-8", errors="replace")
+            except http.client.IncompleteRead as exc:
+                # A long device call can outlive the chunked stream; keep what
+                # arrived instead of losing the whole response.
+                raw = (exc.partial or b"").decode("utf-8", errors="replace")
             sid = resp.getheader("Mcp-Session-Id")
             status = resp.status
         finally:
@@ -95,7 +105,44 @@ def health():
         return json.loads(resp.read().decode("utf-8"))
 
 
+READY_FILE = os.environ.get("FLAMES_T261_READY_FILE", "/tmp/t261_harness_ready")
+READY_TIMEOUT_S = float(os.environ.get("FLAMES_T261_READY_TIMEOUT", "300"))
+ROUTABLE_TIMEOUT_S = float(os.environ.get("FLAMES_T261_ROUTABLE_TIMEOUT", "60"))
+
+
+def wait_for_ready_file():
+    from pathlib import Path
+
+    deadline = time.time() + READY_TIMEOUT_S
+    path = Path(READY_FILE)
+    while time.time() < deadline:
+        if path.exists():
+            print("T261 ready file present: %s" % READY_FILE)
+            return
+        time.sleep(0.5)
+    print("T261 WARNING: ready file %s never appeared within %.0fs"
+          % (READY_FILE, READY_TIMEOUT_S))
+
+
+def wait_for_routable_device():
+    deadline = time.time() + ROUTABLE_TIMEOUT_S
+    last = None
+    while time.time() < deadline:
+        try:
+            body = health()
+            last = body
+            if body.get("devices_routable") == 1:
+                return
+        except Exception as exc:  # noqa: BLE001 - retry until deadline
+            last = str(exc)
+        time.sleep(0.5)
+    print("T261 WARNING: no routable device within %.0fs; last health=%r"
+          % (ROUTABLE_TIMEOUT_S, last))
+
+
 def main():
+    wait_for_ready_file()
+    wait_for_routable_device()
     body = health()
     print("BRIDGE devices_connected=%s devices_routable=%s tools_published=%s"
           % (body.get("devices_connected"), body.get("devices_routable"),
