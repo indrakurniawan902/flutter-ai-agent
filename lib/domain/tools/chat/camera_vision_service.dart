@@ -5,6 +5,13 @@ import 'package:flutter_ai_agent/common/failure.dart';
 /// Image source selection for camera_take_photo.
 enum CameraSource { camera, gallery }
 
+/// Inner capture window for [CameraVisionServiceBase.takePhoto].
+/// The registry's outer bound for `camera_take_photo`
+/// ([ToolRegistry.longWindowToolTimeout], 25s) must stay strictly greater, and
+/// the whole call must stay under the device bridge's 30s call budget, so a
+/// slow capture surfaces as [CameraTimeoutFailure] instead of a registry timeout.
+const Duration kCameraCaptureTimeout = Duration(seconds: 20);
+
 /// Abstraction for camera / gallery image capture returning base64.
 ///
 /// Tools:

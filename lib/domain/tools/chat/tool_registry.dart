@@ -410,6 +410,9 @@ class ToolRegistry {
           'required': ['source'],
         },
         securityTier: SecurityTier.tier2Permission,
+        // Capture may legitimately run up to kCameraCaptureTimeout.
+        timeout: ToolRegistry.longWindowToolTimeout,
+        innerWindow: kCameraCaptureTimeout,
         execute: (args) => service.takePhoto(
           source: args['source']?.toString() == 'gallery'
               ? CameraSource.gallery
@@ -1026,6 +1029,9 @@ class ToolRegistry {
           'required': ['text'],
         },
         securityTier: SecurityTier.tier1Auto,
+        // Piper playback may legitimately run up to kPiperPlaybackTimeout.
+        timeout: ToolRegistry.longWindowToolTimeout,
+        innerWindow: kPiperPlaybackTimeout,
         execute: (args) async {
           final text = args['text'] as String?;
           if (text == null || text.trim().isEmpty) {
