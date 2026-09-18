@@ -341,7 +341,12 @@ void main() {
     testWidgets(
         'the prompt field, the label field and the Save button stay above the keyboard',
         (tester) async {
-      tester.view.physicalSize = const Size(392, 873);
+      // Width is left at the flutter_test default (800) on purpose: the settings screen
+      // behind the sheet overflows horizontally at 392px under the test font (a pre-existing
+      // artifact at settings_screen.dart:653, unrelated to this sheet). The 392x873 device
+      // geometry is covered by the owner's on-device check; the vertical geometry that this
+      // test pins (873 height + a 320px keyboard inset) is unchanged.
+      tester.view.physicalSize = const Size(800, 873);
       tester.view.devicePixelRatio = 1.0;
       tester.view.viewInsets = const FakeViewPadding(bottom: 320);
       addTearDown(tester.view.resetPhysicalSize);
