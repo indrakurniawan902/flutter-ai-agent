@@ -461,6 +461,111 @@ void main() {
     });
   });
 
+  group('geofence action validation', () {
+    test('geofenceActionNames mirrors GeofenceAction.values', () {
+      expect(
+        geofenceActionNames,
+        equals(GeofenceAction.values.map((a) => a.name).toList()),
+      );
+    });
+
+    test('geofenceActionTryParse accepts canonical names', () {
+      expect(geofenceActionTryParse('none'), GeofenceAction.none);
+      expect(geofenceActionTryParse('notify'), GeofenceAction.notify);
+      expect(geofenceActionTryParse('runPrompt'), GeofenceAction.runPrompt);
+      expect(geofenceActionTryParse('openUrl'), GeofenceAction.openUrl);
+    });
+
+    test('geofenceActionTryParse trims and ignores case', () {
+      expect(geofenceActionTryParse('  Notify  '), GeofenceAction.notify);
+      expect(geofenceActionTryParse('RUNPROMPT'), GeofenceAction.runPrompt);
+      expect(geofenceActionTryParse('openurl'), GeofenceAction.openUrl);
+      expect(geofenceActionTryParse('NONE'), GeofenceAction.none);
+    });
+
+    test('geofenceActionTryParse rejects aliases and blanks', () {
+      expect(geofenceActionTryParse('speak'), isNull);
+      expect(geofenceActionTryParse('run_prompt'), isNull);
+      expect(geofenceActionTryParse('url'), isNull);
+      expect(geofenceActionTryParse('prompt'), isNull);
+      expect(geofenceActionTryParse(''), isNull);
+      expect(geofenceActionTryParse('   '), isNull);
+      expect(geofenceActionTryParse(null), isNull);
+    });
+
+    test('geofenceActionBindingError allows payload-free actions', () {
+      expect(
+        geofenceActionBindingError(rawAction: 'none', actionPayload: ''),
+        isNull,
+      );
+      expect(
+        geofenceActionBindingError(rawAction: 'notify', actionPayload: ''),
+        isNull,
+      );
+      expect(
+        geofenceActionBindingError(rawAction: null, actionPayload: ''),
+        isNull,
+      );
+      expect(
+        geofenceActionBindingError(rawAction: '   ', actionPayload: ''),
+        isNull,
+      );
+      expect(
+        geofenceActionBindingError(rawAction: 'notify', actionPayload: 'x'),
+        isNull,
+      );
+    });
+
+    test('geofenceActionBindingError allows payload-bearing actions', () {
+      expect(
+        geofenceActionBindingError(
+          rawAction: 'runPrompt',
+          actionPayload: 'Start focus mode',
+        ),
+        isNull,
+      );
+      expect(
+        geofenceActionBindingError(
+          rawAction: 'openUrl',
+          actionPayload: 'https://example.com',
+        ),
+        isNull,
+      );
+    });
+
+    test('geofenceActionBindingError names offending value and allowed set', () {
+      final message = geofenceActionBindingError(
+        rawAction: 'speak',
+        actionPayload: '',
+      );
+      expect(message, isNotNull);
+      expect(message, contains('speak'));
+      for (final name in geofenceActionNames) {
+        expect(message, contains(name));
+      }
+    });
+
+    test('geofenceActionBindingError requires payload for runPrompt', () {
+      final message = geofenceActionBindingError(
+        rawAction: 'runPrompt',
+        actionPayload: '   ',
+      );
+      expect(message, isNotNull);
+      expect(message, contains('runPrompt'));
+      expect(message, contains('actionPayload'));
+    });
+
+    test('geofenceActionBindingError requires payload for openUrl', () {
+      final message = geofenceActionBindingError(
+        rawAction: 'openUrl',
+        actionPayload: '',
+      );
+      expect(message, isNotNull);
+      expect(message, contains('openUrl'));
+      expect(message, contains('actionPayload'));
+    });
+  });
+
   group('AmbientEvent', () {
     test('supports value equality', () {
       final a = AmbientEvent(

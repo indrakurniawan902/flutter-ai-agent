@@ -812,7 +812,7 @@ class ToolRegistry {
       RegisteredTool(
         name: 'register_geofence',
         description: 'Registers a geofence region.',
-        parameters: const {
+        parameters: {
           'type': 'object',
           'properties': {
             'id': {'type': 'string', 'description': 'Geofence id'},
@@ -824,8 +824,9 @@ class ToolRegistry {
             },
             'action': {
               'type': 'string',
+              'enum': geofenceActionNames,
               'description':
-                  'Action on crossing: none | notify | runPrompt | openUrl',
+                  'Action on crossing: ${geofenceActionNames.join(' | ')}',
             },
             'actionPayload': {
               'type': 'string',
@@ -840,16 +841,26 @@ class ToolRegistry {
         },
         securityTier: SecurityTier.tier1Auto,
         execute: (args) async {
-          final region = GeofenceRegion.fromJson({
-            'id': args['id']?.toString() ?? '',
-            'latitude': (args['latitude'] as num?)?.toDouble() ?? 0.0,
-            'longitude': (args['longitude'] as num?)?.toDouble() ?? 0.0,
-            'radiusMeters':
-                (args['radiusMeters'] as num?)?.toDouble() ?? 100.0,
-            'action': args['action'],
-            'actionPayload': args['actionPayload'],
-            'actionOn': args['actionOn'],
-          });
+          final rawAction = args['action'];
+          final payload = args['actionPayload']?.toString() ?? '';
+          final bindingError = geofenceActionBindingError(
+            rawAction: rawAction,
+            actionPayload: payload,
+          );
+          if (bindingError != null) {
+            return Left<Failure, String>(ValidationFailure(bindingError));
+          }
+          final action =
+              geofenceActionTryParse(rawAction) ?? GeofenceAction.none;
+          final region = GeofenceRegion(
+            id: args['id']?.toString() ?? '',
+            latitude: (args['latitude'] as num?)?.toDouble() ?? 0.0,
+            longitude: (args['longitude'] as num?)?.toDouble() ?? 0.0,
+            radiusMeters: (args['radiusMeters'] as num?)?.toDouble() ?? 100.0,
+            action: action,
+            actionPayload: payload,
+            actionOn: geofenceActionTriggerFromJson(args['actionOn']),
+          );
           service.addGeofence(region);
           return Right<Failure, String>(
             'Geofence registered: ${region.id}',
