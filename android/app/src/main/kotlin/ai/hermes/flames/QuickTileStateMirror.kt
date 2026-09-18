@@ -21,6 +21,9 @@ class QuickTileStateMirror {
     var bound: Boolean = false
         private set
 
+    var hasPendingLocalWrite: Boolean = false
+        private set
+
     private var lastLiveState: Int? = null
 
     fun onBind(liveState: Int?) {
@@ -37,7 +40,12 @@ class QuickTileStateMirror {
         val changed = isActive != active
         isActive = active
         lastLiveState = null
+        hasPendingLocalWrite = true
         return changed
+    }
+
+    fun markSyncedToTile() {
+        hasPendingLocalWrite = false
     }
 
     fun report(): String {
@@ -47,6 +55,7 @@ class QuickTileStateMirror {
 
     private fun reconcile(liveState: Int?) {
         lastLiveState = liveState
+        if (hasPendingLocalWrite) return
         when (liveState) {
             STATE_ACTIVE -> isActive = true
             STATE_INACTIVE -> isActive = false

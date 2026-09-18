@@ -315,7 +315,7 @@ class MainActivity : FlutterActivity() {
                 "setQuickTileState" -> {
                     val active = call.argument<Boolean>("active") ?: false
                     FlamesQuickTile.updateTileState(active)
-                    result.success(true)
+                    result.success(FlamesQuickTile.getTileStateString())
                 }
                 "getPendingAction" -> {
                     result.success(pendingAction)

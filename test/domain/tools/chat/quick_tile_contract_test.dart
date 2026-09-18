@@ -283,5 +283,52 @@ void main() {
       expect(activityKt, contains('"getPendingAction"'));
       expect(activityKt, contains('"clearPendingAction"'));
     });
+
+    test('getTileStateString reports the mirror and never the live tile state', () {
+      if (!ready) return;
+
+      final body = bracedBlock(quickTileKt, 'fun getTileStateString()');
+      expect(body, contains('mirror.report()'));
+      expect(body, isNot(contains('qsTile.state')));
+      expect(body, isNot(contains('Tile.STATE_ACTIVE')));
+      expect(body, isNot(contains('Tile.STATE_INACTIVE')));
+      expect(body, isNot(contains('Tile.STATE_UNAVAILABLE')));
+    });
+
+    test('bind and unbind reconcile through the mirror', () {
+      if (!ready) return;
+
+      final start = bracedBlock(quickTileKt, 'override fun onStartListening()');
+      expect(start, contains('mirror.onBind('));
+
+      final stop = bracedBlock(quickTileKt, 'override fun onStopListening()');
+      expect(stop, contains('mirror.onUnbind('));
+
+      final added = bracedBlock(quickTileKt, 'override fun onTileAdded()');
+      expect(added, contains('mirror.onBind('));
+
+      final removed = bracedBlock(quickTileKt, 'override fun onTileRemoved()');
+      expect(removed, contains('mirror.onUnbind('));
+    });
+
+    test('updateTileState marks the tile push as synced', () {
+      if (!ready) return;
+
+      final body = bracedBlock(
+        quickTileKt,
+        'fun updateTileState(active: Boolean)',
+      );
+      expect(body, contains('mirror.setActive(active)'));
+      expect(body, contains('mirror.markSyncedToTile()'));
+    });
+
+    test('setQuickTileState echoes the state it actually set', () {
+      if (!ready) return;
+
+      final body = bracedBlock(activityKt, '"setQuickTileState" ->');
+      expect(body, contains('FlamesQuickTile.updateTileState(active)'));
+      expect(body, contains('FlamesQuickTile.getTileStateString()'));
+      expect(body, isNot(contains('result.success(true)')));
+    });
   });
 }

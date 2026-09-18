@@ -187,6 +187,57 @@ class QuickTileStateMirrorTest {
     }
 
     @Test
+    fun pendingLocalWrite_survivesBindWithStaleLiveState() {
+        val mirror = QuickTileStateMirror()
+        assertTrue(mirror.setActive(true))
+        assertTrue(mirror.hasPendingLocalWrite)
+        mirror.onBind(QuickTileStateMirror.STATE_INACTIVE)
+        assertTrue(mirror.isActive)
+        assertEquals("active", mirror.report())
+    }
+
+    @Test
+    fun onBind_adoptsLiveState_whenNoPendingWrite() {
+        val mirror = QuickTileStateMirror()
+        mirror.setActive(false)
+        mirror.markSyncedToTile()
+        mirror.onBind(QuickTileStateMirror.STATE_ACTIVE)
+        assertTrue(mirror.isActive)
+        assertEquals("active", mirror.report())
+    }
+
+    @Test
+    fun markSyncedToTile_clearsPending_andBindAdoptsAgain() {
+        val mirror = QuickTileStateMirror()
+        assertTrue(mirror.setActive(true))
+        assertTrue(mirror.hasPendingLocalWrite)
+        mirror.markSyncedToTile()
+        assertFalse(mirror.hasPendingLocalWrite)
+        mirror.onBind(QuickTileStateMirror.STATE_INACTIVE)
+        assertFalse(mirror.isActive)
+        assertEquals("inactive", mirror.report())
+    }
+
+    @Test
+    fun onUnbind_withPendingWrite_doesNotRevertLocalValue() {
+        val mirror = QuickTileStateMirror()
+        assertTrue(mirror.setActive(true))
+        mirror.onUnbind(QuickTileStateMirror.STATE_INACTIVE)
+        assertFalse(mirror.bound)
+        assertTrue(mirror.isActive)
+        assertEquals("active", mirror.report())
+    }
+
+    @Test
+    fun markSyncedToTile_isNoOpForIsActive() {
+        val mirror = QuickTileStateMirror()
+        mirror.setActive(true)
+        mirror.markSyncedToTile()
+        assertTrue(mirror.isActive)
+        assertEquals("active", mirror.report())
+    }
+
+    @Test
     fun legacyPort_reproducesReportDisagreeingWithLastWrite() {
         val legacy = LegacyTileStateMirror()
         legacy.onBind(LegacyTileStateMirror.STATE_INACTIVE)

@@ -11,38 +11,38 @@ class FlamesQuickTile : TileService() {
         const val ACTION_QUICK_TILE_TRIGGER = "ai.hermes.flames.action.QUICK_TILE_TRIGGER"
         const val EXTRA_ACTION = "extra_flames_action"
 
-        private var _isTileActive: Boolean = false
+        private val mirror = QuickTileStateMirror()
+
         var isTileActive: Boolean
-            get() = _isTileActive
+            get() = mirror.isActive
             set(value) {
-                _isTileActive = value
+                mirror.setActive(value)
             }
 
         private var currentInstance: FlamesQuickTile? = null
 
         fun updateTileState(active: Boolean) {
-            _isTileActive = active
-            currentInstance?.let { service ->
-                val tile = service.qsTile ?: return@let
-                tile.state = if (active) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    tile.subtitle = if (active) "Listening" else "Tap for one voice turn"
-                }
-                tile.updateTile()
+            mirror.setActive(active)
+            val service = currentInstance ?: return
+            val tile = service.qsTile ?: return
+            tile.state = if (active) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                tile.subtitle = if (active) "Listening" else "Tap for one voice turn"
             }
+            tile.updateTile()
+            mirror.markSyncedToTile()
         }
 
         fun getTileStateString(): String {
-            return if (currentInstance == null) {
-                if (_isTileActive) "active" else "inactive"
-            } else {
-                val tile = currentInstance?.qsTile
-                when (tile?.state) {
-                    Tile.STATE_ACTIVE -> "active"
-                    Tile.STATE_INACTIVE -> "inactive"
-                    Tile.STATE_UNAVAILABLE -> "unavailable"
-                    else -> if (_isTileActive) "active" else "inactive"
-                }
+            return mirror.report()
+        }
+
+        private fun liveStateOf(service: FlamesQuickTile): Int? {
+            return when (service.qsTile?.state) {
+                Tile.STATE_ACTIVE -> QuickTileStateMirror.STATE_ACTIVE
+                Tile.STATE_INACTIVE -> QuickTileStateMirror.STATE_INACTIVE
+                Tile.STATE_UNAVAILABLE -> QuickTileStateMirror.STATE_UNAVAILABLE
+                else -> null
             }
         }
     }
@@ -50,22 +50,25 @@ class FlamesQuickTile : TileService() {
     override fun onTileAdded() {
         super.onTileAdded()
         currentInstance = this
+        mirror.onBind(liveStateOf(this))
         syncTileAppearance()
     }
 
     override fun onStartListening() {
         super.onStartListening()
         currentInstance = this
+        mirror.onBind(liveStateOf(this))
         syncTileAppearance()
     }
 
     override fun onStopListening() {
         super.onStopListening()
+        mirror.onUnbind(liveStateOf(this))
+        currentInstance = null
     }
 
     override fun onTileRemoved() {
         super.onTileRemoved()
-        currentInstance = null
 
         if (FlamesBackgroundService.isServiceRunning || isTileActive) {
             val intent = Intent(this, FlamesBackgroundService::class.java).apply {
@@ -81,7 +84,9 @@ class FlamesQuickTile : TileService() {
             }
         }
 
-        _isTileActive = false
+        mirror.onUnbind(liveStateOf(this))
+        currentInstance = null
+        mirror.setActive(false)
     }
 
     override fun onClick() {
@@ -104,12 +109,13 @@ class FlamesQuickTile : TileService() {
 
     private fun syncTileAppearance() {
         val tile = qsTile ?: return
-        val isActive = _isTileActive
+        val isActive = mirror.isActive
         tile.state = if (isActive) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
         tile.label = "Flames Agent"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             tile.subtitle = if (isActive) "Listening" else "Tap for one voice turn"
         }
         tile.updateTile()
+        mirror.markSyncedToTile()
     }
 }
