@@ -642,6 +642,33 @@ void main() {
         expect(region.actionPayload, payloads[name]);
       }
     });
+
+    test('register_geofence publishes the allowed action set in its schema',
+        () {
+      // Arrange
+      registry.registerAmbientTriggerTools(mockAmbient);
+
+      // Act
+      final parameters = registry.getTool('register_geofence')?.parameters;
+      final properties = parameters?['properties'] as Map<String, dynamic>?;
+      final action = properties?['action'] as Map<String, dynamic>?;
+
+      // Assert
+      expect(action?['enum'], geofenceActionNames);
+      expect(action?['type'], 'string');
+      expect(
+        action?['description'],
+        contains(geofenceActionNames.join(' | ')),
+      );
+
+      final definition = registry
+          .getOpenAiToolDefinitions()
+          .firstWhere((entry) => entry['function']['name'] == 'register_geofence');
+      expect(
+        definition['function']['parameters']['properties']['action']['enum'],
+        geofenceActionNames,
+      );
+    });
   });
 
   group('registerVoiceTools', () {
