@@ -52,6 +52,9 @@ void main() {
     double longitude = -45.25,
     double radiusMeters = 100,
     bool isEnabled = true,
+    GeofenceAction action = GeofenceAction.none,
+    String actionPayload = '',
+    GeofenceActionTrigger actionOn = GeofenceActionTrigger.both,
   }) {
     return GeofenceRegion(
       id: id,
@@ -60,6 +63,9 @@ void main() {
       longitude: longitude,
       radiusMeters: radiusMeters,
       isEnabled: isEnabled,
+      action: action,
+      actionPayload: actionPayload,
+      actionOn: actionOn,
     );
   }
 
@@ -239,6 +245,38 @@ void main() {
       expect(saved.single.latitude, 12.5);
       expect(saved.single.longitude, -45.25);
     });
+
+    test('rejects an update that strips the payload of a payload-taking action',
+        () async {
+      // Arrange
+      final original = region(
+        action: GeofenceAction.runPrompt,
+        actionPayload: 'Start focus mode',
+      );
+      final cubit = await seedCubit([original]);
+
+      // Act
+      final result = await cubit.updateGeofence(
+        original.id,
+        label: 'Home',
+        latitude: original.latitude,
+        longitude: original.longitude,
+        radiusMeters: original.radiusMeters,
+        action: GeofenceAction.runPrompt,
+        actionPayload: '',
+      );
+
+      // Assert
+      expect(result, isFalse);
+      expect(
+        cubit.state.error,
+        geofenceActionBindingError(
+          rawAction: GeofenceAction.runPrompt.name,
+          actionPayload: '',
+        ),
+      );
+      verifyNever(() => mockStorage.saveGeofences(any()));
+    });
   });
 
   group('GeofenceManagementCubit.addGeofence', () {
@@ -361,6 +399,118 @@ void main() {
       expect(id, isNull);
       verifyNever(() => mockAmbient.addGeofence(any()));
       expect(cubit.state.regions, isEmpty);
+    });
+
+    test('rejects runPrompt with an empty payload without persisting',
+        () async {
+      // Arrange
+      final cubit = await seedCubit(const []);
+
+      // Act
+      final id = await cubit.addGeofence(
+        label: 'Work',
+        latitude: 1.0,
+        longitude: 2.0,
+        radiusMeters: 100.0,
+        action: GeofenceAction.runPrompt,
+      );
+
+      // Assert
+      expect(id, isNull);
+      expect(
+        cubit.state.error,
+        geofenceActionBindingError(
+          rawAction: GeofenceAction.runPrompt.name,
+          actionPayload: '',
+        ),
+      );
+      expect(cubit.state.regions, isEmpty);
+      verifyNever(() => mockStorage.saveGeofences(any()));
+      verifyNever(() => mockAmbient.addGeofence(any()));
+    });
+
+    test('rejects openUrl with an empty payload without persisting', () async {
+      // Arrange
+      final cubit = await seedCubit(const []);
+
+      // Act
+      final id = await cubit.addGeofence(
+        label: 'Work',
+        latitude: 1.0,
+        longitude: 2.0,
+        radiusMeters: 100.0,
+        action: GeofenceAction.openUrl,
+      );
+
+      // Assert
+      expect(id, isNull);
+      expect(
+        cubit.state.error,
+        geofenceActionBindingError(
+          rawAction: GeofenceAction.openUrl.name,
+          actionPayload: '',
+        ),
+      );
+      expect(cubit.state.regions, isEmpty);
+      verifyNever(() => mockStorage.saveGeofences(any()));
+      verifyNever(() => mockAmbient.addGeofence(any()));
+    });
+
+    test('rejects a whitespace-only payload for runPrompt', () async {
+      // Arrange
+      final cubit = await seedCubit(const []);
+
+      // Act
+      final id = await cubit.addGeofence(
+        label: 'Work',
+        latitude: 1.0,
+        longitude: 2.0,
+        radiusMeters: 100.0,
+        action: GeofenceAction.runPrompt,
+        actionPayload: '   ',
+      );
+
+      // Assert
+      expect(id, isNull);
+      expect(
+        cubit.state.error,
+        geofenceActionBindingError(
+          rawAction: GeofenceAction.runPrompt.name,
+          actionPayload: '   ',
+        ),
+      );
+      expect(cubit.state.regions, isEmpty);
+      verifyNever(() => mockStorage.saveGeofences(any()));
+      verifyNever(() => mockAmbient.addGeofence(any()));
+    });
+
+    test('accepts runPrompt when a payload is present', () async {
+      // Arrange
+      final cubit = await seedCubit(const []);
+
+      // Act
+      final id = await cubit.addGeofence(
+        label: 'Work',
+        latitude: 1.0,
+        longitude: 2.0,
+        radiusMeters: 100.0,
+        action: GeofenceAction.runPrompt,
+        actionPayload: 'Start focus mode',
+      );
+
+      // Assert
+      expect(id, isNotNull);
+      final saved = capturedSaved();
+      expect(saved, hasLength(1));
+      expect(saved.first.action, GeofenceAction.runPrompt);
+      expect(saved.first.actionPayload, 'Start focus mode');
+    });
+
+    test('geofenceActionNames matches the values the UI dropdown offers', () {
+      expect(
+        geofenceActionNames,
+        GeofenceAction.values.map((a) => a.name).toList(),
+      );
     });
   });
 }

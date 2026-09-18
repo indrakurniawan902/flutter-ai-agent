@@ -508,7 +508,13 @@ class _AddGeofenceFormState extends State<_AddGeofenceForm> {
   String? _validateActionPayload(String? value) {
     if (!_needsPayload) return null;
     final text = value?.trim() ?? '';
-    if (text.isEmpty) {
+    // The reject decision comes from the shared domain binding rule; only the
+    // field copy below is local.
+    final bindingError = geofenceActionBindingError(
+      rawAction: _action.name,
+      actionPayload: text,
+    );
+    if (bindingError != null) {
       return _action == GeofenceAction.openUrl ? 'URL required' : 'Prompt required';
     }
     if (_action == GeofenceAction.openUrl &&

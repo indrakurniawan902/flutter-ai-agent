@@ -58,7 +58,10 @@ class GeofenceManagementCubit extends Cubit<GeofenceManagementState> {
   /// Adds a new [GeofenceRegion], persists it, and returns its id.
   ///
   /// Invalid input emits an error state and returns `null` without persisting
-  /// or touching the live engine.
+  /// or touching the live engine. The action/payload pair is held to the same
+  /// binding rule as the register_geofence tool via
+  /// [geofenceActionBindingError], so a region can never be stored bound to
+  /// runPrompt/openUrl without a payload.
   ///
   /// [action], [actionPayload] and [actionOn] bind what crossing the region
   /// does; they default to no action.
@@ -79,6 +82,11 @@ class GeofenceManagementCubit extends Cubit<GeofenceManagementState> {
     );
     if (validationError != null) {
       emit(state.copyWith(error: validationError));
+      return null;
+    }
+    final bindingError = _validateActionBinding(action, actionPayload);
+    if (bindingError != null) {
+      emit(state.copyWith(error: bindingError));
       return null;
     }
     final id = _generateId();
@@ -103,7 +111,9 @@ class GeofenceManagementCubit extends Cubit<GeofenceManagementState> {
   /// Updates the region with [id] in place, preserving its id and enabled flag.
   ///
   /// Returns `false` without persisting or touching the live engine when the
-  /// region does not exist, the input is invalid, or persistence fails.
+  /// region does not exist, the input is invalid, or persistence fails. The
+  /// resulting action/payload pair must satisfy [geofenceActionBindingError],
+  /// so an update can never strip the payload a runPrompt/openUrl action needs.
   Future<bool> updateGeofence(
     String id, {
     required String label,
@@ -129,7 +139,16 @@ class GeofenceManagementCubit extends Cubit<GeofenceManagementState> {
       emit(state.copyWith(error: validationError));
       return false;
     }
-    final updatedRegion = state.regions[index].copyWith(
+    final existing = state.regions[index];
+    final bindingError = _validateActionBinding(
+      action ?? existing.action,
+      actionPayload ?? existing.actionPayload,
+    );
+    if (bindingError != null) {
+      emit(state.copyWith(error: bindingError));
+      return false;
+    }
+    final updatedRegion = existing.copyWith(
       name: label,
       latitude: latitude,
       longitude: longitude,
@@ -204,6 +223,20 @@ class GeofenceManagementCubit extends Cubit<GeofenceManagementState> {
       return 'Radius must be greater than 0 and at most 10000 meters';
     }
     return null;
+  }
+
+  /// Enforces the shared action/payload binding rule from the domain entity,
+  /// so this cubit and the register_geofence tool can never disagree.
+  ///
+  /// Returns the helper's message verbatim, or `null` when the pair is valid.
+  String? _validateActionBinding(
+    GeofenceAction action,
+    String actionPayload,
+  ) {
+    return geofenceActionBindingError(
+      rawAction: action.name,
+      actionPayload: actionPayload,
+    );
   }
 
   Future<bool> _persist(List<GeofenceRegion> regions) async {
