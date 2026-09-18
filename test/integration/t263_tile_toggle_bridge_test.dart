@@ -19,9 +19,11 @@
 //
 // Skipped automatically unless FLAMES_T263_URL and FLAMES_T263_TOKEN are set.
 //
-// Run against the local test bridge:
+// Run against the local test bridge (the token must be issued for the SAME id as
+// FLAMES_T263_CLIENT_ID, because the bridge binds a token to its device id):
 //   FLAMES_T263_URL=ws://127.0.0.1:8898/device/ws \
-//   FLAMES_T263_TOKEN=<issued for flutter_client> \
+//   FLAMES_T263_TOKEN=<issued for t263_harness> \
+//   FLAMES_T263_CLIENT_ID=t263_harness \
 //   FLAMES_T263_SECONDS=150 \
 //   flutter test test/integration/t263_tile_toggle_bridge_test.dart --tags manual
 @Tags(['manual', 'integration'])
@@ -115,6 +117,12 @@ void main() {
       '/tmp/t263_harness_ready';
   final logFile =
       Platform.environment['FLAMES_T263_LOG'] ?? '/tmp/t263_harness.log';
+  // A distinct client id by default: the bridge keys sessions by device_id
+  // and binds a token to it, so reusing the phone's 'flutter_client' would
+  // evict the live device's session for the duration of the run. Issue a
+  // token for whatever id is set here (FLAMES_T263_CLIENT_ID).
+  final clientId =
+      Platform.environment['FLAMES_T263_CLIENT_ID'] ?? 't263_harness';
   final enabled = url != null && token != null && token.isNotEmpty;
   final wsUrl = url ?? '';
   final deviceToken = token ?? '';
@@ -149,7 +157,7 @@ void main() {
       );
 
       final client = GatewayClient(
-        clientId: 'flutter_client',
+        clientId: clientId,
         toolManifestProvider: registry.getOpenAiToolDefinitions,
       );
       final receiver = GatewayDeviceRpcReceiver(
@@ -197,7 +205,7 @@ void main() {
         },
       );
 
-      logLine('t263 connecting url=$wsUrl');
+      logLine('t263 connecting url=$wsUrl clientId=$clientId');
       await client.connect(wsUrl, token: deviceToken);
 
       final authDeadline = DateTime.now().add(const Duration(seconds: 15));
