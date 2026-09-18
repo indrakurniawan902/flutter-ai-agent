@@ -10,8 +10,10 @@ import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.WeightRecord
+import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import java.time.Duration
 import java.time.Instant
@@ -20,9 +22,10 @@ object FlamesHealthConnect {
     const val PROVIDER_PACKAGE = "com.google.android.apps.healthdata"
 
     // On Android 14 a Health Connect call can suspend forever; every native
-    // read must be bounded so the existing catch blocks return a structured
-    // null/empty result instead of hanging the Dart caller.
-    private const val READ_TIMEOUT_MS = 8_000L
+    // read must be bounded so the catch blocks return a structured error
+    // instead of hanging the Dart caller. Timeouts must nest strictly:
+    // native 4s < Dart wrapper 5s < Dart service 6s < registry 10s.
+    private const val READ_TIMEOUT_MS = 4_000L
 
     val readPermissions: Set<String> = setOf(
         HealthPermission.getReadPermission(StepsRecord::class),
@@ -79,18 +82,22 @@ object FlamesHealthConnect {
         metric: String,
         startTimeMs: Long,
         endTimeMs: Long,
-    ): Map<String, Any>? {
-        if (permissionFor(metric) == null) return null
+    ): Map<String, Any> {
         val start = Instant.ofEpochMilli(startTimeMs)
         val end = Instant.ofEpochMilli(endTimeMs)
+        val payload: MutableMap<String, Any> = mutableMapOf(
+            "metric" to metric,
+            "start" to start.toString(),
+            "end" to end.toString(),
+        )
+        if (permissionFor(metric) == null) {
+            payload["error_code"] = "health_unsupported_metric"
+            payload["error_message"] = "Unsupported metric: $metric"
+            return payload
+        }
         return try {
             val client = HealthConnectClient.getOrCreate(context)
             val filter = TimeRangeFilter.between(start, end)
-            val payload: MutableMap<String, Any> = mutableMapOf(
-                "metric" to metric,
-                "start" to start.toString(),
-                "end" to end.toString(),
-            )
             when (metric) {
                 "steps" -> readSteps(client, filter, payload)
                 "heart_rate" -> readHeartRate(client, filter, payload)
@@ -100,9 +107,46 @@ object FlamesHealthConnect {
                 "weight" -> readWeight(client, filter, payload)
             }
             payload
-        } catch (_: Throwable) {
-            null
+        } catch (e: TimeoutCancellationException) {
+            errorPayload(metric, start, end, e)
+        } catch (e: Throwable) {
+            errorPayload(metric, start, end, e)
         }
+    }
+
+    private fun errorPayload(
+        metric: String,
+        start: Instant,
+        end: Instant,
+        e: Throwable,
+    ): Map<String, Any> = mapOf(
+        "metric" to metric,
+        "start" to start.toString(),
+        "end" to end.toString(),
+        "error_code" to errorCode(e),
+        "error_message" to errorMessage(e),
+    )
+
+    private fun errorCode(e: Throwable): String = when (e) {
+        is TimeoutCancellationException -> "health_timeout"
+        else -> "health_platform_error"
+    }
+
+    private fun errorMessage(e: Throwable): String =
+        "${e.javaClass.simpleName}: ${e.message ?: "no message"}"
+
+    private suspend fun attachRecords(
+        payload: MutableMap<String, Any>,
+        loader: suspend () -> List<Map<String, Any>>,
+    ): List<Map<String, Any>>? = try {
+        val records = loader()
+        payload["records"] = records
+        records
+    } catch (e: Throwable) {
+        payload["records"] = emptyList<Map<String, Any>>()
+        payload["records_unavailable"] = true
+        payload["records_error"] = errorMessage(e)
+        null
     }
 
     private suspend fun readSteps(
@@ -110,25 +154,33 @@ object FlamesHealthConnect {
         filter: TimeRangeFilter,
         payload: MutableMap<String, Any>,
     ) {
-        val response = withTimeout(READ_TIMEOUT_MS) {
-            client.readRecords(
-                ReadRecordsRequest(recordType = StepsRecord::class, timeRangeFilter = filter)
-            )
+        val result = withTimeout(READ_TIMEOUT_MS) {
+            client.aggregate(AggregateRequest(setOf(StepsRecord.COUNT_TOTAL), filter))
         }
-        val records = mutableListOf<Map<String, Any>>()
-        var total = 0L
-        for (record in response.records) {
-            records.add(
-                mapOf<String, Any>(
-                    "start" to record.startTime.toString(),
-                    "end" to record.endTime.toString(),
-                    "count" to record.count,
-                )
-            )
-            total += record.count
-        }
-        payload["records"] = records
+        val total = result.get(StepsRecord.COUNT_TOTAL) ?: 0L
         payload["summary"] = mapOf<String, Any>("total" to total)
+        attachRecords(payload) {
+            val response = withTimeout(READ_TIMEOUT_MS) {
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = StepsRecord::class,
+                        timeRangeFilter = filter,
+                        pageSize = 200,
+                    )
+                )
+            }
+            val records = mutableListOf<Map<String, Any>>()
+            for (record in response.records) {
+                records.add(
+                    mapOf<String, Any>(
+                        "start" to record.startTime.toString(),
+                        "end" to record.endTime.toString(),
+                        "count" to record.count,
+                    )
+                )
+            }
+            records
+        }
     }
 
     private suspend fun readHeartRate(
@@ -136,39 +188,48 @@ object FlamesHealthConnect {
         filter: TimeRangeFilter,
         payload: MutableMap<String, Any>,
     ) {
-        val response = withTimeout(READ_TIMEOUT_MS) {
-            client.readRecords(
-                ReadRecordsRequest(recordType = HeartRateRecord::class, timeRangeFilter = filter)
+        val result = withTimeout(READ_TIMEOUT_MS) {
+            client.aggregate(
+                AggregateRequest(
+                    setOf(
+                        HeartRateRecord.BPM_MIN,
+                        HeartRateRecord.BPM_MAX,
+                        HeartRateRecord.BPM_AVG,
+                        HeartRateRecord.MEASUREMENTS_COUNT,
+                    ),
+                    filter,
+                )
             )
         }
-        val records = mutableListOf<Map<String, Any>>()
-        var min = Long.MAX_VALUE
-        var max = Long.MIN_VALUE
-        var sum = 0L
-        var count = 0
-        for (record in response.records) {
-            for (sample in record.samples) {
-                val bpm = sample.beatsPerMinute
-                records.add(
-                    mapOf<String, Any>(
-                        "time" to sample.time.toString(),
-                        "bpm" to bpm,
+        payload["summary"] = mapOf<String, Any>(
+            "min" to (result.get(HeartRateRecord.BPM_MIN) ?: 0L),
+            "max" to (result.get(HeartRateRecord.BPM_MAX) ?: 0L),
+            "avg" to (result.get(HeartRateRecord.BPM_AVG) ?: 0L).toDouble(),
+            "samples" to (result.get(HeartRateRecord.MEASUREMENTS_COUNT) ?: 0L),
+        )
+        attachRecords(payload) {
+            val response = withTimeout(READ_TIMEOUT_MS) {
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = HeartRateRecord::class,
+                        timeRangeFilter = filter,
+                        pageSize = 200,
                     )
                 )
-                if (bpm < min) min = bpm
-                if (bpm > max) max = bpm
-                sum += bpm
-                count++
             }
+            val records = mutableListOf<Map<String, Any>>()
+            for (record in response.records) {
+                for (sample in record.samples) {
+                    records.add(
+                        mapOf<String, Any>(
+                            "time" to sample.time.toString(),
+                            "bpm" to sample.beatsPerMinute,
+                        )
+                    )
+                }
+            }
+            records
         }
-        val avg = if (count > 0) sum.toDouble() / count else 0.0
-        payload["records"] = records
-        payload["summary"] = mapOf<String, Any>(
-            "min" to (if (count > 0) min else 0L),
-            "max" to (if (count > 0) max else 0L),
-            "avg" to avg,
-            "samples" to count,
-        )
     }
 
     private suspend fun readCalories(
@@ -176,26 +237,33 @@ object FlamesHealthConnect {
         filter: TimeRangeFilter,
         payload: MutableMap<String, Any>,
     ) {
-        val response = withTimeout(READ_TIMEOUT_MS) {
-            client.readRecords(
-                ReadRecordsRequest(recordType = TotalCaloriesBurnedRecord::class, timeRangeFilter = filter)
-            )
+        val result = withTimeout(READ_TIMEOUT_MS) {
+            client.aggregate(AggregateRequest(setOf(TotalCaloriesBurnedRecord.ENERGY_TOTAL), filter))
         }
-        val records = mutableListOf<Map<String, Any>>()
-        var total = 0.0
-        for (record in response.records) {
-            val kcal = record.energy.inKilocalories
-            records.add(
-                mapOf<String, Any>(
-                    "start" to record.startTime.toString(),
-                    "end" to record.endTime.toString(),
-                    "kcal" to kcal,
+        val totalKcal = result.get(TotalCaloriesBurnedRecord.ENERGY_TOTAL)?.inKilocalories ?: 0.0
+        payload["summary"] = mapOf<String, Any>("total_kcal" to totalKcal)
+        attachRecords(payload) {
+            val response = withTimeout(READ_TIMEOUT_MS) {
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = TotalCaloriesBurnedRecord::class,
+                        timeRangeFilter = filter,
+                        pageSize = 200,
+                    )
                 )
-            )
-            total += kcal
+            }
+            val records = mutableListOf<Map<String, Any>>()
+            for (record in response.records) {
+                records.add(
+                    mapOf<String, Any>(
+                        "start" to record.startTime.toString(),
+                        "end" to record.endTime.toString(),
+                        "kcal" to record.energy.inKilocalories,
+                    )
+                )
+            }
+            records
         }
-        payload["records"] = records
-        payload["summary"] = mapOf<String, Any>("total_kcal" to total)
     }
 
     private suspend fun readSleep(
@@ -203,38 +271,46 @@ object FlamesHealthConnect {
         filter: TimeRangeFilter,
         payload: MutableMap<String, Any>,
     ) {
-        val response = withTimeout(READ_TIMEOUT_MS) {
-            client.readRecords(
-                ReadRecordsRequest(recordType = SleepSessionRecord::class, timeRangeFilter = filter)
-            )
+        val result = withTimeout(READ_TIMEOUT_MS) {
+            client.aggregate(AggregateRequest(setOf(SleepSessionRecord.SLEEP_DURATION_TOTAL), filter))
         }
-        val records = mutableListOf<Map<String, Any>>()
-        var totalMinutes = 0L
-        for (record in response.records) {
-            val stages = mutableListOf<Map<String, Any>>()
-            for (stage in record.stages) {
-                stages.add(
-                    mapOf<String, Any>(
-                        "stage" to stage.stage.toString(),
-                        "start" to stage.startTime.toString(),
-                        "end" to stage.endTime.toString(),
+        val totalMinutes = result.get(SleepSessionRecord.SLEEP_DURATION_TOTAL)?.toMinutes() ?: 0L
+        val records = attachRecords(payload) {
+            val response = withTimeout(READ_TIMEOUT_MS) {
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = SleepSessionRecord::class,
+                        timeRangeFilter = filter,
+                        pageSize = 200,
                     )
                 )
             }
-            val minutes = Duration.between(record.startTime, record.endTime).toMinutes()
-            records.add(
-                mapOf<String, Any>(
-                    "start" to record.startTime.toString(),
-                    "end" to record.endTime.toString(),
-                    "duration_minutes" to minutes,
-                    "stages" to stages,
+            val list = mutableListOf<Map<String, Any>>()
+            for (record in response.records) {
+                val stages = mutableListOf<Map<String, Any>>()
+                for (stage in record.stages) {
+                    stages.add(
+                        mapOf<String, Any>(
+                            "stage" to stage.stage.toString(),
+                            "start" to stage.startTime.toString(),
+                            "end" to stage.endTime.toString(),
+                        )
+                    )
+                }
+                val minutes = Duration.between(record.startTime, record.endTime).toMinutes()
+                list.add(
+                    mapOf<String, Any>(
+                        "start" to record.startTime.toString(),
+                        "end" to record.endTime.toString(),
+                        "duration_minutes" to minutes,
+                        "stages" to stages,
+                    )
                 )
-            )
-            totalMinutes += minutes
+            }
+            list
         }
-        payload["records"] = records
         payload["summary"] = mapOf<String, Any>(
-            "sessions" to response.records.size,
+            "sessions" to (records?.size?.toLong() ?: 0L),
             "total_minutes" to totalMinutes,
         )
     }
@@ -246,7 +322,11 @@ object FlamesHealthConnect {
     ) {
         val response = withTimeout(READ_TIMEOUT_MS) {
             client.readRecords(
-                ReadRecordsRequest(recordType = OxygenSaturationRecord::class, timeRangeFilter = filter)
+                ReadRecordsRequest(
+                    recordType = OxygenSaturationRecord::class,
+                    timeRangeFilter = filter,
+                    pageSize = 200,
+                )
             )
         }
         val records = mutableListOf<Map<String, Any>>()
@@ -281,28 +361,38 @@ object FlamesHealthConnect {
         filter: TimeRangeFilter,
         payload: MutableMap<String, Any>,
     ) {
-        val response = withTimeout(READ_TIMEOUT_MS) {
-            client.readRecords(
-                ReadRecordsRequest(recordType = WeightRecord::class, timeRangeFilter = filter)
-            )
+        val result = withTimeout(READ_TIMEOUT_MS) {
+            client.aggregate(AggregateRequest(setOf(WeightRecord.WEIGHT_AVG), filter))
         }
-        val records = mutableListOf<Map<String, Any>>()
-        var latestKg = 0.0
-        var latestTime: Instant? = null
-        for (record in response.records) {
-            val kg = record.weight.inKilograms
-            records.add(
-                mapOf<String, Any>(
-                    "time" to record.time.toString(),
-                    "kg" to kg,
+        var latestKg = result.get(WeightRecord.WEIGHT_AVG)?.inKilograms ?: 0.0
+        attachRecords(payload) {
+            val response = withTimeout(READ_TIMEOUT_MS) {
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = WeightRecord::class,
+                        timeRangeFilter = filter,
+                        pageSize = 200,
+                    )
                 )
-            )
-            if (latestTime == null || record.time.isAfter(latestTime)) {
-                latestTime = record.time
-                latestKg = kg
             }
+            val records = mutableListOf<Map<String, Any>>()
+            var latestTime: Instant? = null
+            for (record in response.records) {
+                val kg = record.weight.inKilograms
+                records.add(
+                    mapOf<String, Any>(
+                        "time" to record.time.toString(),
+                        "kg" to kg,
+                    )
+                )
+                val previous = latestTime
+                if (previous == null || record.time.isAfter(previous)) {
+                    latestTime = record.time
+                    latestKg = kg
+                }
+            }
+            records
         }
-        payload["records"] = records
         payload["summary"] = mapOf<String, Any>("latest_kg" to latestKg)
     }
 }
