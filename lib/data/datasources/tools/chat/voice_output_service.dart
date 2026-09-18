@@ -510,6 +510,13 @@ class VoiceOutputService implements VoiceOutputServiceBase {
         _setStatus(VoiceOutputStatus.playing);
         spoke = await piper.speak(text, voice: voice, speed: speed);
       } catch (_) {
+        // The engine abandoned the utterance mid-playback (its own window
+        // expired, or it refused): stop it before the caller re-reads the same
+        // text through the system engine, or the two voices talk over each
+        // other.
+        try {
+          await piper.stop();
+        } catch (_) {}
         _playing = false;
         return false;
       }
@@ -520,6 +527,13 @@ class VoiceOutputService implements VoiceOutputServiceBase {
         return true;
       }
       if (!spoke) {
+        // The engine abandoned the utterance mid-playback (its own window
+        // expired, or it refused): stop it before the caller re-reads the same
+        // text through the system engine, or the two voices talk over each
+        // other.
+        try {
+          await piper.stop();
+        } catch (_) {}
         _playing = false;
         return false;
       }
