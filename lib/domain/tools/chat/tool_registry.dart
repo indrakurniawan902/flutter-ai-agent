@@ -1208,10 +1208,16 @@ class ToolRegistry {
               final res = await service.toggleTileState();
               return res.fold(
                 (f) => Left(f),
-                (newState) => Right(jsonEncode({
-                  'status': 'tile_state_toggled',
-                  'tile_state': newState.name,
-                })),
+                (change) => Right(jsonEncode(change.changed
+                    ? {
+                        'status': 'tile_state_toggled',
+                        'tile_state': change.state.name,
+                      }
+                    : {
+                        'status': 'tile_state_unchanged',
+                        'tile_state': change.state.name,
+                        'reason': change.reason,
+                      })),
               );
 
             default:

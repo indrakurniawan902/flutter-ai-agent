@@ -829,13 +829,53 @@ void main() {
     test('executes action "toggle_tile_state"', () async {
       when(
         () => mockBackgroundService.toggleTileState(),
-      ).thenAnswer((_) async => const Right(QuickTileState.active));
+      ).thenAnswer(
+        (_) async => const Right(TileStateChange(
+          state: QuickTileState.active,
+          changed: true,
+          reason: 'toggled',
+        )),
+      );
 
       final result = await bgRegistry.executeTool('manage_background_service', {
         'action': 'toggle_tile_state',
       });
 
       expect(result.isRight(), isTrue);
+      result.fold(
+        (_) => fail('Expected Right'),
+        (text) {
+          expect(text, contains('"status":"tile_state_toggled"'));
+          expect(text, contains('"tile_state":"active"'));
+        },
+      );
+      verify(() => mockBackgroundService.toggleTileState()).called(1);
+    });
+
+    test('reports tile_state_unchanged when the toggle did not take', () async {
+      when(
+        () => mockBackgroundService.toggleTileState(),
+      ).thenAnswer(
+        (_) async => const Right(TileStateChange(
+          state: QuickTileState.inactive,
+          changed: false,
+          reason: 'state_unchanged',
+        )),
+      );
+
+      final result = await bgRegistry.executeTool('manage_background_service', {
+        'action': 'toggle_tile_state',
+      });
+
+      expect(result.isRight(), isTrue);
+      result.fold(
+        (_) => fail('Expected Right'),
+        (text) {
+          expect(text, contains('"status":"tile_state_unchanged"'));
+          expect(text, contains('"tile_state":"inactive"'));
+          expect(text, contains('"reason":"state_unchanged"'));
+        },
+      );
       verify(() => mockBackgroundService.toggleTileState()).called(1);
     });
 
