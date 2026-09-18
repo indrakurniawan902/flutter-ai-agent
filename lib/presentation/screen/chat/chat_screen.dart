@@ -127,9 +127,20 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _gatewayBusy = false;
 
   /// Display-only telemetry for the current gateway turn: server-side
-  /// `tool_event` lifecycle frames rendered as tool cards. Never consumed as a
-  /// command and never replied to.
+  /// `tool_event` lifecycle frames kept as tool history. The most recent
+  /// still-running entry is what the bottom ticker shows; settled entries are
+  /// collapsed behind the history header. Never consumed as a command and
+  /// never replied to.
   final List<GatewayToolEventMessage> _gatewayToolEvents = [];
+
+  /// The newest gateway tool event still in the 'running' phase, or null when
+  /// every event has settled.
+  GatewayToolEventMessage? get _runningGatewayToolEvent {
+    for (var i = _gatewayToolEvents.length - 1; i >= 0; i--) {
+      if (_gatewayToolEvents[i].phase == 'running') return _gatewayToolEvents[i];
+    }
+    return null;
+  }
   final List<String> _openElicitationSheets = [];
   GatewayRpcCubit? _rpcCubit;
   GatewayLinkCubit? _linkCubit;
@@ -1791,7 +1802,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     ? _buildEmptyState(context)
                     : _buildMessageList(context, messages, state),
               ),
-              if (state is AgentThinking || _gatewayBusy) _buildThinkingBar(context),
+              if (_mode == ChatMode.gateway && _runningGatewayToolEvent != null)
+                _buildGatewayToolTicker(context, _runningGatewayToolEvent!.tool)
+              else if (state is AgentThinking || _gatewayBusy)
+                _buildThinkingBar(context),
               if (_isVoiceRecording && _voiceService != null)
                 Padding(
                   padding: const EdgeInsets.symmetric(
@@ -2126,9 +2140,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _buildStreamingBubble(context, state.partialText),
       if (isGatewayStreaming)
         _buildStreamingBubble(context, _streamingGatewayDelta),
-      if (_mode == ChatMode.gateway)
-        for (var i = 0; i < _gatewayToolEvents.length; i++)
-          _buildGatewayToolEventCard(context, _gatewayToolEvents[i], i),
+      if (_mode == ChatMode.gateway) _buildGatewayToolHistory(context),
       if (state is ExecutingTool)
         _buildExecutingToolCard(context, state.toolName, state.arguments),
     ];
@@ -2480,25 +2492,96 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
-  /// Renders a gateway `tool_event` frame by reusing the standalone-mode tool
-  /// cards. Server-side tool arguments are not on the wire, so the
-  /// server-provided [GatewayToolEventMessage.label] preview occupies the card
-  /// body that arguments normally fill.
-  Widget _buildGatewayToolEventCard(
-    BuildContext context,
-    GatewayToolEventMessage event,
-    int index,
-  ) {
-    if (event.phase == 'running') {
-      return _buildExecutingToolCard(context, event.tool, const {});
+  /// Collapses the settled gateway tool events behind one tappable header so a
+  /// long tool chain does not stack full cards down the transcript. Server-side
+  /// tool arguments are not on the wire, so the server-provided
+  /// [GatewayToolEventMessage.label] preview occupies the card body that
+  /// arguments normally fill.
+  Widget _buildGatewayToolHistory(BuildContext context) {
+    final theme = Theme.of(context);
+    final settledIndices = <int>[];
+    for (var i = 0; i < _gatewayToolEvents.length; i++) {
+      if (_gatewayToolEvents[i].phase != 'running') settledIndices.add(i);
     }
-    return _buildToolCallCard(
-      context,
-      ToolCallDelta(
-        index: index,
-        id: event.toolCallId.isEmpty ? null : event.toolCallId,
-        name: event.tool,
-        argumentsFragment: event.label,
+    if (settledIndices.isEmpty) return const SizedBox.shrink();
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      color: const Color(0xFF1E293B),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: Color(0xFF334155)),
+      ),
+      elevation: 0,
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        data: theme.copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          key: const Key('gateway_tool_history'),
+          dense: true,
+          leading: Icon(
+            Icons.construction_outlined,
+            size: 20,
+            color: theme.colorScheme.primary,
+          ),
+          title: Text(
+            settledIndices.length == 1
+                ? '1 tool call'
+                : '${settledIndices.length} tool calls',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFFF8FAFC),
+            ),
+          ),
+          children: [
+            for (final i in settledIndices)
+              _buildToolCallCard(
+                context,
+                ToolCallDelta(
+                  index: i,
+                  id: _gatewayToolEvents[i].toolCallId.isEmpty
+                      ? null
+                      : _gatewayToolEvents[i].toolCallId,
+                  name: _gatewayToolEvents[i].tool,
+                  argumentsFragment: _gatewayToolEvents[i].label,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Rolling status line for the newest running gateway tool. Replaces the
+  /// per-frame running cards so a long tool chain occupies one line.
+  Widget _buildGatewayToolTicker(BuildContext context, String toolName) {
+    final theme = Theme.of(context);
+    return Padding(
+      key: const Key('gateway_tool_ticker'),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Running $toolName...',
+              key: const Key('gateway_tool_ticker_label'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

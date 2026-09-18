@@ -874,7 +874,7 @@ void main() {
       expect(find.byType(ElicitationApprovalSheet), findsNothing);
     });
 
-    testWidgets('tool_event running renders an executing tool card',
+    testWidgets('tool_event running renders a rolling status line',
         (tester) async {
       await tester.pumpWidget(
           createWidgetUnderTest(initialMode: ChatMode.gateway));
@@ -890,7 +890,9 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 10));
 
+      expect(find.byKey(const Key('gateway_tool_ticker')), findsOneWidget);
       expect(find.text('Running read_file...'), findsOneWidget);
+      expect(find.byKey(const Key('gateway_tool_history')), findsNothing);
     });
 
     testWidgets('tool_event completed settles the card and drops the running '
@@ -921,6 +923,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 10));
 
       expect(find.text('Running read_file...'), findsNothing);
+      expect(find.byKey(const Key('gateway_tool_ticker')), findsNothing);
+      expect(find.text('1 tool call'), findsOneWidget);
+
+      await tester.tap(find.text('1 tool call'));
+      await tester.pumpAndSettle();
+
       expect(find.text('Tool: read_file'), findsOneWidget);
     });
 
@@ -939,6 +947,11 @@ void main() {
       ));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 10));
+
+      expect(find.text('1 tool call'), findsOneWidget);
+
+      await tester.tap(find.text('1 tool call'));
+      await tester.pumpAndSettle();
 
       expect(find.text('Tool: read_file'), findsOneWidget);
     });
@@ -965,7 +978,13 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 10));
 
-      expect(find.text('Running read_file...'), findsNothing);
+      expect(find.byKey(const Key('gateway_tool_ticker')), findsNothing);
+      expect(find.textContaining('Running '), findsNothing);
+      expect(find.text('1 tool call'), findsOneWidget);
+
+      await tester.tap(find.text('1 tool call'));
+      await tester.pumpAndSettle();
+
       expect(find.text('Tool: read_file'), findsOneWidget);
     });
 
@@ -1028,7 +1047,13 @@ void main() {
       await tester.pump(const Duration(milliseconds: 10));
 
       expect(find.text('Running read_file...'), findsNothing);
+      expect(find.byKey(const Key('gateway_tool_ticker')), findsNothing);
       expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('1 tool call'), findsOneWidget);
+
+      await tester.tap(find.text('1 tool call'));
+      await tester.pumpAndSettle();
+
       expect(find.text('Tool: read_file'), findsOneWidget);
     });
 
@@ -1054,7 +1079,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 10));
 
       expect(find.text('Running read_file...'), findsNothing);
+      expect(find.byKey(const Key('gateway_tool_ticker')), findsNothing);
       expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('1 tool call'), findsOneWidget);
+
+      await tester.tap(find.text('1 tool call'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tool: read_file'), findsOneWidget);
     });
 
     testWidgets(
@@ -1088,6 +1120,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 10));
 
+      expect(find.text('1 tool call'), findsOneWidget);
+
+      await tester.tap(find.text('1 tool call'));
+      await tester.pumpAndSettle();
+
       expect(find.text('Tool: read_file'), findsOneWidget);
     });
 
@@ -1114,6 +1151,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 10));
 
       expect(find.text('Running read_file...'), findsNothing);
+      expect(find.text('1 tool call'), findsOneWidget);
+
+      await tester.tap(find.text('1 tool call'));
+      await tester.pumpAndSettle();
+
       expect(find.text('Tool: read_file'), findsOneWidget);
     });
 
@@ -1142,6 +1184,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 10));
 
+      expect(find.text('1 tool call'), findsOneWidget);
+
+      await tester.tap(find.text('1 tool call'));
+      await tester.pumpAndSettle();
+
       await tester.tap(find.text('Tool: read_file'));
       await tester.pumpAndSettle();
 
@@ -1165,13 +1212,68 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 10));
       expect(find.text('Running read_file...'), findsOneWidget);
+      expect(find.byKey(const Key('gateway_tool_ticker')), findsOneWidget);
       expect(find.text('Gateway Remote Node'), findsNothing);
 
       await tester.tap(find.byKey(const Key('chat_mode_toggle')));
       await tester.pumpAndSettle();
 
       expect(find.text('Running read_file...'), findsNothing);
+      expect(find.byKey(const Key('gateway_tool_ticker')), findsNothing);
       expect(find.text('Autonomous Device Agent'), findsOneWidget);
+    });
+
+    testWidgets('three running frames render one rolling status line, not '
+        'three cards', (tester) async {
+      await tester.pumpWidget(
+          createWidgetUnderTest(initialMode: ChatMode.gateway));
+      await tester.pumpAndSettle();
+
+      gatewayMessageController.add(const GatewayToolEventMessage(
+        phase: 'running',
+        tool: 'read_file',
+        label: 'Reading foo.py',
+        toolCallId: 'call_1',
+        sessionId: 'up-1',
+      ));
+      gatewayMessageController.add(const GatewayToolEventMessage(
+        phase: 'running',
+        tool: 'write_file',
+        label: 'Writing bar.py',
+        toolCallId: 'call_2',
+        sessionId: 'up-1',
+      ));
+      gatewayMessageController.add(const GatewayToolEventMessage(
+        phase: 'running',
+        tool: 'grep',
+        label: 'Searching baz',
+        toolCallId: 'call_3',
+        sessionId: 'up-1',
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      expect(find.textContaining('Running '), findsOneWidget);
+      expect(find.text('Running grep...'), findsOneWidget);
+      expect(find.text('Running read_file...'), findsNothing);
+      expect(find.byKey(const Key('gateway_tool_ticker')), findsOneWidget);
+
+      gatewayMessageController.add(
+          const GatewayChatMessage(content: 'done', role: 'assistant'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      expect(find.textContaining('Running '), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('3 tool calls'), findsOneWidget);
+      expect(find.textContaining('Tool: '), findsNothing);
+
+      await tester.tap(find.text('3 tool calls'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tool: read_file'), findsOneWidget);
+      expect(find.text('Tool: write_file'), findsOneWidget);
+      expect(find.text('Tool: grep'), findsOneWidget);
     });
   });
 }
