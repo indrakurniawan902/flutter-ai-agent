@@ -1167,9 +1167,15 @@ class _SettingsViewState extends State<_SettingsView> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (sheetContext) {
+        final bottomInset = MediaQuery.of(sheetContext).viewInsets.bottom;
         return BlocProvider<SettingsCubit>.value(
           value: cubit,
-          child: const _NfcScanSheet(),
+          child: SafeArea(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomInset),
+              child: const _NfcScanSheet(),
+            ),
+          ),
         );
       },
     );
@@ -1310,14 +1316,14 @@ class _NfcScanSheetState extends State<_NfcScanSheet> {
 
         return ConstrainedBox(
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.8,
+            maxHeight: (MediaQuery.of(context).size.height -
+                    MediaQuery.of(context).viewInsets.bottom) *
+                0.8,
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
                 const Text(
                   'Bind NFC Trigger',
                   style: TextStyle(
@@ -1516,8 +1522,7 @@ class _NfcScanSheetState extends State<_NfcScanSheet> {
                 ),
               ],
             ),
-          ),
-        );
+          );
       },
     );
   }
