@@ -133,14 +133,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   /// never replied to.
   final List<GatewayToolEventMessage> _gatewayToolEvents = [];
 
-  /// The newest gateway tool event still in the 'running' phase, or null when
-  /// every event has settled.
-  GatewayToolEventMessage? get _runningGatewayToolEvent {
-    for (var i = _gatewayToolEvents.length - 1; i >= 0; i--) {
-      if (_gatewayToolEvents[i].phase == 'running') return _gatewayToolEvents[i];
-    }
-    return null;
-  }
   final List<String> _openElicitationSheets = [];
   GatewayRpcCubit? _rpcCubit;
   GatewayLinkCubit? _linkCubit;
@@ -155,6 +147,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   PermissionStatus? _micStatus;
   PermissionStatus? _cameraStatus;
   bool _permissionBannerDismissed = false;
+
+  /// The newest gateway tool event still in the 'running' phase, or null when
+  /// every event has settled.
+  GatewayToolEventMessage? get _runningGatewayToolEvent {
+    for (var i = _gatewayToolEvents.length - 1; i >= 0; i--) {
+      if (_gatewayToolEvents[i].phase == 'running') return _gatewayToolEvents[i];
+    }
+    return null;
+  }
 
   /// The default [PermissionGate] reaches `permission_handler` through a
   /// platform channel that never completes inside `flutter test` (no plugin
