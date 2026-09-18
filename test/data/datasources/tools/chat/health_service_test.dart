@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/data/datasources/tools/chat/health_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/health_metrics.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/health_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class HangingHealthPlatform implements HealthPlatformWrapper {
@@ -570,6 +571,13 @@ void main() {
       platform.availabilityResult = <String, dynamic>{'status': 'unavailable'};
 
       expect(await service.checkPermission(), isFalse);
+    });
+  });
+
+  group('declared window constants', () {
+    test('health status window is 13s and health read window is 19s', () {
+      expect(kHealthStatusWindow, const Duration(seconds: 13));
+      expect(kHealthReadWindow, const Duration(seconds: 19));
     });
   });
 }

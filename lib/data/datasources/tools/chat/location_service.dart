@@ -52,6 +52,15 @@ class LocationService implements LocationServiceBase {
   @override
   Future<Either<Failure, Map<String, dynamic>>> getLocation({
     String? accuracy,
+  }) =>
+      _getLocation(accuracy: accuracy).timeout(
+        kLocationToolWindow,
+        onTimeout: () =>
+            const Left(ServerFailure('Location error: no fix within 16s')),
+      );
+
+  Future<Either<Failure, Map<String, dynamic>>> _getLocation({
+    String? accuracy,
   }) async {
     try {
       final serviceEnabled = await _geolocator.isLocationServiceEnabled();
@@ -78,15 +87,17 @@ class LocationService implements LocationServiceBase {
 
       final accuracySetting = _mapAccuracy(accuracy);
       final pos = await _geolocator.getCurrentPosition(
-        locationSettings: LocationSettings(accuracy: accuracySetting),
+        locationSettings: LocationSettings(
+          accuracy: accuracySetting,
+          timeLimit: kLocationFixTimeout,
+        ),
       );
 
       String addressString;
       try {
-        final placemarks = await _geocoding.placemarkFromCoordinates(
-          pos.latitude,
-          pos.longitude,
-        );
+        final placemarks = await _geocoding
+            .placemarkFromCoordinates(pos.latitude, pos.longitude)
+            .timeout(kLocationGeocodeTimeout);
         if (placemarks.isNotEmpty) {
           final p = placemarks.first;
           final parts = <String>[

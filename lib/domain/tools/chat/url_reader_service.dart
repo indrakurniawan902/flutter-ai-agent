@@ -2,6 +2,13 @@ import 'package:dartz/dartz.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
 
+/// Inner window for [UrlReaderServiceBase.fetchReadableText].
+/// The registry's outer bound for `read_web_page`
+/// ([ToolRegistry.longWindowToolTimeout], 25s) must stay strictly greater, and the
+/// whole call must stay under the device bridge's 30s call budget, so a slow page
+/// surfaces as a [NetworkFailure] instead of a registry timeout.
+const Duration kWebReadTimeout = Duration(seconds: 20);
+
 abstract class UrlReaderServiceBase {
   Future<Either<Failure, String>> fetchReadableText(String url);
 
