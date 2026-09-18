@@ -27,7 +27,8 @@ class DefaultHealthPlatformWrapper implements HealthPlatformWrapper {
 
   /// A silent platform call (Health Connect readRecords that never replies)
   /// must not suspend the caller forever. Bounds nest strictly:
-  /// native 4s < wrapper 5s < service 6s < registry 10s.
+  /// native 4s < wrapper 5s < service 6s, and the health tools' own outer
+  /// windows (kHealthStatusWindow 13s / kHealthReadWindow 19s) sit above that.
   static const Duration _platformCallTimeout = Duration(seconds: 5);
 
   @override
@@ -109,9 +110,9 @@ class HealthService implements HealthServiceBase {
   /// Upper bound for every platform call this service makes. Any
   /// [HealthPlatformWrapper] implementation can silently never complete, so the
   /// bound lives here where every call routes through - not inside one concrete
-  /// wrapper. Bounds nest strictly: native 4s < wrapper 5s < service 6s <
-  /// registry 10s (and the bridge's 30s budget) so callers see a structured
-  /// failure, not a hang.
+  /// wrapper. Bounds nest strictly: native 4s < wrapper 5s < service 6s < the
+  /// health tools' outer windows (kHealthStatusWindow 13s / kHealthReadWindow
+  /// 19s), so callers see a structured failure, not a hang.
   static const Duration platformCallTimeout = Duration(seconds: 6);
 
   final HealthPlatformWrapper _platform;
@@ -135,7 +136,14 @@ class HealthService implements HealthServiceBase {
   }
 
   @override
-  Future<Either<Failure, String>> healthStatusFormattedJson() async {
+  Future<Either<Failure, String>> healthStatusFormattedJson() =>
+      _healthStatus().timeout(
+        kHealthStatusWindow,
+        onTimeout: () => const Left(ServerFailure(
+          'health_status_failed: no response from Health Connect within 13s')),
+      );
+
+  Future<Either<Failure, String>> _healthStatus() async {
     try {
       final availability = await _bounded(_platform.availability());
       if (availability == null) {
@@ -189,6 +197,21 @@ class HealthService implements HealthServiceBase {
 
   @override
   Future<Either<Failure, String>> getHealthDataFormattedJson({
+    required String metric,
+    String? startDate,
+    String? endDate,
+  }) =>
+      _getHealthData(
+        metric: metric,
+        startDate: startDate,
+        endDate: endDate,
+      ).timeout(
+        kHealthReadWindow,
+        onTimeout: () => const Left(ServerFailure(
+          'health_read_failed: no response from Health Connect within 19s')),
+      );
+
+  Future<Either<Failure, String>> _getHealthData({
     required String metric,
     String? startDate,
     String? endDate,
@@ -318,6 +341,11 @@ class HealthService implements HealthServiceBase {
     }
   }
 
+  /// This is `get_health_data`'s pre-check, not `health_status`'s. Worst case
+  /// is two sequential 6s platform calls = 12s, running on top of
+  /// get_health_data's own 19s window; the stage is bound by
+  /// [RegisteredTool.effectivePermissionTimeout] (10s), not by the tool's 25s
+  /// execution window.
   @override
   Future<bool> checkPermission() async {
     try {

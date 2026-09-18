@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dartz/dartz.dart';
 import 'package:dio/dio.dart';
 import 'package:injectable/injectable.dart';
@@ -38,20 +40,30 @@ class UrlReaderService implements UrlReaderServiceBase {
   );
 
   /// Fetches [url] and returns the raw response body (HTML).
+  ///
+  /// [kWebReadTimeout] is a true ceiling: the per-request `receiveTimeout` and
+  /// `connectTimeout` (18s/10s) keep a stalled transport a [DioException] so
+  /// `_describeDioError` can map it, while the `.timeout(kWebReadTimeout)` on
+  /// the whole request caps the pathological "connect 10s then receive stalls"
+  /// case at 20s total instead of 10 + 18s.
   Future<Either<Failure, String>> fetchUrl(String url) async {
     try {
-      final response = await _dio.get<String>(
-        url,
-        options: Options(
-          responseType: ResponseType.plain,
-          followRedirects: true,
-          headers: const {
-            'User-Agent': _userAgent,
-            'Accept': _accept,
-            'Accept-Language': _acceptLanguage,
-          },
-        ),
-      );
+      final response = await _dio
+          .get<String>(
+            url,
+            options: Options(
+              responseType: ResponseType.plain,
+              followRedirects: true,
+              receiveTimeout: const Duration(seconds: 18),
+              connectTimeout: const Duration(seconds: 10),
+              headers: const {
+                'User-Agent': _userAgent,
+                'Accept': _accept,
+                'Accept-Language': _acceptLanguage,
+              },
+            ),
+          )
+          .timeout(kWebReadTimeout);
       final body = response.data;
       if (body == null || body.trim().isEmpty) {
         return Left(ParseFailure('No readable content found at $url'));
@@ -59,6 +71,10 @@ class UrlReaderService implements UrlReaderServiceBase {
       return Right(body);
     } on DioException catch (e) {
       return Left(NetworkFailure(_describeDioError(e, url)));
+    } on TimeoutException catch (_) {
+      return Left(
+        NetworkFailure('Failed to fetch $url: Request timeout occurred'),
+      );
     } catch (e) {
       return Left(
         NetworkFailure(

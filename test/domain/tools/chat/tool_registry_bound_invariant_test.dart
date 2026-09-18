@@ -9,11 +9,16 @@ import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/data/datasources/skills/doc_builder_skill.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/file_workspace_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/health_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/location_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/security_policy.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/url_reader_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_input_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
 import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
+
+import '../../../helpers/mocks.dart';
 
 class _MockNfcService extends Mock implements NfcServiceBase {}
 
@@ -24,6 +29,8 @@ class _MockCameraVisionService extends Mock
 
 class _MockVoiceOutputService extends Mock implements VoiceOutputServiceBase {}
 
+class _MockHealthService extends Mock implements HealthServiceBase {}
+
 /// Every tool with a service-side inner window, mapped to that window. A new
 /// configurable-window tool must be added here deliberately; the reverse
 /// assertion in the group below fails when a tool declares an innerWindow that
@@ -31,10 +38,30 @@ class _MockVoiceOutputService extends Mock implements VoiceOutputServiceBase {}
 const Map<String, Duration> expectedInnerWindows = <String, Duration>{
   'nfc_read_tag': kNfcScanTimeout, // 20s
   'nfc_read_emoney_balance': kNfcScanTimeout, // 20s
-  'listen_voice_input': Duration(seconds: kMaxVoiceListenSeconds), // 20s
+  'listen_voice_input': kVoiceInputToolWindow, // 22s
   'export_document_pdf': DocBuilderSkill.exportTimeout, // 8s
   'camera_take_photo': kCameraCaptureTimeout, // 20s
   'speak_text': kPiperPlaybackTimeout, // 18s
+  'read_web_page': kWebReadTimeout, // 20s
+  'health_status': kHealthStatusWindow, // 13s
+  'get_health_data': kHealthReadWindow, // 19s
+  'get_location': kLocationToolWindow, // 16s
+};
+
+/// Every tool in the app that has a KNOWN service-side window. A tool here that
+/// declares no innerWindow is a failure — the registry's outer bound would fire
+/// before the tool's own honest error could.
+const Set<String> toolsWithServiceWindows = <String>{
+  'nfc_read_tag',
+  'nfc_read_emoney_balance',
+  'listen_voice_input',
+  'export_document_pdf',
+  'camera_take_photo',
+  'speak_text',
+  'read_web_page',
+  'health_status',
+  'get_health_data',
+  'get_location',
 };
 
 class _UnimplementedFileSystemWrapper implements FileSystemWrapper {
@@ -90,6 +117,9 @@ void main() {
         voiceInputService: _MockVoiceInputService(),
         cameraVisionService: _MockCameraVisionService(),
         voiceOutputService: _MockVoiceOutputService(),
+        urlReaderService: MockUrlReaderService(),
+        healthService: _MockHealthService(),
+        locationService: MockLocationService(),
       );
       DocBuilderSkill.registerTools(
         registry,
@@ -128,10 +158,7 @@ void main() {
     test('listen_voice_input declares the voice listen window', () {
       final tool = registry.getTool('listen_voice_input');
       expect(tool, isNotNull);
-      expect(
-        tool!.innerWindow,
-        const Duration(seconds: kMaxVoiceListenSeconds),
-      );
+      expect(tool!.innerWindow, kVoiceInputToolWindow);
       expect(tool.effectiveTimeout > tool.innerWindow!, isTrue);
     });
 
@@ -193,15 +220,63 @@ void main() {
       );
     });
 
+    test('every tool with a known service-side window declares its inner window',
+        () {
+      for (final name in toolsWithServiceWindows) {
+        final tool = registry.getTool(name);
+        expect(tool, isNotNull, reason: '$name must be registered');
+        expect(
+          tool!.innerWindow,
+          isNotNull,
+          reason:
+              '$name: an undeclared inner window means the registry\'s outer '
+              'bound fires first and the tool\'s own honest error is '
+              'unreachable',
+        );
+      }
+      expect(
+        toolsWithServiceWindows,
+        expectedInnerWindows.keys.toSet(),
+        reason:
+            'the known-window table and the expected-window table must be the '
+            'same set, so neither can silently lose an entry',
+      );
+    });
+
     test('the declared window constants are pinned', () {
       expect(kNfcScanTimeout, const Duration(seconds: 20));
       expect(kCameraCaptureTimeout, const Duration(seconds: 20));
       expect(kPiperPlaybackTimeout, const Duration(seconds: 18));
+      expect(kWebReadTimeout, const Duration(seconds: 20));
+      expect(kHealthStatusWindow, const Duration(seconds: 13));
+      expect(kHealthReadWindow, const Duration(seconds: 19));
+      expect(kLocationToolWindow, const Duration(seconds: 16));
+      expect(kVoiceInputToolWindow, const Duration(seconds: 22));
       expect(ToolRegistry.toolExecutionTimeout, const Duration(seconds: 10));
       expect(
         ToolRegistry.longWindowToolTimeout,
         const Duration(seconds: 25),
       );
+    });
+
+    test('no tool can exceed the bridge budget across its two stages', () {
+      for (final tool in registry.tools) {
+        final permissionStage = tool.checkPermission == null
+            ? Duration.zero
+            : tool.effectivePermissionTimeout;
+        final executionStage = tool.effectiveTimeout;
+        expect(
+          permissionStage + executionStage < const Duration(seconds: 30),
+          isTrue,
+          reason:
+              '${tool.name}: permission pre-check $permissionStage plus '
+              'execution stage $executionStage must stay under the device '
+              'bridge 30s budget — executeTool bounds the two stages '
+              'separately, so their SUM is the real worst case, and '
+              'effectiveTimeout is the only bound the registry itself can '
+              'guarantee',
+        );
+      }
     });
 
     test('every effective bound stays under the bridge 30s budget', () {

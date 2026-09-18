@@ -302,4 +302,12 @@ void main() {
       );
     });
   });
+
+  group('declared window constants', () {
+    test('fix window is 8s, geocode window 7s, tool window 16s', () {
+      expect(kLocationFixTimeout, const Duration(seconds: 8));
+      expect(kLocationGeocodeTimeout, const Duration(seconds: 7));
+      expect(kLocationToolWindow, const Duration(seconds: 16));
+    });
+  });
 }

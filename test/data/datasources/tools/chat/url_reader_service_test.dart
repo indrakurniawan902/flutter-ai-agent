@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dartz/dartz.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_ai_agent/common/failure.dart';
@@ -65,6 +67,37 @@ void main() {
 
       expect(result, isA<Left>());
       expect((result as Left).value, isA<NetworkFailure>());
+    });
+
+    test('passes an 18s receive timeout and a 10s connect timeout', () async {
+      stubBody('<html>hi</html>');
+
+      await service.fetchUrl('https://a.test');
+
+      final captured = verify(
+        () => mockDio.get<String>(any(), options: captureAny(named: 'options')),
+      ).captured;
+      final options = captured.single as Options;
+      expect(options.receiveTimeout, const Duration(seconds: 18));
+      expect(options.connectTimeout, const Duration(seconds: 10));
+    });
+
+    test('Left NetworkFailure with timeout wording on TimeoutException',
+        () async {
+      when(
+        () => mockDio.get<String>(any(), options: any(named: 'options')),
+      ).thenAnswer((_) => Future<Response<String>>.error(TimeoutException('slow')));
+
+      final result = await service.fetchUrl('https://a.test');
+
+      expect(
+        result,
+        const Left<Failure, String>(
+          NetworkFailure(
+            'Failed to fetch https://a.test: Request timeout occurred',
+          ),
+        ),
+      );
     });
   });
 

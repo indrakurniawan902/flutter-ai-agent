@@ -20,6 +20,7 @@ void main() {
     PermissionChecker? checkPermission,
     Duration? timeout,
     Duration? innerWindow,
+    Duration? permissionTimeout,
   }) {
     return RegisteredTool(
       name: name,
@@ -30,6 +31,7 @@ void main() {
       checkPermission: checkPermission,
       timeout: timeout,
       innerWindow: innerWindow,
+      permissionTimeout: permissionTimeout,
     );
   }
 
@@ -186,6 +188,36 @@ void main() {
         registry.getTool('default_bound_tool')!.effectiveTimeout,
         ToolRegistry.toolExecutionTimeout,
       );
+    });
+
+    test('the permission stage uses the permission bound, not the execution bound',
+        () async {
+      // A 25s execution window with a 200ms permission bound: if executeTool used
+      // effectiveTimeout for the pre-check this would hang for 25s, so the elapsed
+      // assertion below is what pins the call site.
+      registry.register(
+        tool(
+          name: 'long_window_hang_perm_tool',
+          tier: SecurityTier.tier2Permission,
+          timeout: const Duration(seconds: 25),
+          permissionTimeout: const Duration(milliseconds: 200),
+          checkPermission: () => Completer<bool>().future,
+          execute: (_) async => const Right('should not run'),
+        ),
+      );
+
+      final stopwatch = Stopwatch()..start();
+      final result = await registry.executeTool('long_window_hang_perm_tool');
+      stopwatch.stop();
+
+      expect(result, isA<Left<Failure, String>>());
+      expect(result.fold((failure) => failure, (_) => null),
+          isA<ToolTimeoutFailure>());
+      expect(
+        result.fold((failure) => failure.message, (_) => ''),
+        contains('within 0s'),
+      );
+      expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
     });
   });
 }

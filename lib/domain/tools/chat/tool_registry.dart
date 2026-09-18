@@ -56,6 +56,13 @@ class RegisteredTool {
   /// The tool's own internal bound, declared so the invariant is checkable.
   final Duration? innerWindow;
 
+  /// Per-tool override of the permission pre-check bound. A permission check is
+  /// a quick plugin/dialog query, not real work, so it must not inherit a long
+  /// execution window: `executeTool` bounds the pre-check and the execution
+  /// separately, and their SUM is what the device bridge's 30s budget has to
+  /// cover.
+  final Duration? permissionTimeout;
+
   const RegisteredTool({
     required this.name,
     required this.description,
@@ -65,6 +72,7 @@ class RegisteredTool {
     this.checkPermission,
     this.timeout,
     this.innerWindow,
+    this.permissionTimeout,
   }) : assert(
           innerWindow == null ||
               (timeout ?? ToolRegistry.toolExecutionTimeout) > innerWindow,
@@ -73,6 +81,19 @@ class RegisteredTool {
         );
 
   Duration get effectiveTimeout => timeout ?? ToolRegistry.toolExecutionTimeout;
+
+  /// Bound for the permission pre-check stage of [ToolRegistry.executeTool].
+  ///
+  /// Defaults to the smaller of the tool's execution bound and
+  /// [ToolRegistry.toolExecutionTimeout] (10s): a per-tool `timeout` override has
+  /// always bounded this stage too, while a long-window tool (25s) must not leak its
+  /// execution bound here, because `executeTool` bounds the two stages separately and
+  /// their SUM has to stay under the device bridge's 30s call budget.
+  Duration get effectivePermissionTimeout =>
+      permissionTimeout ??
+      (effectiveTimeout < ToolRegistry.toolExecutionTimeout
+          ? effectiveTimeout
+          : ToolRegistry.toolExecutionTimeout);
 
   Map<String, dynamic> toOpenAiTool() {
     return {
@@ -84,6 +105,45 @@ class RegisteredTool {
       },
     };
   }
+}
+
+/// Runs one `listen_voice_input` call. Split out of [ToolRegistry.registerVoiceTools]
+/// so the whole call can be bounded by [kVoiceInputToolWindow]: the speech plugin's
+/// `startListening` / `stopListening` have no timeout of their own, so without this
+/// the declared window would not be a real ceiling.
+Future<Either<Failure, String>> _runVoiceListen(
+  VoiceInputServiceBase service,
+  Map<String, dynamic> args,
+) async {
+  final durationSec =
+      ((args['listenDurationSeconds'] as num?)?.toInt() ?? 10)
+          .clamp(1, kMaxVoiceListenSeconds);
+  final startResult = await service.startListening(
+    listenFor: Duration(seconds: durationSec),
+  );
+  return startResult.fold(
+    (failure) => Left(failure),
+    (_) async {
+      final completer = Completer<void>();
+      final sub = service.statusStream.listen((status) {
+        if (status == VoiceInputStatus.done ||
+            status == VoiceInputStatus.error) {
+          if (!completer.isCompleted) completer.complete();
+        }
+      });
+
+      try {
+        await completer.future.timeout(
+          Duration(seconds: durationSec),
+          onTimeout: () {},
+        );
+      } finally {
+        await sub.cancel();
+      }
+
+      return service.stopListening();
+    },
+  );
 }
 
 @lazySingleton
@@ -272,13 +332,13 @@ class ToolRegistry {
           tool.checkPermission != null) {
         final bool granted;
         try {
-          granted =
-              await tool.checkPermission!().timeout(tool.effectiveTimeout);
+          granted = await tool.checkPermission!()
+              .timeout(tool.effectivePermissionTimeout);
         } on TimeoutException {
           return Left(
             ToolTimeoutFailure(
               'tool_timeout: permission check for $name did not answer '
-              'within ${tool.effectiveTimeout.inSeconds}s',
+              'within ${tool.effectivePermissionTimeout.inSeconds}s',
             ),
           );
         }
@@ -352,6 +412,11 @@ class ToolRegistry {
           },
         },
         securityTier: SecurityTier.tier2Permission,
+        // kLocationToolWindow (16s) is the honest ceiling; 18s leaves 2s of
+        // headroom over it so the registry's backstop cannot race the tool's own
+        // error, and 10 + 18 = 28s keeps the two stages under the 30s budget.
+        timeout: const Duration(seconds: 18),
+        innerWindow: kLocationToolWindow,
         execute: (args) => locationService.getLocationFormattedJson(
           accuracy: args['accuracy'] as String?,
         ),
@@ -966,38 +1031,19 @@ class ToolRegistry {
           },
         },
         securityTier: SecurityTier.tier2Permission,
-        timeout: ToolRegistry.longWindowToolTimeout,
-        innerWindow: Duration(seconds: kMaxVoiceListenSeconds),
+        // The outer bound must stay strictly above kVoiceInputToolWindow (22s),
+        // and 7s pre-check + 22.5s execution = 29.5s stays under the 30s bridge
+        // budget. A whole 22s would equal the window and trip the strict assert;
+        // 23s would push the two stages to 30s.
+        timeout: const Duration(seconds: 22, milliseconds: 500),
+        innerWindow: kVoiceInputToolWindow,
+        // The speech-plugin availability query is quick; a 7s pre-check keeps the
+        // two stages' aggregate at 7 + 22.5 = 29.5s, under the 30s bridge budget.
+        permissionTimeout: const Duration(seconds: 7),
         execute: (args) async {
-          final durationSec =
-              ((args['listenDurationSeconds'] as num?)?.toInt() ?? 10)
-                  .clamp(1, kMaxVoiceListenSeconds);
-          final startResult = await service.startListening(
-            listenFor: Duration(seconds: durationSec),
-          );
-          return startResult.fold(
-            (failure) => Left(failure),
-            (_) async {
-              final completer = Completer<void>();
-              final sub = service.statusStream.listen((status) {
-                if (status == VoiceInputStatus.done ||
-                    status == VoiceInputStatus.error) {
-                  if (!completer.isCompleted) completer.complete();
-                }
-              });
-
-              try {
-                await completer.future.timeout(
-                  Duration(seconds: durationSec),
-                  onTimeout: () {},
-                );
-              } finally {
-                await sub.cancel();
-              }
-
-              return service.stopListening();
-            },
-          );
+          final result = await _runVoiceListen(service, args)
+              .timeout(kVoiceInputToolWindow);
+          return result;
         },
         checkPermission: () => service.checkPermission().then(
               (res) => res.fold((_) => false, (allowed) => allowed),
@@ -1452,6 +1498,9 @@ class ToolRegistry {
           'required': ['url'],
         },
         securityTier: SecurityTier.tier2Permission,
+        // A slow page may legitimately run up to kWebReadTimeout.
+        timeout: ToolRegistry.longWindowToolTimeout,
+        innerWindow: kWebReadTimeout,
         execute: (args) async {
           final url = args['url']?.toString() ?? '';
           return service.fetchReadableText(url);
@@ -1581,6 +1630,10 @@ class ToolRegistry {
           'required': <String>[],
         },
         securityTier: SecurityTier.tier1Auto,
+        // Two sequential 6s platform calls may legitimately run up to
+        // kHealthStatusWindow.
+        timeout: ToolRegistry.longWindowToolTimeout,
+        innerWindow: kHealthStatusWindow,
         execute: (_) => service.healthStatusFormattedJson(),
       ),
     );
@@ -1612,6 +1665,12 @@ class ToolRegistry {
           'required': ['metric'],
         },
         securityTier: SecurityTier.tier2Permission,
+        // kHealthReadWindow (19s) is the honest ceiling; 19.5s leaves the strict
+        // assert headroom over the window, and 10s pre-check + 19.5s execution =
+        // 29.5s stays under the 30s bridge budget. A whole 20s would make the two
+        // stages sum to exactly 30s, which is not under budget.
+        timeout: const Duration(seconds: 19, milliseconds: 500),
+        innerWindow: kHealthReadWindow,
         checkPermission: () => service.checkPermission(),
         execute: (args) async {
           final rawMetric = args['metric'];
