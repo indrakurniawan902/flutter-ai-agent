@@ -198,7 +198,12 @@ class BackgroundService implements BackgroundServiceBase {
       final result = await _channel.invokeMethod('setQuickTileState', {
         'active': state == QuickTileState.active,
       });
-      return Right(result == true);
+      final echoed = switch (result?.toString()) {
+        'active' => QuickTileState.active,
+        'inactive' => QuickTileState.inactive,
+        _ => null,
+      };
+      return Right(echoed == state);
     } catch (e) {
       return Left(
         ServerFailure(
@@ -209,16 +214,32 @@ class BackgroundService implements BackgroundServiceBase {
   }
 
   @override
-  Future<Either<Failure, QuickTileState>> toggleTileState() async {
+  Future<Either<Failure, TileStateChange>> toggleTileState() async {
     final current = await getTileState();
+    if (current == QuickTileState.unavailable) {
+      return const Right(TileStateChange(
+        state: QuickTileState.unavailable,
+        changed: false,
+        reason: 'tile_state_unavailable',
+      ));
+    }
+
     final next = current == QuickTileState.active
         ? QuickTileState.inactive
         : QuickTileState.active;
     final result = await setTileState(next);
-    return result.fold(
-      (failure) => Left(failure),
-      (_) => Right(next),
-    );
+    final failure = result.fold((f) => f, (_) => null);
+    if (failure != null) {
+      return Left(failure);
+    }
+
+    final after = await getTileState();
+    final changed = after == next;
+    return Right(TileStateChange(
+      state: after,
+      changed: changed,
+      reason: changed ? 'toggled' : 'state_unchanged',
+    ));
   }
 
   @override

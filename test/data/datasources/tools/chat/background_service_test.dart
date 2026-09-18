@@ -282,7 +282,7 @@ void main() {
     test('setTileState calls platform wrapper with boolean', () async {
       when(
         () => mockPlatform.invokeMethod('setQuickTileState', any()),
-      ).thenAnswer((_) async => true);
+      ).thenAnswer((_) async => 'active');
 
       final resultActive = await service.setTileState(QuickTileState.active);
       expect(resultActive, const Right<Failure, bool>(true));
@@ -291,6 +291,10 @@ void main() {
           'active': true,
         }),
       ).called(1);
+
+      when(
+        () => mockPlatform.invokeMethod('setQuickTileState', any()),
+      ).thenAnswer((_) async => 'inactive');
 
       final resultInactive = await service.setTileState(
         QuickTileState.inactive,
@@ -303,18 +307,60 @@ void main() {
       ).called(1);
     });
 
-    test('toggleTileState toggles from inactive to active and updates tile',
-        () async {
-      when(
-        () => mockPlatform.invokeMethod('getQuickTileState'),
-      ).thenAnswer((_) async => 'inactive');
+    test('setTileState reports did-not-take when the echo differs', () async {
       when(
         () => mockPlatform.invokeMethod('setQuickTileState', any()),
-      ).thenAnswer((_) async => true);
+      ).thenAnswer((_) async => 'inactive');
+
+      expect(
+        await service.setTileState(QuickTileState.active),
+        const Right<Failure, bool>(false),
+      );
+
+      when(
+        () => mockPlatform.invokeMethod('setQuickTileState', any()),
+      ).thenAnswer((_) async => 'unavailable');
+
+      expect(
+        await service.setTileState(QuickTileState.active),
+        const Right<Failure, bool>(false),
+      );
+
+      when(
+        () => mockPlatform.invokeMethod('setQuickTileState', any()),
+      ).thenAnswer((_) async => null);
+
+      expect(
+        await service.setTileState(QuickTileState.active),
+        const Right<Failure, bool>(false),
+      );
+    });
+
+    test('toggleTileState toggles from inactive to active and updates tile',
+        () async {
+      var tileState = 'inactive';
+      when(
+        () => mockPlatform.invokeMethod('getQuickTileState'),
+      ).thenAnswer((_) async => tileState);
+      when(
+        () => mockPlatform.invokeMethod('setQuickTileState', any()),
+      ).thenAnswer((invocation) async {
+        final args =
+            invocation.positionalArguments[1] as Map<String, dynamic>;
+        tileState = (args['active'] as bool) ? 'active' : 'inactive';
+        return tileState;
+      });
 
       final result = await service.toggleTileState();
 
-      expect(result, const Right<Failure, QuickTileState>(QuickTileState.active));
+      result.fold(
+        (failure) => fail('Expected Right, got $failure'),
+        (change) {
+          expect(change.changed, isTrue);
+          expect(change.state, QuickTileState.active);
+          expect(change.reason, 'toggled');
+        },
+      );
       verify(
         () => mockPlatform.invokeMethod('setQuickTileState', {
           'active': true,
@@ -324,18 +370,28 @@ void main() {
 
     test('toggleTileState toggles from active to inactive and updates tile',
         () async {
+      var tileState = 'active';
       when(
         () => mockPlatform.invokeMethod('getQuickTileState'),
-      ).thenAnswer((_) async => 'active');
+      ).thenAnswer((_) async => tileState);
       when(
         () => mockPlatform.invokeMethod('setQuickTileState', any()),
-      ).thenAnswer((_) async => true);
+      ).thenAnswer((invocation) async {
+        final args =
+            invocation.positionalArguments[1] as Map<String, dynamic>;
+        tileState = (args['active'] as bool) ? 'active' : 'inactive';
+        return tileState;
+      });
 
       final result = await service.toggleTileState();
 
-      expect(
-        result,
-        const Right<Failure, QuickTileState>(QuickTileState.inactive),
+      result.fold(
+        (failure) => fail('Expected Right, got $failure'),
+        (change) {
+          expect(change.changed, isTrue);
+          expect(change.state, QuickTileState.inactive);
+          expect(change.reason, 'toggled');
+        },
       );
       verify(
         () => mockPlatform.invokeMethod('setQuickTileState', {
@@ -344,23 +400,83 @@ void main() {
       ).called(1);
     });
 
-    test(
-        'toggleTileState maps unavailable to active instead of failing',
+    test('toggleTileState reports state_unchanged when the write did not take',
         () async {
+      var tileState = 'inactive';
       when(
         () => mockPlatform.invokeMethod('getQuickTileState'),
-      ).thenAnswer((_) async => 'unavailable');
+      ).thenAnswer((_) async => tileState);
       when(
         () => mockPlatform.invokeMethod('setQuickTileState', any()),
-      ).thenAnswer((_) async => true);
+      ).thenAnswer((_) async => tileState);
 
       final result = await service.toggleTileState();
 
-      expect(result.isRight(), isTrue);
       result.fold(
-        (_) => fail('Expected Right'),
-        (state) => expect(state, QuickTileState.active),
+        (failure) => fail('Expected Right, got $failure'),
+        (change) {
+          expect(change.changed, isFalse);
+          expect(change.state, QuickTileState.inactive);
+          expect(change.reason, 'state_unchanged');
+        },
       );
+    });
+
+    test('toggleTileState never writes when the tile is unavailable', () async {
+      when(
+        () => mockPlatform.invokeMethod('getQuickTileState'),
+      ).thenAnswer((_) async => 'unavailable');
+
+      final result = await service.toggleTileState();
+
+      result.fold(
+        (failure) => fail('Expected Right, got $failure'),
+        (change) {
+          expect(change.changed, isFalse);
+          expect(change.state, QuickTileState.unavailable);
+          expect(change.reason, 'tile_state_unavailable');
+        },
+      );
+      verifyNever(
+        () => mockPlatform.invokeMethod('setQuickTileState', any()),
+      );
+    });
+
+    test('six interleaved toggles alternate through a stateful echo', () async {
+      var tileState = 'inactive';
+      when(
+        () => mockPlatform.invokeMethod('getQuickTileState'),
+      ).thenAnswer((_) async => tileState);
+      when(
+        () => mockPlatform.invokeMethod('setQuickTileState', any()),
+      ).thenAnswer((invocation) async {
+        final args =
+            invocation.positionalArguments[1] as Map<String, dynamic>;
+        tileState = (args['active'] as bool) ? 'active' : 'inactive';
+        return tileState;
+      });
+
+      const expectedStates = [
+        QuickTileState.active,
+        QuickTileState.inactive,
+        QuickTileState.active,
+        QuickTileState.inactive,
+        QuickTileState.active,
+        QuickTileState.inactive,
+      ];
+
+      for (final expected in expectedStates) {
+        final result = await service.toggleTileState();
+        result.fold(
+          (failure) => fail('Expected Right, got $failure'),
+          (change) {
+            expect(change.changed, isTrue);
+            expect(change.state, expected);
+            expect(change.reason, 'toggled');
+          },
+        );
+        expect(await service.getTileState(), expected);
+      }
     });
   });
 

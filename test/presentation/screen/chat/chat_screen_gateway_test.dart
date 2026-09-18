@@ -1231,9 +1231,13 @@ class _RecordingBackgroundService implements BackgroundServiceBase {
   }
 
   @override
-  Future<Either<Failure, QuickTileState>> toggleTileState() async {
+  Future<Either<Failure, TileStateChange>> toggleTileState() async {
     calls.add('toggleTileState');
-    return const Right(QuickTileState.inactive);
+    return const Right(TileStateChange(
+      state: QuickTileState.inactive,
+      changed: true,
+      reason: 'toggled',
+    ));
   }
 
   @override

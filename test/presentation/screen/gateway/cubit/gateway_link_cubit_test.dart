@@ -75,8 +75,12 @@ class _FakeBackgroundService implements BackgroundServiceBase {
       const Right(true);
 
   @override
-  Future<Either<Failure, QuickTileState>> toggleTileState() async =>
-      const Right(QuickTileState.inactive);
+  Future<Either<Failure, TileStateChange>> toggleTileState() async =>
+      const Right(TileStateChange(
+        state: QuickTileState.inactive,
+        changed: true,
+        reason: 'toggled',
+      ));
 
   @override
   Stream<String> get actionStream => const Stream<String>.empty();
