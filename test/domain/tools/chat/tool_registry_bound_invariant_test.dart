@@ -7,15 +7,35 @@ import 'package:mocktail/mocktail.dart';
 
 import 'package:flutter_ai_agent/common/failure.dart';
 import 'package:flutter_ai_agent/data/datasources/skills/doc_builder_skill.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/file_workspace_service.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/security_policy.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/tool_registry.dart';
 import 'package:flutter_ai_agent/domain/tools/chat/voice_input_service.dart';
+import 'package:flutter_ai_agent/domain/tools/chat/voice_output_service.dart';
 import 'package:flutter_ai_agent/domain/tools/device/nfc_service.dart';
 
 class _MockNfcService extends Mock implements NfcServiceBase {}
 
 class _MockVoiceInputService extends Mock implements VoiceInputServiceBase {}
+
+class _MockCameraVisionService extends Mock
+    implements CameraVisionServiceBase {}
+
+class _MockVoiceOutputService extends Mock implements VoiceOutputServiceBase {}
+
+/// Every tool with a service-side inner window, mapped to that window. A new
+/// configurable-window tool must be added here deliberately; the reverse
+/// assertion in the group below fails when a tool declares an innerWindow that
+/// is missing from this table.
+const Map<String, Duration> expectedInnerWindows = <String, Duration>{
+  'nfc_read_tag': kNfcScanTimeout, // 20s
+  'nfc_read_emoney_balance': kNfcScanTimeout, // 20s
+  'listen_voice_input': Duration(seconds: kMaxVoiceListenSeconds), // 20s
+  'export_document_pdf': DocBuilderSkill.exportTimeout, // 8s
+  'camera_take_photo': kCameraCaptureTimeout, // 20s
+  'speak_text': kPiperPlaybackTimeout, // 18s
+};
 
 class _UnimplementedFileSystemWrapper implements FileSystemWrapper {
   @override
@@ -68,6 +88,8 @@ void main() {
       registry = ToolRegistry(
         nfcService: _MockNfcService(),
         voiceInputService: _MockVoiceInputService(),
+        cameraVisionService: _MockCameraVisionService(),
+        voiceOutputService: _MockVoiceOutputService(),
       );
       DocBuilderSkill.registerTools(
         registry,
@@ -125,6 +147,61 @@ void main() {
               'strictly greater than inner window $innerWindow',
         );
       }
+    });
+
+    test('every tool with a service-side window declares a fitting bound', () {
+      for (final entry in expectedInnerWindows.entries) {
+        final name = entry.key;
+        final tool = registry.getTool(name);
+        expect(tool, isNotNull, reason: '$name must be registered');
+        expect(tool!.innerWindow, entry.value, reason: name);
+        expect(
+          tool.effectiveTimeout > tool.innerWindow!,
+          isTrue,
+          reason: '$name outer bound must strictly exceed its inner window',
+        );
+        expect(
+          tool.effectiveTimeout < const Duration(seconds: 30),
+          isTrue,
+          reason: '$name outer bound must stay under the bridge 30s budget',
+        );
+        if (entry.value >= ToolRegistry.toolExecutionTimeout) {
+          expect(
+            tool.effectiveTimeout > ToolRegistry.toolExecutionTimeout,
+            isTrue,
+            reason:
+                '$name inner window ${entry.value} is at or above the 10s '
+                'default, so it must not be left on the default bound',
+          );
+        }
+      }
+    });
+
+    test('only tools in expectedInnerWindows declare an inner window', () {
+      final declared = registry.tools
+          .where((tool) => tool.innerWindow != null)
+          .map((tool) => tool.name)
+          .toSet();
+      expect(
+        declared,
+        expectedInnerWindows.keys.toSet(),
+        reason:
+            'a tool with a service-side window that declares no innerWindow is '
+            'a silent gap: the registry would fire its outer bound first. Add '
+            'it to expectedInnerWindows and declare its innerWindow in '
+            'ToolRegistry.',
+      );
+    });
+
+    test('the declared window constants are pinned', () {
+      expect(kNfcScanTimeout, const Duration(seconds: 20));
+      expect(kCameraCaptureTimeout, const Duration(seconds: 20));
+      expect(kPiperPlaybackTimeout, const Duration(seconds: 18));
+      expect(ToolRegistry.toolExecutionTimeout, const Duration(seconds: 10));
+      expect(
+        ToolRegistry.longWindowToolTimeout,
+        const Duration(seconds: 25),
+      );
     });
 
     test('every effective bound stays under the bridge 30s budget', () {

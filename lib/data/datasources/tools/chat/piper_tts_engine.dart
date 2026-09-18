@@ -298,7 +298,7 @@ class PiperTtsEngine implements PiperTtsEngineBase {
     SherpaTtsWrapper? sherpa,
     AudioPlayerWrapper? player,
     bool Function()? nativeSupported,
-    Duration playbackTimeout = const Duration(seconds: 45),
+    Duration playbackTimeout = kPiperPlaybackTimeout,
   }) : _store = store,
        _sherpa = sherpa ?? DefaultSherpaTtsWrapper(),
        _player = player,

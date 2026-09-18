@@ -559,6 +559,66 @@ void main() {
       ).thenAnswer((_) async => result);
     }
 
+    test(
+        'a piper playback window that expires stops the engine before the '
+        'system TTS re-reads the text', () async {
+      final mockPiper = MockPiperTtsEngine();
+      final mockSecureStorage = MockSecureStorageService();
+      final callOrder = <String>[];
+
+      when(
+        () => mockSecureStorage.getTtsEngineMode(),
+      ).thenAnswer((_) async => 'piper');
+      when(
+        () => mockSecureStorage.getPiperVoiceId(),
+      ).thenAnswer((_) async => null);
+      when(() => mockPiper.isAvailable).thenReturn(true);
+      when(() => mockPiper.prepare(any())).thenAnswer((_) async => true);
+      when(
+        () => mockPiper.speak(
+          any(),
+          voice: any(named: 'voice'),
+          speed: any(named: 'speed'),
+        ),
+      ).thenAnswer((_) async => false);
+      when(() => mockPiper.stop()).thenAnswer((_) async {
+        callOrder.add('piper.stop');
+      });
+      when(
+        () => mockPlatformTts.speak(
+          any(),
+          voice: any(named: 'voice'),
+          speed: any(named: 'speed'),
+        ),
+      ).thenAnswer((_) async {
+        callOrder.add('platform.speak');
+        return true;
+      });
+
+      final piperService = VoiceOutputService(
+        ttsClient: mockTtsClient,
+        audioPlayer: mockPlayer,
+        platformTts: mockPlatformTts,
+        piperTts: mockPiper,
+        secureStorage: mockSecureStorage,
+      );
+      addTearDown(piperService.dispose);
+
+      final result = await piperService.speakText('Hello');
+
+      expect(result.isRight(), isTrue);
+      expect(callOrder, ['piper.stop', 'platform.speak']);
+      verify(() => mockPiper.stop()).called(1);
+      verify(
+        () => mockPlatformTts.speak(
+          'Hello',
+          voice: any(named: 'voice'),
+          speed: any(named: 'speed'),
+        ),
+      ).called(1);
+      expect(piperService.lastEngineUsed, TtsEngine.androidTts);
+    });
+
     test('remote 404 falls back to platform TTS', () async {
       stubTtsThrowingUnsupported();
       stubPlatformSpeak(true);

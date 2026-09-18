@@ -62,6 +62,15 @@ abstract class VoiceOutputServiceBase {
 
 enum TtsEngineMode { system, piper }
 
+/// Inner playback window for the offline Piper engine.
+/// Deliberately SHORTER than the 45s it used to be: the registry's outer bound
+/// for `speak_text` ([ToolRegistry.longWindowToolTimeout], 25s) must stay strictly
+/// greater, and the device bridge gives the whole device call only 30s
+/// (DEVICE_CALL_TIMEOUT), so a 45s playback window could never be reported honestly.
+/// When playback does not settle in this window the engine returns false and the
+/// service falls through to the system TTS / remote engine.
+const Duration kPiperPlaybackTimeout = Duration(seconds: 18);
+
 /// Thrown when a downloaded Piper voice model fails checksum/size validation.
 class VoiceModelIntegrityException implements Exception {
   const VoiceModelIntegrityException(this.message);

@@ -13,7 +13,7 @@ import 'package:flutter_ai_agent/domain/tools/chat/camera_vision_service.dart';
 class CameraVisionService implements CameraVisionServiceBase {
   CameraVisionService({
     ImagePicker? picker,
-    this.captureTimeout = const Duration(seconds: 25),
+    this.captureTimeout = kCameraCaptureTimeout,
   }) : _picker = picker ?? ImagePicker();
 
   @factoryMethod
