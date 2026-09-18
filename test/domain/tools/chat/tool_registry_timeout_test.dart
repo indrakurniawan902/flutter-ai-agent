@@ -18,6 +18,8 @@ void main() {
     required SecurityTier tier,
     required ToolExecutor execute,
     PermissionChecker? checkPermission,
+    Duration? timeout,
+    Duration? innerWindow,
   }) {
     return RegisteredTool(
       name: name,
@@ -26,6 +28,8 @@ void main() {
       securityTier: tier,
       execute: execute,
       checkPermission: checkPermission,
+      timeout: timeout,
+      innerWindow: innerWindow,
     );
   }
 
@@ -97,6 +101,91 @@ void main() {
       final result = await registry.executeTool('fast_tool');
 
       expect(result, const Right<Failure, String>('ok'));
+    });
+  });
+
+  group('per-tool timeout override', () {
+    test('bounds a never-completing executor with the override', () async {
+      registry.register(
+        tool(
+          name: 'short_hang_tool',
+          tier: SecurityTier.tier1Auto,
+          timeout: const Duration(milliseconds: 200),
+          execute: (_) => Completer<Either<Failure, String>>().future,
+        ),
+      );
+
+      final stopwatch = Stopwatch()..start();
+      final result = await registry.executeTool('short_hang_tool');
+      stopwatch.stop();
+
+      expect(result, isA<Left<Failure, String>>());
+      expect(result.fold((failure) => failure, (_) => null),
+          isA<ToolTimeoutFailure>());
+      expect(
+        result.fold((failure) => failure.message, (_) => ''),
+        contains('within 0s'),
+      );
+      expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
+    });
+
+    test('bounds a never-completing permission check with the override',
+        () async {
+      registry.register(
+        tool(
+          name: 'short_hang_perm_tool',
+          tier: SecurityTier.tier2Permission,
+          timeout: const Duration(milliseconds: 200),
+          checkPermission: () => Completer<bool>().future,
+          execute: (_) async => const Right('should not run'),
+        ),
+      );
+
+      final stopwatch = Stopwatch()..start();
+      final result = await registry.executeTool('short_hang_perm_tool');
+      stopwatch.stop();
+
+      expect(result, isA<Left<Failure, String>>());
+      expect(result.fold((failure) => failure, (_) => null),
+          isA<ToolTimeoutFailure>());
+      expect(
+        result.fold((failure) => failure.message, (_) => ''),
+        contains('within 0s'),
+      );
+      expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
+    });
+
+    test('a tool finishing under the override is not cut off', () async {
+      registry.register(
+        tool(
+          name: 'slow_but_ok_tool',
+          tier: SecurityTier.tier1Auto,
+          timeout: const Duration(seconds: 2),
+          execute: (_) async {
+            await Future<void>.delayed(const Duration(seconds: 1));
+            return const Right('ok');
+          },
+        ),
+      );
+
+      final result = await registry.executeTool('slow_but_ok_tool');
+
+      expect(result, const Right<Failure, String>('ok'));
+    });
+
+    test('a tool without an override keeps the registry default', () {
+      registry.register(
+        tool(
+          name: 'default_bound_tool',
+          tier: SecurityTier.tier1Auto,
+          execute: (_) async => const Right('ok'),
+        ),
+      );
+
+      expect(
+        registry.getTool('default_bound_tool')!.effectiveTimeout,
+        ToolRegistry.toolExecutionTimeout,
+      );
     });
   });
 }

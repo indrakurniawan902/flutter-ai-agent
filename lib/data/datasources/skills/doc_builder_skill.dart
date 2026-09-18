@@ -61,6 +61,7 @@ class DocBuilderSkill {
           'required': ['title', 'markdownContent'],
         },
         securityTier: SecurityTier.tier1Auto,
+        innerWindow: DocBuilderSkill.exportTimeout,
         execute: (args) => exportDocument(
           fileSystem: fs,
           title: args['title']?.toString() ?? '',
@@ -75,10 +76,10 @@ class DocBuilderSkill {
   /// silent filesystem call must settle as a CacheFailure, never hang the
   /// caller.
   ///
-  /// INVARIANT: this inner bound MUST stay strictly below
-  /// `ToolRegistry.toolExecutionTimeout` (10s). The registry is the outer bound
-  /// and fires first if this value is larger, replacing the human-readable
-  /// CacheFailure below with a generic `tool_timeout`, making this path dead.
+  /// The outer-bound > inner-bound invariant is enforced by the
+  /// [RegisteredTool] assert and asserted by a unit test. If this value were
+  /// larger than the registry bound, the human-readable CacheFailure would be
+  /// replaced by a generic `tool_timeout`.
   static const Duration exportTimeout = Duration(seconds: 8);
 
   /// Renders [markdownContent] and writes the PDF into
