@@ -418,6 +418,91 @@ void main() {
 
       await controller.close();
     });
+
+    testWidgets('the keyboard rising AFTER the sheet is open keeps the fields visible',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 873);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetViewInsets);
+
+      final controller = StreamController<SettingsState>();
+      whenListen(mockSettingsCubit, controller.stream, initialState: loadedBase);
+      when(() => mockSettingsCubit.scanAndBindNfcTag())
+          .thenAnswer((_) async {});
+
+      await tester.pumpWidget(buildWidget());
+      await tester.pump();
+
+      await tester.ensureVisible(find.byKey(const Key('nfc_add_trigger_button')));
+      await tester.tap(find.byKey(const Key('nfc_add_trigger_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      controller.add(const SettingsNfcScanResult(uid: '04A2B3C4D5'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.byKey(const Key('nfc_prompt_field')), 'Open the gate');
+      await tester.pump();
+
+      final before = tester.getRect(find.byKey(const Key('nfc_save_button')));
+      expect(
+        before.bottom,
+        greaterThan(553.5),
+        reason:
+            'Save button bottom ${before.bottom} should be below the keyboard top 553.5 before the keyboard rises',
+      );
+
+      tester.view.viewInsets = const FakeViewPadding(bottom: 320);
+      await tester.pumpAndSettle();
+
+      const keyboardTop = 873.0 - 320.0;
+
+      final promptRect =
+          tester.getRect(find.byKey(const Key('nfc_prompt_field')));
+      expect(
+        promptRect.top,
+        greaterThanOrEqualTo(0.0),
+        reason: 'Prompt field top ${promptRect.top} is above the viewport top',
+      );
+      expect(
+        promptRect.bottom,
+        lessThanOrEqualTo(keyboardTop + 0.5),
+        reason:
+            'Prompt field bottom ${promptRect.bottom} is below the keyboard top $keyboardTop',
+      );
+
+      final labelRect =
+          tester.getRect(find.byKey(const Key('nfc_label_field')));
+      expect(
+        labelRect.top,
+        greaterThanOrEqualTo(0.0),
+        reason: 'Label field top ${labelRect.top} is above the viewport top',
+      );
+      expect(
+        labelRect.bottom,
+        lessThanOrEqualTo(keyboardTop + 0.5),
+        reason:
+            'Label field bottom ${labelRect.bottom} is below the keyboard top $keyboardTop',
+      );
+
+      final saveRect = tester.getRect(find.byKey(const Key('nfc_save_button')));
+      expect(
+        saveRect.top,
+        greaterThanOrEqualTo(0.0),
+        reason: 'Save button top ${saveRect.top} is above the viewport top',
+      );
+      expect(
+        saveRect.bottom,
+        lessThanOrEqualTo(keyboardTop + 0.5),
+        reason:
+            'Save button bottom ${saveRect.bottom} is below the keyboard top $keyboardTop',
+      );
+
+      await controller.close();
+    });
   });
 
   group('NFC delete flow', () {
