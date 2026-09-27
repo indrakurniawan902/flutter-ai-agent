@@ -5,10 +5,12 @@
 > [`design-system.md`](./design-system.md) (visuals). For the file-by-file
 > current → target moves, see [`MIGRATION-PLAN.md`](./MIGRATION-PLAN.md).
 >
-> These rules describe the **target** layer-first conventions for this
-> codebase. The repo still physically lives at the old feature-first layout
-> (`lib/features/...`); follow this document (and the migration plan) when
-> writing or moving code so the tree converges on the target.
+> These rules describe the **actual** layer-first conventions for this
+> codebase. The repo is layer-first today; the old feature-first layout
+> (`lib/features/...`) is gone — the T13.x migration cards executed
+> [`MIGRATION-PLAN.md`](./MIGRATION-PLAN.md) to completion. Follow this
+> document when writing or reviewing code; where it disagrees with the tree,
+> the tree wins and this document is the bug.
 
 ---
 
@@ -37,25 +39,27 @@
   `data/datasources/remote/<feature>/`, `data/models/<feature>/`,
   `data/repositories/<feature>_repository_impl.dart`,
   `domain/entities/<feature>/`, `domain/repositories/<feature>/`,
-  `domain/usecase/<feature>/`, `presentation/screen/<feature>/`.
+  `domain/services/<feature>/`, `presentation/screen/<feature>/`.
 - Cross-cutting infrastructure goes in `lib/common/`:
-  - `common/injection/`: DI container and `injection.config.dart` (generated)
+  - `common/injection/`: DI container (`injection.dart`, `modules.dart`) and `injection.config.dart` (generated)
   - `common/constant.dart`: App constants, defaults, storage keys
   - `common/failure.dart`: `Failure` hierarchy and exceptions
+  - `common/failure_message.dart`: `FailureMessage.humanize(...)` / `.fromDio(...)`
   - `common/exception.dart`: `ServerException` / `DatabaseException` / `CacheException`
   - `common/remote_response_mapper.dart`: `ResponseMapper<T>` marker interface
-  - `common/hive_constant.dart`: Hive box names + type IDs
 - Generic helpers and design tokens go in `lib/utils/`:
   - `utils/app_theme.dart`, `utils/hermes_theme.dart` (tokens)
-  - `utils/either_extensions.dart`, `utils/dio_err_handler.dart` (helpers)
+  - `utils/dio_err_handler.dart`, `utils/permission_gate.dart`,
+    `utils/thought_extractor.dart` (helpers)
 - Shared widgets go in `lib/presentation/widget/`; screen-local widgets stay
   inline in the feature's `presentation/screen/<feature>/`.
-- Folder names stay **singular** — `usecase/` (not `usecases/`),
-  `<feature>_datasource.dart` (not `<feature>_datasources.dart`).
+- Folder names stay **singular** — `<feature>_datasource.dart`, not
+  `<feature>_datasources.dart`.
 - Local datasources go under `data/datasources/local/<feature>/`, remote ones
   under `data/datasources/remote/<feature>/` — don't nest one under the other.
-- Tests mirror the same tree under `test/` (`test/domain/usecase/<feature>/`,
-  `test/presentation/screen/<feature>/cubit/`, ...).
+  Device tool service implementations go under `data/datasources/tools/<feature>/`.
+- Tests mirror the same tree under `test/` (`test/domain/services/<feature>/`,
+  `test/presentation/screen/<feature>/cubit/`, ...) — never `test/features/`.
 
 ---
 
@@ -71,17 +75,19 @@
 | State | `<Feature>State` | `AgentState`, `AgentStreaming` |
 | Repo interface | `<Feature>Repository` | `LlmRepository`, `ServerProfileRepository` |
 | Repo impl | `<Feature>RepositoryImpl` | `LlmRepositoryImpl` |
-| Usecase | `<Verb><Noun>Usecase` (lowercase `c`) | `SendChatMessageUsecase` |
-| Remote DataSource | `<Feature>Datasource` (abstract) / `...Impl` | `LlmDatasource` / `LlmDatasourceImpl` |
+| Domain service | `<Feature>Service` / `<Feature>Base` (abstract) | `SkillsRegistryService`, `VoiceTurnServiceBase` |
+| Remote DataSource | `<Feature>Datasource` (abstract) / `...Impl` | `ChatDatasource` / `ChatDatasourceImpl` |
 | Remote model (DTO) | `<Feature>RemoteResponse` | `ChatMessageRemoteResponse` |
 | Local model (Hive) | `<Feature>LocalModel` | `ChatMessageLocalModel` |
 | Entity | `<Thing>` (plain class, no suffix) | `ServerProfile`, `ChatMode` |
 | Screen | `<Thing>Screen` | `ChatScreen`, `SettingsScreen` |
 | Widget | `<Thing>` / `<Thing>Sheet` / `<Thing>Card` | `ActionApprovalSheet`, `ToolCallCard` |
 
-Keep usecase classes suffixed `Usecase` (lowercase `c`), state variants
-suffixed `Error` (not `Failed`), and DTOs suffixed `RemoteResponse` / `LocalModel` —
-pick one and use it consistently across every feature.
+Keep domain-service names suffixed `Service` (or `Base` for the abstract
+contract), state variants suffixed `Error` (not `Failed`), and DTOs suffixed
+`RemoteResponse` / `LocalModel` — pick one and use it consistently across every
+feature. Flames has **no `*Usecase` classes**; business actions live in
+`domain/services/` (see §15.8 in `architecture.md`).
 
 JSON keys from an API are sometimes PascalCase or another casing — map them
 with `@JsonKey(name: '...')` to camelCase Dart fields.
@@ -125,8 +131,10 @@ with `@JsonKey(name: '...')` to camelCase Dart fields.
 2. Shared mocks are kept central in `test/helpers/mocks.dart`.
 3. Test files follow the AAA (Arrange, Act, Assert) structure.
 4. For Cubit testing, use `blocTest` from `bloc_test` package for state transition assertions.
-5. **Mock one layer down, never further.** A cubit test mocks its usecase; a usecase test mocks its repository interface; a repository test mocks its datasource.
-6. Test files **strictly mirror** `lib/` under `test/` — `test/<same path>/<file>_test.dart`. Cubit tests go to `test/presentation/screen/<feature>/cubit/<feature>_cubit_test.dart`, NOT in a `test/.../domain/` path.
+5. **Mock one layer down, never further.** A cubit test mocks its domain
+   service (or repository); a service test mocks its repository interface; a
+   repository test mocks its datasource.
+6. Test files **strictly mirror** `lib/` under `test/` — `test/<same path>/<file>_test.dart`. Cubit tests go to `test/presentation/screen/<feature>/cubit/<feature>_cubit_test.dart`, NOT in a `test/.../domain/` path or `test/features/`.
 7. All tests must be 100% passing before any commit.
 
 ---
@@ -140,7 +148,7 @@ Before committing or declaring a task complete:
 - [ ] No re-export shim files left behind (delete the shim, update imports).
 - [ ] No DTOs (`*RemoteResponse` / `*LocalModel`) in `domain/`.
 - [ ] No parallel `lib/core/` next to `lib/common/`.
-- [ ] Usecase folders are singular (`domain/usecase/`, not `use cases`/`usecases/`).
+- [ ] Business actions live in `domain/services/` — no `*Usecase` classes (Flames deviation, `architecture.md` §15.8).
 - [ ] Tests mirror the layer tree (`test/presentation/screen/<feature>/cubit/`, ...), not `test/features/`.
 - [ ] Code follows naming conventions (§3).
 - [ ] Zero emoji icons in chrome/UI (§1).
@@ -157,18 +165,18 @@ These are the specific ways this layout has been broken before. All of them
 make the tree harder to read, none of them are improvements:
 
 - **Do not reintroduce `lib/features/`.** A layer-first tree is the point: all
-  repository contracts are in `domain/repositories/`, all usecases in
-  `domain/usecase/`, all screens in `presentation/screen/`. Folding a feature's
+  repository contracts are in `domain/repositories/`, all business actions in
+  `domain/services/`, all screens in `presentation/screen/`. Folding a feature's
   three layers into one folder means answering "what calls the network?" now
   requires opening every feature folder.
 - **Do not leave re-export shim files.** A one-line
   `export '../presentation/cubits/x_cubit.dart';` sitting in `domain/` is not
   "backwards compatibility" — it is a cubit in the wrong layer with a decoy
-  path. If something moved, update the imports and delete the shim. (Flames has
-  exactly these today: `lib/features/chat/domain/agent_cubit.dart` and friends —
-  the migration deletes them, see `MIGRATION-PLAN.md`.)
+  path. If something moved, update the imports and delete the shim. (The T13.x
+  migration deleted the last of these; `tool/check_layout.sh` now fails if one
+  reappears.)
 - **Do not put a Cubit or `flutter_bloc` import in `domain/`.** Not in
-  `domain/`, not in `domain/usecase/`, not anywhere under `domain/`. State
+  `domain/`, not in `domain/services/`, not anywhere under `domain/`. State
   management is presentation-only
   ([`architecture.md §6`](./architecture.md#6-state-management-cubit)).
 - **Do not put DTOs in `domain/`.** `*RemoteResponse` / `*LocalModel` live in
@@ -177,8 +185,8 @@ make the tree harder to read, none of them are improvements:
 - **Do not create a parallel `lib/core/` next to `lib/common/`.** Cross-cutting
   infra has one home (`lib/common/`) plus `lib/utils/` for design tokens and
   helpers. Two folders holding the same four files is exactly the "berantakan"
-  this convention exists to prevent. (Flames has this today: `lib/core/*` vs
-  `lib/common/*` — the migration collapses them.)
+  this convention exists to prevent. (The migration collapsed the old
+  `lib/core/*` into `lib/common/*`; do not recreate it.)
 - **Do not hand-roll DI registration** where an `@injectable` annotation would
   do — hand-written `sl.register*` lines drift out of sync with the generated
   `injection.config.dart`.

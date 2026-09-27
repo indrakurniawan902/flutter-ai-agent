@@ -32,6 +32,19 @@ for p in "lib/common/injection/injection.dart" "lib/presentation/screen" "lib/ut
   fi
 done
 
+# Business-action layer: usecase OR services (Flames uses domain/services by
+# approved deviation; a repo with NEITHER has lost its business layer entirely).
+if [ ! -d "$ROOT/lib/domain/usecase" ] && [ ! -d "$ROOT/lib/domain/services" ]; then
+  echo "LAYOUT VIOLATION: business-action layer missing — neither lib/domain/usecase nor lib/domain/services exists" >&2
+  exit 1
+fi
+
+# Tests must mirror the layer tree; test/features/ is the old feature-first shape.
+if [ -d "$ROOT/test/features" ]; then
+  echo "LAYOUT VIOLATION: $ROOT/test/features must not exist (tests mirror the layer tree)" >&2
+  exit 1
+fi
+
 data_violations=$(grep -rn "import .*['\"].*\/data\/.*['\"]" "$ROOT/lib/presentation" 2>/dev/null | grep -v "secure_storage_service.dart" || true)
 if [ -n "$data_violations" ]; then
   echo "LAYOUT VIOLATION: presentation layer must not import data layer:" >&2

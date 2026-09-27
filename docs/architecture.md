@@ -13,11 +13,10 @@
 > [`rules.md`](./rules.md); for visual/UI rules see
 > [`design-system.md`](./design-system.md).
 >
-> The repo still lives at the old **feature-first** layout (`lib/features/...`).
-> This document describes the **target layer-first** tree. The file-by-file
-> old → new mapping is in [`MIGRATION-PLAN.md`](./MIGRATION-PLAN.md); later cards
-> execute it. Where this document and the current tree disagree, this document
-> wins.
+> The repo is **layer-first today** (`lib/{common,data,domain,presentation,utils}/`);
+> the old `lib/features/` tree is gone — the migration cards (T13.x) executed
+> [`MIGRATION-PLAN.md`](./MIGRATION-PLAN.md) to completion. Where this document
+> and the tree disagree, the tree wins and this document is the bug.
 
 ---
 
@@ -28,7 +27,7 @@
 | Framework | Flutter, Dart SDK `>=3.3.0 <4.0.0` |
 | State management | `flutter_bloc` — **Cubit only**, no `Bloc`/events anywhere |
 | Dependency injection | `get_it` + `injectable` (codegen), entry `lib/common/injection/` |
-| Routing | `go_router` (introduced as part of the layer-first migration; today the app uses a `MaterialApp(home:)` splash → navigation-shell chain) |
+| Routing | `go_router` — single instance in `lib/presentation/navigation/app_router.dart`, wired into `MaterialApp.router` in `lib/myapp.dart` |
 | Networking | `dio` — injected directly into datasources, no wrapper client class; custom `SseParser` for streaming SSE completions |
 | Realtime gateway | `web_socket_channel` for bidirectional RPC transport |
 | Local storage | `flutter_secure_storage` (credentials, tokens, profiles) + `hive_ce_flutter` (cache) |
@@ -50,9 +49,9 @@ runs via `build_runner`. **Never hand-edit generated files**
 The `lib/` tree is organised **by architectural layer at the top level**, with
 the feature folder *inside* each layer. This is deliberately not the
 feature-first `lib/features/<feature>/{data,domain,presentation}` shape: with
-layer-first you read all repository contracts in one place, all usecases in one
-place, and you never have to open five feature folders to answer "what talks to
-the network?".
+layer-first you read all repository contracts in one place, all domain services
+in one place, and you never have to open five feature folders to answer "what
+talks to the network?".
 
 ```text
 lib/
@@ -60,35 +59,34 @@ lib/
 
   common/                      # cross-cutting infrastructure (see §5)
     injection/
-      injection.dart           # getIt + @InjectableInit + @module providers
+      injection.dart           # getIt + @InjectableInit
+      modules.dart             # @module providers (NetworkModule, StorageModule, ToolsModule)
       injection.config.dart    # GENERATED — never hand-edit
     constant.dart              # AppConstants (defaults, endpoints, storage keys)
     failure.dart               # Failure hierarchy
+    failure_message.dart       # FailureMessage.humanize(...) / .fromDio(...)
     exception.dart             # ServerException / DatabaseException / CacheException
     remote_response_mapper.dart# ResponseMapper<T> marker interface
-    hive_constant.dart         # Hive box names + type IDs (when Hive is used)
 
   data/                        # see §4
     datasources/
       remote/<feature>/<feature>_datasource.dart
       local/<feature>/<feature>_local_datasource.dart
-    models/
-      <feature>/<feature>_remote_response.dart
-      <feature>/local/<feature>_local_model.dart
+      tools/<feature>/         # device tool service implementations (ClipboardService, ...)
+    models/<feature>/<feature>_remote_response.dart
     repositories/<feature>_repository_impl.dart
-    tools/<feature>/           # device tool service implementations (chat/data/tools/*)
+    services/<feature>/        # service implementations for domain contracts
 
   domain/                      # see §4
     entities/<feature>/        # plain Dart classes
-    models/<feature>/          # domain-level value objects (e.g. ToolCallRequest)
     repositories/<feature>/    # abstract interfaces
-    usecase/<feature>/         # thin callable wrappers, one action each
+    services/<feature>/        # domain services (business actions — see §15.8)
     tools/<feature>/           # domain tool contracts + security policy (ToolRegistry, SecurityPolicy)
 
   presentation/                # see §4
     navigation/
-      app_router.dart          # single GoRouter instance (planned)
-      app_routes.dart          # AppRoutes.nr* name constants (planned)
+      app_router.dart          # single GoRouter instance
+      app_routes.dart          # AppRoutes.nr* name constants
     screen/<feature>/
       <feature>_screen.dart
       cubit/<feature>_cubit.dart   # part '<feature>_state.dart';
@@ -98,8 +96,9 @@ lib/
   utils/                       # design tokens + generic helpers
     app_theme.dart             # AppTheme (dark slate & teal)
     hermes_theme.dart          # HermesColors / HermesTypography / HermesTheme
-    either_extensions.dart     # EitherX helpers
     dio_err_handler.dart       # DioErrHandler.handleDioError(...)
+    permission_gate.dart       # 3-state permission gate helper
+    thought_extractor.dart     # ThoughtExtractor (thinking-block parsing)
 ```
 
 Two corollaries worth stating outright:
@@ -107,8 +106,8 @@ Two corollaries worth stating outright:
 - **There is no `lib/features/`.** A "feature" is a *name* that repeats across
   `data/`, `domain/`, and `presentation/screen/` — not a folder that owns its
   own three layers.
-- **Folder names are singular** — `usecase/`, not `usecases/`; a file is
-  `<feature>_datasource.dart`, not `<feature>_datasources.dart`.
+- **Folder names are singular** — `<feature>_datasource.dart`, not
+  `<feature>_datasources.dart`.
 
 The current feature set: **chat** (ReAct agent loop, SSE chat, tool execution),
 **gateway** (WebSocket/SSE RPC transport), **pairing** (QR scanner & pairing
@@ -161,16 +160,15 @@ A feature is a slice spread across the three layer folders:
 data/
   datasources/remote/<feature>/<feature>_datasource.dart  # abstract + Impl, talks to Dio/SDK
   datasources/local/<feature>/<feature>_local_datasource.dart
+  datasources/tools/<feature>/                            # device tool service implementations
   models/<feature>/<feature>_remote_response.dart         # json_serializable, implements ResponseMapper<Entity>
-  models/<feature>/local/<feature>_local_model.dart       # @HiveType, implements ResponseMapper<Entity>
   repositories/<feature>_repository_impl.dart             # implements the domain interface
-  tools/<feature>/                                        # device tool services (ClipboardService, ...)
+  services/<feature>/                                     # implementations of domain service contracts
 
 domain/
   entities/<feature>/<feature>.dart                       # plain Dart class
-  models/<feature>/                                       # domain value objects (no JSON)
   repositories/<feature>/<feature>_repository.dart        # abstract class
-  usecase/<feature>/<verb>_<feature>_usecase.dart         # one action each
+  services/<feature>/                                     # domain services — the business actions (see §15.8)
   tools/<feature>/                                        # tool contracts + security policy (ToolRegistry, SecurityPolicy)
 
 presentation/
@@ -181,21 +179,20 @@ presentation/
 ```
 
 Not every feature needs every layer — a purely local/offline feature can skip
-the remote datasource, and a static screen can skip the usecase. Add the pieces
-the feature actually needs.
+the remote datasource. Add the pieces the feature actually needs.
 
 ### The dependency rule
 
 ```text
 presentation  ──▶  domain  ◀──  data
    (screens,       (entities,    (datasources,
-    cubits)        usecases,     models,
-                    repo iface)  repo impl)
+    cubits)        services,     models,
+                   repo iface)   repo impl)
 ```
 
 - `domain` depends on nothing outside itself — entities are plain Dart classes,
-  repository interfaces are abstract, a usecase imports only `dartz` + its own
-  repository interface.
+  repository interfaces are abstract, a domain service imports only `dartz` +
+  its own repository interfaces.
 - `data` implements the interfaces declared in `domain/repositories/` and maps
   its DTOs to `domain/entities/` via each model's `toDomain()`.
 - `presentation` depends on `domain` only — a cubit **never** imports a
@@ -207,8 +204,8 @@ presentation  ──▶  domain  ◀──  data
 ```text
 Screen (StatefulWidget)
   → _xCubit.someAction()                          # pulled from getIt in State
-      → <Feature>Usecase.call(...)                # a plain callable class
-          → <Feature>RepositoryImpl                # implements the domain interface
+      → <Feature>Service                          # domain service, or a repository directly
+          → <Feature>RepositoryImpl               # implements the domain interface
               → <Feature>Datasource / LocalDatasource
                   → Dio / Hive / backend SDK
 ```
@@ -216,7 +213,7 @@ Screen (StatefulWidget)
 Standard files:
 
 ```dart
-// domain/repositories/<feature>/<feature>_repository.dart
+// domain/repositories/chat/llm_repository.dart
 abstract class LlmRepository {
   Future<Either<Failure, Stream<ChatChunk>>> streamCompletion({
     required String baseUrl,
@@ -224,61 +221,38 @@ abstract class LlmRepository {
     required List<Map<String, dynamic>> messages,
     List<Map<String, dynamic>>? tools,
     String? apiKey,
+    double? temperature,
   });
 }
 
-// domain/usecase/<feature>/send_chat_message_usecase.dart
-@lazySingleton
-class SendChatMessageUsecase {
-  final LlmRepository llmRepository;
-  SendChatMessageUsecase({required this.llmRepository});
-
-  Future<Either<Failure, Stream<ChatChunk>>> call(
-          {required String baseUrl,
-           required String model,
-           required List<Map<String, dynamic>> messages,
-           List<Map<String, dynamic>>? tools,
-           String? apiKey}) =>
-      llmRepository.streamCompletion(
-          baseUrl: baseUrl,
-          model: model,
-          messages: messages,
-          tools: tools,
-          apiKey: apiKey);
+// data/datasources/remote/chat/chat_datasource.dart
+abstract class ChatDatasource {
+  Future<Stream<ChatChunkRemoteResponse>> streamCompletion({...});
 }
 
-// data/datasources/remote/<feature>/<feature>_datasource.dart
-abstract class LlmDatasource {
-  Future<ResponseBody> streamCompletion(...);
-}
+@LazySingleton(as: ChatDatasource)
+class ChatDatasourceImpl implements ChatDatasource { /* injects Dio + SseParser */ }
 
-@LazySingleton(as: LlmDatasource)
-class LlmDatasourceImpl implements LlmDatasource { /* injects Dio */ }
-
-// data/repositories/<feature>_repository_impl.dart
+// data/repositories/chat_repository_impl.dart
 @LazySingleton(as: LlmRepository)
 class LlmRepositoryImpl implements LlmRepository {
-  final LlmDatasource llmDatasource;
-  final SseParser sseParser;
-  LlmRepositoryImpl({required this.llmDatasource, required this.sseParser});
+  final ChatDatasource _datasource;
+  final DioErrHandler _dioErrHandler;
+  LlmRepositoryImpl({required ChatDatasource datasource, DioErrHandler? dioErrHandler})
+      : _datasource = datasource,
+        _dioErrHandler = dioErrHandler ?? const DioErrHandler();
 
   @override
-  Future<Either<Failure, Stream<ChatChunk>>> streamCompletion(...) async {
+  Future<Either<Failure, Stream<ChatChunk>>> streamCompletion({...}) async {
     try {
-      // parse SSE lines via sseParser, return Right(stream)
-    } on SocketException {
-      return const Left(ConnectionFailure('Failed to connect to the network'));
+      final stream = await _datasource.streamCompletion(...);
+      return Right(stream.map((chunk) => chunk.toDomain()));
+    } on DioException catch (e) {
+      return Left(ConnectionFailure(_dioErrHandler.handleDioError(e)));
     }
   }
 }
 ```
-
-> Migration note: today `LlmRepository` is a single concrete class in
-> `features/chat/data/llm_repository.dart` that both defines the contract and
-> talks to `Dio` directly. Later migration cards split it into
-> `domain/repositories/chat/llm_repository.dart` (abstract) +
-> `data/repositories/chat/llm_repository_impl.dart` (impl) and move the SSE
-> parsing into the impl / datasource.
 
 ---
 
@@ -294,16 +268,14 @@ final getIt = GetIt.instance;
 @InjectableInit()
 void configureInjection() => getIt.init();
 
+// lib/common/injection/modules.dart
 @module
 abstract class NetworkModule {
   @lazySingleton
-  Dio provideDio() {
-    final dio = Dio(BaseOptions(
-      connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(seconds: 60),
-    ));
-    return dio;
-  }
+  Dio provideDio() => Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 60),
+      ));
 }
 
 @module
@@ -313,18 +285,18 @@ abstract class StorageModule {
 }
 ```
 
-`@module` abstract classes are how third-party types that can't be annotated
-directly (`Dio`, secure storage) get registered — the single `Dio` instance
-produced here is injected into every remote datasource's constructor. There is
-no separate `ApiClient`/`ApiService` wrapper class.
+`@module` abstract classes (in `modules.dart`) are how third-party types that
+can't be annotated directly (`Dio`, secure storage) get registered — the single
+`Dio` instance produced here is injected into every remote datasource's
+constructor. There is no separate `ApiClient`/`ApiService` wrapper class.
 
 ### Annotation map
 
 | Layer | Annotation | Example |
 |---|---|---|
-| Remote/local datasource impl | `@LazySingleton(as: AbstractType)` | `<Feature>DatasourceImpl` |
-| Repository impl | `@LazySingleton(as: AbstractType)` | `<Feature>RepositoryImpl` |
-| Usecase | `@lazySingleton` (concrete class, no interface) | `SendChatMessageUsecase` |
+| Remote/local datasource impl | `@LazySingleton(as: AbstractType)` | `ChatDatasourceImpl` |
+| Repository impl | `@LazySingleton(as: AbstractType)` | `LlmRepositoryImpl` |
+| Domain service / service impl | `@lazySingleton` / `@LazySingleton(as: Base)` | `SkillsRegistryService`, `VoiceTurnService` |
 | Cubit | `@injectable` (factory — new instance per resolve) | `AgentCubit` |
 | Plain utility singleton | `@singleton` | `DioErrHandler` |
 | Third-party singleton | `@module` + `@lazySingleton` | `Dio`, `FlutterSecureStorage` |
@@ -359,11 +331,6 @@ i.e. pull the cubit from `getIt` as a `State` field → trigger its action in
 inline inside a route `builder` when the route itself passes constructor
 arguments the cubit can't get from DI alone.
 
-> Migration note: today DI is hand-written (`lib/core/di/injection_container.dart`,
-> ~25 `sl.register*` calls with manual `isRegistered` guards). The migration
-> retires it: `initDependencies()` delegates to `configureInjection()` and later
-> cards delete it.
-
 ---
 
 ## 6. State management (Cubit)
@@ -378,12 +345,12 @@ part '<feature>_state.dart';
 
 @injectable
 class <Feature>Cubit extends Cubit<<Feature>State> {
-  final <Feature>Usecase <feature>Usecase;
-  <Feature>Cubit({required this.<feature>Usecase}) : super(<Feature>Initial());
+  final <Feature>Service <feature>Service;
+  <Feature>Cubit({required this.<feature>Service}) : super(<Feature>Initial());
 
   void load() async {
     emit(<Feature>Loading());
-    final result = await <feature>Usecase.call();
+    final result = await <feature>Service.load();
     result.fold(
       (failure) => emit(<Feature>Error(message: failure.message)),
       (data) => emit(<Feature>Success(data: data)),
@@ -420,10 +387,10 @@ final class <Feature>Error extends <Feature>State {
 }
 ```
 
-The standard shape: `emit(XLoading())` → call the usecase → `result.fold` into
-`XError(failure.message)` or `XSuccess(data)`. Screens render with
-`BlocBuilder`, branching on `state is XLoading / XSuccess / XError` — **always
-handle all three**, plus an `else` returning `SizedBox.shrink()` for
+The standard shape: `emit(XLoading())` → call the domain service or repository →
+`result.fold` into `XError(failure.message)` or `XSuccess(data)`. Screens render
+with `BlocBuilder`, branching on `state is XLoading / XSuccess / XError` —
+**always handle all three**, plus an `else` returning `SizedBox.shrink()` for
 `Initial`.
 
 The chat/ReAct cubit is the reference for a **stream-driven exception**: it
@@ -491,7 +458,7 @@ Streaming chat uses `dio` with `ResponseType.stream` + the custom `SseParser`
   `DatabaseException(message)`, `CacheException(message)`, thrown by
   datasources, caught by repository impls.
 - `Either<Failure, T>` (from `dartz`) is the return type for every repository
-  method and usecase `call()`. Cubits consume it via
+  method and domain-service action. Cubits consume it via
   `result.fold((failure) => emit(XError(...)), (data) => emit(XSuccess(...)))`.
 
 ---
@@ -500,10 +467,12 @@ Streaming chat uses `dio` with `ResponseType.stream` + the custom `SseParser`
 
 - `flutter_secure_storage` holds credentials, API keys/tokens, and server
   profiles; `hive_ce_flutter` is the offline cache layer.
-- `Hive.initFlutter()` runs once in `bootstrap()`'s `_initHiveAdapters()`,
-  followed by `Hive.registerAdapter(...)` for each `@HiveType` model — awaited.
-- Hive type IDs and box names are centralized in
-  `lib/common/hive_constant.dart`.
+- `Hive.initFlutter('flames')` runs once in `bootstrap()`'s
+  `_initHiveAdapters()`; `Hive.registerAdapter(...)` per `@HiveType` model when
+  one exists (Flames has none today).
+- Box names are declared next to their datasource as a `static const String
+  boxName` (e.g. `data/datasources/local/action_center/`) — there is no shared
+  `hive_constant.dart` in Flames.
 - Only cache a feature's data if it actually benefits from an offline/fast read
   path — not every feature needs a Hive box.
 - Repository impls that cache follow a **cache-first** pattern: check the local
@@ -591,10 +560,10 @@ final GoRouter appRouter = GoRouter(
   input rather than internal navigation only.
 - New route paths derive from the name constant and use kebab-case.
 
-> Current state: the app's root widget lives in `lib/myapp.dart`, which wires
-> the router above through `MaterialApp.router`; the `MaterialApp(home:)`
-> `SplashScreen → MainNavigationShell` chain is the old shape that `go_router`
-> replaced during the layer-first migration.
+> Current state: `lib/myapp.dart` wires the router above through
+> `MaterialApp.router` (with `VoiceTurnActionListener` as a `builder` wrapper).
+> The old `MaterialApp(home:)` `SplashScreen → MainNavigationShell` chain is
+> gone.
 
 ---
 
@@ -618,13 +587,15 @@ final GoRouter appRouter = GoRouter(
 When assembling a new feature module, build components in dependency order:
 
 1. **Domain first** — entity (`domain/entities/<feature>/`), repository
-   interface (`domain/repositories/<feature>/`), one usecase per action
-   (`domain/usecase/<feature>/`).
+   interface (`domain/repositories/<feature>/`), and any domain service the
+   feature needs (`domain/services/<feature>/`) — Flames has no `usecase/`
+   layer (§15.8).
 2. **Data** — remote/local models implementing `ResponseMapper<T>`
-   (`data/models/`), datasources (`data/datasources/`), repository impl
-   (`data/repositories/`), device tool services (`data/tools/<feature>/`).
-   Annotate each (`@LazySingleton(as: ...)` etc., see §5) and run
-   `build_runner`.
+   (`data/models/`), datasources (`data/datasources/{remote,local}/`),
+   repository impl (`data/repositories/`), device tool services
+   (`data/datasources/tools/<feature>/`), service impls
+   (`data/services/<feature>/`). Annotate each (`@LazySingleton(as: ...)` etc.,
+   see §5) and run `build_runner`.
 3. **State** — the cubit + state pair
    (`presentation/screen/<feature>/cubit/`), annotated `@injectable`.
 4. **UI** — the screen widget, pulling the cubit from `getIt` in `State`,
@@ -648,12 +619,11 @@ test/
     datasources/<feature>/
     models/<feature>/
     repositories/<feature>/
-    tools/<feature>/
+    services/<feature>/
   domain/
     entities/<feature>/
-    models/<feature>/
     repositories/<feature>/
-    usecase/<feature>/
+    services/<feature>/
     tools/<feature>/
   presentation/
     navigation/
@@ -666,19 +636,20 @@ test/
 
 | Layer | Tool | What it covers |
 |---|---|---|
-| Usecase / repository | `flutter_test` + `mocktail` | mock one layer below (a repository mocks its datasource; a usecase mocks its repository interface), assert the `Either<Failure, T>` |
-| Cubit | `bloc_test` + `mocktail` | mock the usecase, assert the emitted state sequence (`Initial → Loading → Success`/`Error`) |
+| Repository / service | `flutter_test` + `mocktail` | mock one layer below (a repository mocks its datasource; a service mocks its repository interface), assert the `Either<Failure, T>` |
+| Cubit | `bloc_test` + `mocktail` | mock the service/repository, assert the emitted state sequence (`Initial → Loading → Success`/`Error`) |
 | Widget/screen | `flutter_test` (`testWidgets`) | pump the screen with a mocked cubit via `BlocProvider.value`, assert each render branch |
 
 Prefer `mocktail` over `mockito` — no code generation, works directly with
 `get_it`/`injectable`'s constructor-injected classes. Register `mocktail`
 fallback values once in `test/helpers/mocks.dart`, not per-test.
 
-**Mock one layer down, never further** — a cubit test mocks its usecase, not the
-repository underneath it; a usecase test mocks its repository interface, not the
-datasource. Not every class needs a test: prioritize usecases (business logic)
-and cubits (state transitions) first — widget tests earn their cost on a
-screen's branching logic, not on pure layout.
+**Mock one layer down, never further** — a cubit test mocks its domain service
+(or repository), not the datasource underneath it; a service test mocks its
+repository interface, not the datasource. Not every class needs a test:
+prioritize domain services (business logic) and cubits (state transitions)
+first — widget tests earn their cost on a screen's branching logic, not on pure
+layout.
 
 > For coding standards, naming conventions, and the verification checklist
 > before marking work complete, see [`rules.md`](./rules.md). For the exact
@@ -692,7 +663,7 @@ screen's branching logic, not on pure layout.
 Canonical base is `flutter-cubit-template` (layer-first `lib/{common,data,
 domain,presentation,utils}/`, Cubit-only, `get_it` + `injectable`, `dartz`
 `Either<Failure, T>`). Flames keeps that core and deliberately deviates in
-the 7 ways below. Nothing here is accidental drift — each exception exists
+the 8 ways below. Nothing here is accidental drift — each exception exists
 for a Flames-specific requirement.
 
 ### 1. Single entrypoint (no flavors)
@@ -710,10 +681,10 @@ for a Flames-specific requirement.
 - `flutter_secure_storage` holds credentials, API keys/tokens, and server
   profiles; `hive_ce_flutter` is the offline cache layer (see §9).
 - Registered via an injectable `@module` `StorageModule` in
-  `lib/common/injection/injection.dart`:
+  `lib/common/injection/modules.dart`:
   `provideSecureStorage() => const FlutterSecureStorage()`.
-- `Hive.initFlutter()` + `registerAdapter(...)` run awaited in `bootstrap()`;
-  box names / type IDs centralized in `lib/common/hive_constant.dart`.
+- `Hive.initFlutter('flames')` + `registerAdapter(...)` run awaited in
+  `bootstrap()`; box names are `static const` next to their datasource.
 - Rationale: template has no secure-credential story; Flames stores secrets
   that must never sit in plain Hive boxes.
 
@@ -777,11 +748,30 @@ for a Flames-specific requirement.
 - `tool/check_layout.sh` mechanically enforces layer-first invariants:
   no `lib/features/`, no parallel `lib/core/`, no `flutter_bloc` /
   `package:flutter/` under `lib/domain/`, no re-export shims, required
-  paths present, no `presentation → data` imports, no DTOs in `domain/`.
+  paths present, no `presentation → data` imports, no DTOs in `domain/`,
+  a business-action layer present (`domain/usecase/` OR `domain/services/`),
+  no `test/features/` test tree.
 - Must print `LAYOUT OK` (exit 0); wired into Definition of Done alongside
   `flutter analyze` (0 issues) and `flutter test` (100% green).
+- `tool/check_layout_test.sh` asserts the guard's own rules (clean tree passes,
+  each violation shape fails).
 - Rationale: template relies on review discipline; Flames codifies the
   layout traps (§8) as a script so regressions fail fast on VPS/CI.
+
+### 8. Domain services instead of a usecase layer
+
+- Flames has **no `lib/domain/usecase/`** and zero classes named `*Usecase`.
+  Its business actions live in `domain/services/<feature>/` (orchestration,
+  parsing, policy — e.g. `ToolCallTextParser`, `ProactiveWatcher`,
+  `GeofenceActionDispatcher`, `VoiceTurnService`), with implementations in
+  `data/services/<feature>/` where a platform/data dependency is involved.
+- Rationale: Flames is an agent runtime, not a CRUD app. Most "business
+  actions" are long-lived services (gateway transport, watcher, voice turn
+  loop) or tool contracts; wrapping each in a thin `Usecase` class would add
+  a layer that carries no logic. Approved deviation (2026-09-26) — canonical
+  note: vault `notes/flutter-clean-architecture-standard.md`.
+- The dependency rule is unchanged: `presentation → domain ← data`; a cubit
+  never imports `data/`.
 
 ---
 
