@@ -5,9 +5,10 @@ Single source of truth for all agents (@dev, @ops, orchestrator). No PR/card mar
 ## 0. Stack & Clean Architecture Map
 - Framework: Flutter (Dart 3.x), Dark theme only (`#0F172A`, surface `#1E293B`, accent Teal `#008080`).
 - Layers (`data → domain ← presentation`):
-  - `lib/presentation/`: Screens, Widgets, Cubits (`screens/<feature>/cubit/`). Cubit-only (NO Bloc/events).
-  - `lib/domain/`: Pure Dart entities, models, repository contracts, `ToolRegistry`.
-  - `lib/data/`: Models/DTOs, repository implementations, device services.
+  - `lib/presentation/`: Screens, Widgets, Cubits (`screen/<feature>/cubit/`). Cubit-only (NO Bloc/events).
+  - `lib/domain/`: Pure Dart entities, repository contracts, domain services (`services/<feature>/`), tool contracts + `ToolRegistry`/`SecurityPolicy` (`tools/<feature>/`).
+  - `lib/data/`: Models/DTOs, repository implementations, datasources (`datasources/{remote,local,tools}/`), service impls (`services/<feature>/`).
+- Business actions are **domain services**, not usecases: Flames has no `lib/domain/usecase/` (approved deviation — vault `notes/flutter-clean-architecture-standard.md`).
 - DI & Testing: `get_it` service locator, `mocktail` (AAA pattern, NO build_runner mocks).
 
 ## 1. Hard Verification Gates (Definition of Done)
@@ -22,6 +23,6 @@ Compile serialization is automatically handled by wrapper `compile-lock` in `~/.
 - Bulletproof 3-State Permission: Granted -> execute; Denied -> rationale modal; Permanently Denied -> `openAppSettings()` button. Must be covered in tests.
 
 ## 3. Learned Pitfalls (DO NOT REPEAT)
-- Cubit Placement: MUST be in `lib/presentation/screens/<feature>/cubit/`, NEVER in `domain/` or `lib/features/`.
-- No Re-export Shims: Never create barrel export files (`export 'screens/...'`). Place files directly in target paths.
+- Cubit Placement: MUST be in `lib/presentation/screen/<feature>/cubit/`, NEVER in `domain/` or `lib/features/`.
+- No Re-export Shims: Never create barrel export files (`export 'screen/...'`). Place files directly in target paths.
 - Exit 75 in Compile: Transient lock contention — do NOT `kanban_block`, just exit cleanly.
